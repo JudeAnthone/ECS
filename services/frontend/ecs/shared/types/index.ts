@@ -1,0 +1,1 @@
+export type { role } from "@/shared/types/characters/role"
