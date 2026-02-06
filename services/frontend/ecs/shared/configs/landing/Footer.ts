@@ -1,27 +1,27 @@
 export const footerSections = [
   {
-    title: "Services",
+    title: "About Us",
     links: [
       {
-        title: "Overview",
-        href: "#",
+        title: "Mission & Vision",
+        href: "/mission-vision",
       },
       {
-        title: "Features",
-        href: "#",
+        title: "Our Mandate",
+        href: "/our-mandate",
       },
       {
-        title: "Solutions",
-        href: "#",
+        title: "Organizational Team",
+        href: "/organizational-team",
       },
       {
-        title: "Tutorials",
-        href: "#",
+        title: "Core Values",
+        href: "/core-values",
       },
 
       {
-        title: "Releases",
-        href: "#",
+        title: "History",
+        href: "/history",
       },
     ],
   },

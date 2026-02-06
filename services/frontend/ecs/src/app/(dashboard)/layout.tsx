@@ -13,7 +13,6 @@ export default function Layout ({
         * Renders overall server side structure for the dashboard onwards
         */
         <>
-        
             {children}
         </>
     )
