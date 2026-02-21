@@ -391,7 +391,7 @@ INSERT INTO users (full_name, email, password_hash, auth_provider, role, account
 VALUES (
     'System Administrator',
     'admin@extensionservice.com',
-    'CHANGE_THIS_TO_BCRYPT_HASH_MICKO',
+    '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'local',
     'admin',
     'active'
