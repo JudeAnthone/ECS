@@ -25,7 +25,7 @@ import { AboutUs, Programs, } from "@/shared/configs/index";
 
 const Navbar = () => {
   return (
-    <nav className="fixed top-0 inset-x-0 w-full h-16 bg-background border-b z-50">
+    <nav className="fixed top-0 inset-x-0 w-full h-16 bg-red-500 text-white border-b z-50">
       <div className="h-full flex items-center justify-between max-w-(--breakpoint-xl) mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-8">
           <Logo title="Earist" className="cursor-default" />

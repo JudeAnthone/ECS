@@ -8,7 +8,7 @@ import { footerSections } from "@/shared/configs/index"
 
 const Footer = () => {
   return (
-    <div className="min-h-[30svh] flex flex-col">
+    <div className="min-h-[30svh] flex flex-col bg-red-400 text-white">
     
       <div className="grow bg-muted" />
       <footer className="border-t">
