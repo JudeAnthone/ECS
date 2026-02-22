@@ -38,15 +38,15 @@ export function LoginForm({
       // Redirect based on user role
       const role = response.user.role
       if (role === 'admin') {
-        router.push('/admin-dashboard')
+        router.push('/admin/admin-dashboard')
       } else if (role === 'project_chair') {
-        router.push('/project-chair-dashboard')
+        router.push('/project-chair/project-chair-dashboard')
       } else if (role === 'project_head') {
-        router.push('/project-head-dashboard')
+        router.push('/project-head/project-head-dashboard')
       } else if (role === 'staff') {
-        router.push('/authorized-personnel-dashboard')
+        router.push('/staff/staff-dashboard')
       } else {
-        router.push('/public-user-project-list')
+        router.push('/public-user/public-user-project-list')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')

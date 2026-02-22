@@ -82,10 +82,21 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
           section: "",
         });
       } else {
-        // Account is active, redirect to dashboard
+        // Account is active, redirect to dashboard based on role
         setSuccess("Account created successfully! Redirecting...");
         setTimeout(() => {
-          router.push("/dashboard");
+          const role = response.user.role;
+          if (role === 'admin') {
+            router.push('/admin/admin-dashboard');
+          } else if (role === 'project_chair') {
+            router.push('/project-chair/project-chair-dashboard');
+          } else if (role === 'project_head') {
+            router.push('/project-head/project-head-dashboard');
+          } else if (role === 'staff') {
+            router.push('/staff/staff-dashboard');
+          } else {
+            router.push('/public-user/public-user-project-list');
+          }
         }, 1500);
       }
     } catch (err) {
