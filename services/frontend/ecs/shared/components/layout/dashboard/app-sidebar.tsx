@@ -20,30 +20,37 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/shared/components/ui/Sidebar"
+import { AuthService } from "@/shared/lib/auth-service"
+import { useParams } from "next/navigation"
 
 import Link from "next/link"
 
-const data = {
-  user: {
-    name: "Zoro",
-    email: "m@example.com",
-    avatar: "",
-  },
-  navSecondary: [
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const [user, setUser] = React.useState<any>(null);
+  const params = useParams();
+  const role = params?.role as string;
+
+  React.useEffect(() => {
+    const currentUser = AuthService.getUser();
+    setUser(currentUser);
+  }, []);
+
+  const navSecondary = [
     {
       title: "Search",
-      url: "/", /**Must show the current route after refresh*/
+      url: `/${role || user?.role || 'admin'}`,
       icon: Search,
     },
     {
-      title: "Settings",
-      url: "/settings", /**Mush show base on the current user active this is for general usage but different api to avoid confusion*/
+      title: "Settings", 
+      url: `/${role || user?.role || 'admin'}/settings`,
       icon: Settings,
     },
-  ],
-  projects: [ /**DEMO ONLY*/
+  ];
+
+  const projects = [
     {
-      name: "Enviromental Awareness",
+      name: "Environmental Awareness",
       url: "#",
     },
     {
@@ -54,10 +61,14 @@ const data = {
       name: "Health Care Improvement",
       url: "#",
     },
-  ],
-}
+  ];
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const userData = {
+    name: user ? `${user.first_name} ${user.last_name}` : "User",
+    email: user?.email || "user@example.com",
+    avatar: user?.avatar_url || "",
+  };
+
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
@@ -69,8 +80,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <Command className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Position</span>
-                  <span className="truncate text-xs">Department Position</span>
+                  <span className="truncate font-medium">{user?.role?.replace('_', ' ').toUpperCase() || 'Role'}</span>
+                  <span className="truncate text-xs">{user?.section || 'Department'}</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -78,12 +89,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain/>
-        <NavProjects projects={data.projects} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        <NavMain userRole={role || user?.role} />
+        <NavProjects projects={projects} />
+        <NavSecondary items={navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={userData} />
       </SidebarFooter>
     </Sidebar>
   )

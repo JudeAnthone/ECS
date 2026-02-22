@@ -1,3 +1,5 @@
+"use client"
+
 import React from "react"
 
 import {
@@ -14,14 +16,19 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/shared/components/ui/Sidebar"
+import { useParams } from "next/navigation"
 
 import { AppSidebar } from "@/shared/components/layout/dashboard/app-sidebar"
 
-export default function Layout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+interface LayoutProps {
+  children: React.ReactNode;
+}
+
+export default function Layout({ children }: LayoutProps) {
+  const params = useParams();
+  const role = (params?.role as string) || 'admin';
+  const roleDisplayName = role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+  
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -36,19 +43,19 @@ export default function Layout({
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">
-                  <BreadcrumbLink href="#">
-                    Building Your Application
+                  <BreadcrumbLink href={`/${role}`}>
+                    {roleDisplayName} Dashboard
                   </BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
-                  <BreadcrumbPage>Data Fetching</BreadcrumbPage>
+                  <BreadcrumbPage>Current Page</BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
           </div>
         </header>
-          {children}
+        {children}
       </SidebarInset>
     </SidebarProvider>
   )

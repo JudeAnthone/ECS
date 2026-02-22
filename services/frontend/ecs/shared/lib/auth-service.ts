@@ -93,6 +93,11 @@ export class AuthService {
   static logout(): void {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user');
+    
+    // Redirect to login page
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
   }
 
   static getToken(): string | null {
@@ -106,5 +111,15 @@ export class AuthService {
 
   static isAuthenticated(): boolean {
     return !!this.getToken();
+  }
+
+  static requireAuth(): boolean {
+    if (!this.isAuthenticated()) {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+      return false;
+    }
+    return true;
   }
 }
