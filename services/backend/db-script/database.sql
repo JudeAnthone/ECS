@@ -55,7 +55,8 @@ CREATE TYPE account_status AS ENUM (
 
 CREATE TABLE users (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    full_name           VARCHAR(150) NOT NULL,
+    first_name          VARCHAR(75) NOT NULL,
+    last_name           VARCHAR(75) NOT NULL,
     email               VARCHAR(150) UNIQUE NOT NULL,
     password_hash       TEXT,
     auth_provider       auth_provider NOT NULL DEFAULT 'local',
@@ -387,9 +388,10 @@ CREATE TRIGGER trg_proposals_updated BEFORE UPDATE ON project_proposals
 CREATE TRIGGER trg_blog_updated BEFORE UPDATE ON blog_posts
     FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
-INSERT INTO users (full_name, email, password_hash, auth_provider, role, account_status)
+INSERT INTO users (first_name, last_name, email, password_hash, auth_provider, role, account_status)
 VALUES (
-    'System Administrator',
+    'System',
+    'Administrator',
     'admin@extensionservice.com',
     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'local',

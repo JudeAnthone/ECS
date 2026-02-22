@@ -6,7 +6,8 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest {
-  full_name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   password: string;
   role?: string;
@@ -15,7 +16,8 @@ export interface RegisterRequest {
 
 export interface UserDTO {
   id: string;
-  full_name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   role: string;
   section?: string;

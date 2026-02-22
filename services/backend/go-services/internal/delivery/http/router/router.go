@@ -47,4 +47,3 @@ func NewServer(port string) *http.Server {
 		Handler: handler,
 	}
 }
-

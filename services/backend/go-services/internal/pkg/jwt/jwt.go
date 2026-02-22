@@ -18,7 +18,7 @@ type Claims struct {
 // GenerateToken generates a JWT token for the user
 func GenerateToken(userID, email, role, accountStatus, secret string, expirationHours int) (string, int64, error) {
 	expirationTime := time.Now().Add(time.Duration(expirationHours) * time.Hour)
-	
+
 	claims := &Claims{
 		UserID:        userID,
 		Email:         email,

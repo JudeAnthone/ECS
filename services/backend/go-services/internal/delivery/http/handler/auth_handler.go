@@ -57,8 +57,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 // Helper functions
 func respondWithError(w http.ResponseWriter, code int, message string) {
 	respondWithJSON(w, code, dto.ErrorResponse{
-		Error:   message,
-		Code:    code,
+		Error: message,
+		Code:  code,
 	})
 }
 

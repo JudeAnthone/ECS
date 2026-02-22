@@ -20,15 +20,16 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 
 func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	query := `
-		INSERT INTO users (full_name, email, password_hash, auth_provider, role, section, account_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO users (first_name, last_name, email, password_hash, auth_provider, role, section, account_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, created_at, updated_at
 	`
 
 	err := r.db.QueryRow(
 		ctx,
 		query,
-		user.FullName,
+		user.FirstName,
+		user.LastName,
 		user.Email,
 		user.PasswordHash,
 		user.AuthProvider,
@@ -46,7 +47,7 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, full_name, email, password_hash, auth_provider, google_id, avatar_url,
+		SELECT id, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
 		       role, section, account_status, approved_by, approved_at, is_active,
 		       created_at, updated_at
 		FROM users
@@ -56,7 +57,8 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 	user := &domain.User{}
 	err := r.db.QueryRow(ctx, query, email).Scan(
 		&user.ID,
-		&user.FullName,
+		&user.FirstName,
+		&user.LastName,
 		&user.Email,
 		&user.PasswordHash,
 		&user.AuthProvider,
@@ -84,7 +86,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, full_name, email, password_hash, auth_provider, google_id, avatar_url,
+		SELECT id, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
 		       role, section, account_status, approved_by, approved_at, is_active,
 		       created_at, updated_at
 		FROM users
@@ -94,7 +96,8 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 	user := &domain.User{}
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&user.ID,
-		&user.FullName,
+		&user.FirstName,
+		&user.LastName,
 		&user.Email,
 		&user.PasswordHash,
 		&user.AuthProvider,
@@ -123,15 +126,16 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	query := `
 		UPDATE users
-		SET full_name = $1, email = $2, role = $3, section = $4, 
-		    account_status = $5, avatar_url = $6
-		WHERE id = $7
+		SET first_name = $1, last_name = $2, email = $3, role = $4, section = $5, 
+		    account_status = $6, avatar_url = $7
+		WHERE id = $8
 	`
 
 	_, err := r.db.Exec(
 		ctx,
 		query,
-		user.FullName,
+		user.FirstName,
+		user.LastName,
 		user.Email,
 		user.Role,
 		user.Section,
@@ -157,4 +161,3 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 
 	return nil
 }
- 

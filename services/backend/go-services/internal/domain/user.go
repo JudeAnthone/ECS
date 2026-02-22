@@ -7,7 +7,8 @@ import (
 // User represents a user in the system
 type User struct {
 	ID            string
-	FullName      string
+	FirstName     string
+	LastName      string
 	Email         string
 	PasswordHash  string
 	AuthProvider  string
@@ -21,6 +22,11 @@ type User struct {
 	IsActive      bool
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+}
+
+// GetFullName returns the user's full name
+func (u *User) GetFullName() string {
+	return u.FirstName + " " + u.LastName
 }
 
 // UserRole constants

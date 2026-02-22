@@ -60,7 +60,8 @@ func (u *authUsecase) Login(ctx context.Context, req *dto.LoginRequest) (*dto.Au
 		ExpiresIn: expiresIn,
 		User: &dto.UserDTO{
 			ID:            user.ID,
-			FullName:      user.FullName,
+			FirstName:     user.FirstName,
+			LastName:      user.LastName,
 			Email:         user.Email,
 			Role:          user.Role,
 			Section:       user.Section,
@@ -92,7 +93,8 @@ func (u *authUsecase) Register(ctx context.Context, req *dto.RegisterRequest) (*
 
 	// Create user
 	user := &domain.User{
-		FullName:      req.FullName,
+		FirstName:     req.FirstName,
+		LastName:      req.LastName,
 		Email:         req.Email,
 		PasswordHash:  hashedPassword,
 		AuthProvider:  domain.AuthProviderLocal,
@@ -115,7 +117,8 @@ func (u *authUsecase) Register(ctx context.Context, req *dto.RegisterRequest) (*
 		return &dto.AuthResponse{
 			User: &dto.UserDTO{
 				ID:            user.ID,
-				FullName:      user.FullName,
+				FirstName:     user.FirstName,
+				LastName:      user.LastName,
 				Email:         user.Email,
 				Role:          user.Role,
 				Section:       user.Section,
@@ -143,7 +146,8 @@ func (u *authUsecase) Register(ctx context.Context, req *dto.RegisterRequest) (*
 		ExpiresIn: expiresIn,
 		User: &dto.UserDTO{
 			ID:            user.ID,
-			FullName:      user.FullName,
+			FirstName:     user.FirstName,
+			LastName:      user.LastName,
 			Email:         user.Email,
 			Role:          user.Role,
 			Section:       user.Section,
