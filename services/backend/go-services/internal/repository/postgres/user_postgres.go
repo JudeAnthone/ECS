@@ -154,9 +154,86 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 func (r *UserRepository) Delete(ctx context.Context, id string) error {
 	query := `DELETE FROM users WHERE id = $1`
 
-	_, err := r.db.Exec(ctx, query, id)
+	result, err := r.db.Exec(ctx, query, id)
 	if err != nil {
+		// Check if it's a foreign key constraint error
+		if err.Error() != "" {
+			return fmt.Errorf("cannot delete user: user has related records (tasks, reports, or proposals). Please remove or reassign those first, or the system will cascade delete them: %w", err)
+		}
 		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	// Check if any rows were affected
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	return nil
+}
+
+func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*domain.User, error) {
+	query := `
+		SELECT id, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
+		       role, section, account_status, approved_by, approved_at, is_active,
+		       created_at, updated_at
+		FROM users
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*domain.User
+	for rows.Next() {
+		user := &domain.User{}
+		err := rows.Scan(
+			&user.ID,
+			&user.FirstName,
+			&user.LastName,
+			&user.Email,
+			&user.PasswordHash,
+			&user.AuthProvider,
+			&user.GoogleID,
+			&user.AvatarURL,
+			&user.Role,
+			&user.Section,
+			&user.AccountStatus,
+			&user.ApprovedBy,
+			&user.ApprovedAt,
+			&user.IsActive,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return users, nil
+}
+
+func (r *UserRepository) UpdateAccountStatus(ctx context.Context, userID string, status string, approvedByID *string) error {
+	query := `
+		UPDATE users
+		SET account_status = $1::account_status,
+		    approved_by = $2,
+		    approved_at = CASE WHEN $1::text = 'active' THEN NOW() ELSE NULL END,
+		    updated_at = NOW()
+		WHERE id = $3
+	`
+
+	_, err := r.db.Exec(ctx, query, status, approvedByID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update account status: %w", err)
 	}
 
 	return nil
