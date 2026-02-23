@@ -146,7 +146,7 @@ func (uc *userUseCase) UpdateUser(ctx context.Context, userID string, updates *d
 	if updates.LastName != nil {
 		user.LastName = *updates.LastName
 	}
-	
+
 	// Process department BEFORE role to avoid constraint violations
 	if updates.Department != nil {
 		if *updates.Department == "" {
@@ -155,11 +155,11 @@ func (uc *userUseCase) UpdateUser(ctx context.Context, userID string, updates *d
 			user.Department = updates.Department
 		}
 	}
-	
+
 	if updates.Role != nil {
 		newRole := *updates.Role
 		user.Role = newRole
-		
+
 		// Handle department constraints based on role
 		if newRole == "admin" || newRole == "public_user" {
 			// Admin and public_user don't need department
@@ -171,7 +171,7 @@ func (uc *userUseCase) UpdateUser(ctx context.Context, userID string, updates *d
 			}
 		}
 	}
-	
+
 	if updates.ContactNumber != nil {
 		if *updates.ContactNumber == "" {
 			user.ContactNumber = nil
