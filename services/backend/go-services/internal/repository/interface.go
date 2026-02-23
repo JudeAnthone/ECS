@@ -18,3 +18,23 @@ type UserRepository interface {
 	UpdateAccountStatus(ctx context.Context, userID string, status string, approvedByID *string) error
 	UpdateLastActive(ctx context.Context, userID string) error
 }
+
+// DepartmentRepository defines methods for department data access
+type DepartmentRepository interface {
+	GetAll(ctx context.Context) ([]*domain.Department, error)
+	GetByID(ctx context.Context, id string) (*domain.Department, error)
+	GetByCode(ctx context.Context, code string) (*domain.Department, error)
+}
+
+// ProgramRepository defines methods for program data access
+type ProgramRepository interface {
+	Create(ctx context.Context, program *domain.Program) error
+	GetAll(ctx context.Context) ([]*domain.Program, error)
+	GetByID(ctx context.Context, id string) (*domain.Program, error)
+	GetByDepartment(ctx context.Context, departmentID string) ([]*domain.Program, error)
+	GetByProgramChair(ctx context.Context, programChairID string) ([]*domain.Program, error)
+	Update(ctx context.Context, program *domain.Program) error
+	UpdateStatus(ctx context.Context, id string, status string) error
+	UpdateApproval(ctx context.Context, id string, approvalStatus string, approvedBy *string) error
+	Delete(ctx context.Context, id string) error
+}

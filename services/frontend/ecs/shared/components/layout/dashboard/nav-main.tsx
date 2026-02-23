@@ -29,6 +29,7 @@ const roleNavigation: RoleNavigation = {
     items: [
       { title: "Dashboard", href: "/admin-dashboard" },
       { title: "User Management", href: "/admin-user-management" },
+      { title: "Program Management", href: "/admin-program-management" },
       { title: "Project Management", href: "/admin-project-management" },
       { title: "Analytics", href: "/admin-analytics" },
       { title: "Reports", href: "/admin-report" },

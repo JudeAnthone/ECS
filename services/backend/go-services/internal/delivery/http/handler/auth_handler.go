@@ -53,17 +53,3 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	respondWithJSON(w, http.StatusCreated, response)
 }
-
-// Helper functions
-func respondWithError(w http.ResponseWriter, code int, message string) {
-	respondWithJSON(w, code, dto.ErrorResponse{
-		Error: message,
-		Code:  code,
-	})
-}
-
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(payload)
-}

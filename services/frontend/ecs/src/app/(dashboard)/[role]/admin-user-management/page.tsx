@@ -58,6 +58,7 @@ export default function UserManagement() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<Array<{id: string, department_name: string, department_code: string}>>([]);
   const [editForm, setEditForm] = useState({
     first_name: '',
     last_name: '',
@@ -93,6 +94,40 @@ export default function UserManagement() {
     }
   };
 
+  const loadDepartments = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.log('No auth token found for loading departments');
+        return;
+      }
+
+      console.log('Fetching departments from API...');
+      const response = await fetch('http://localhost:8081/api/v1/departments', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('Departments API response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to fetch departments:', response.status, errorText);
+        throw new Error('Failed to fetch departments');
+      }
+
+      const data = await response.json();
+      console.log('Departments data received:', data);
+      setDepartments(data.departments || []);
+      console.log('Departments set:', data.departments?.length || 0, 'departments');
+    } catch (err) {
+      console.error('Error loading departments:', err);
+    }
+  };
+
   useEffect(() => {
     // Load current user ID from localStorage
     const userStr = localStorage.getItem('user');
@@ -105,6 +140,7 @@ export default function UserManagement() {
       }
     }
     loadUsers();
+    loadDepartments();
   }, []);
 
   const handleApprove = async (userId: string) => {
@@ -203,6 +239,9 @@ export default function UserManagement() {
       account_status: user.account_status,
     });
     setIsEditDialogOpen(true);
+    
+    // Reload departments to ensure they're available in the dropdown
+    loadDepartments();
   };
 
   const handleUpdateUser = async () => {
@@ -773,7 +812,7 @@ export default function UserManagement() {
 
         {/* Edit User Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="bg-white max-w-2xl">
+          <DialogContent className="bg-white max-w-4xl w-full">
             <DialogHeader>
               <DialogTitle className="text-2xl text-slate-900">Edit User</DialogTitle>
               <DialogDescription className="text-slate-600">
@@ -837,81 +876,99 @@ export default function UserManagement() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">
-                  Email *
-                </label>
-                <Input
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm({...editForm, email: e.target.value})}
-                  placeholder="email@example.com"
-                  className="border-slate-300"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Email *
+                  </label>
+                  <Input
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({...editForm, email: e.target.value})}
+                    placeholder="email@example.com"
+                    className="border-slate-300"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Username *
+                  </label>
+                  <Input
+                    value={editForm.username}
+                    onChange={(e) => setEditForm({...editForm, username: e.target.value})}
+                    placeholder="username"
+                    className="border-slate-300"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">
-                  Username *
-                </label>
-                <Input
-                  value={editForm.username}
-                  onChange={(e) => setEditForm({...editForm, username: e.target.value})}
-                  placeholder="username"
-                  className="border-slate-300"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">
-                  Role *
-                </label>
-                <Select 
-                  value={editForm.role} 
-                  onValueChange={(value) => setEditForm({...editForm, role: value})}
-                  disabled={isEditingSelf}
-                >
-                  <SelectTrigger className="border-slate-300">
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white">
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="program_chair">Program Chair</SelectItem>
-                    <SelectItem value="project_head">Project Head</SelectItem>
-                    <SelectItem value="staff">Staff</SelectItem>
-                    <SelectItem value="public_user">Public User</SelectItem>
-                  </SelectContent>
-                </Select>
-                {isEditingSelf && (
-                  <p className="text-xs text-orange-600">Cannot change your own role</p>
-                )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Role *
+                  </label>
+                  <Select 
+                    value={editForm.role} 
+                    onValueChange={(value) => setEditForm({...editForm, role: value})}
+                    disabled={isEditingSelf}
+                  >
+                    <SelectTrigger className="border-slate-300">
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="program_chair">Program Chair</SelectItem>
+                      <SelectItem value="project_head">Project Head</SelectItem>
+                      <SelectItem value="staff">Staff</SelectItem>
+                      <SelectItem value="public_user">Public User</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {isEditingSelf && (
+                    <p className="text-xs text-orange-600">Cannot change your own role</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Contact Number
+                  </label>
+                  <Input
+                    value={editForm.contact_number}
+                    onChange={(e) => setEditForm({...editForm, contact_number: e.target.value})}
+                    placeholder="e.g., +63 123 456 7890"
+                    className="border-slate-300"
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">
                   Department {(editForm.role === 'program_chair' || editForm.role === 'project_head' || editForm.role === 'staff') && '*'}
                 </label>
-                <Input
-                  value={editForm.department}
-                  onChange={(e) => setEditForm({...editForm, department: e.target.value})}
-                  placeholder="e.g., Computer Science, Engineering"
-                  className="border-slate-300"
-                />
+                <Select 
+                  value={editForm.department} 
+                  onValueChange={(value) => setEditForm({...editForm, department: value})}
+                >
+                  <SelectTrigger className="border-slate-300">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    {departments.length === 0 ? (
+                      <SelectItem value="loading" disabled>Loading departments...</SelectItem>
+                    ) : (
+                      departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.department_name}>
+                          {dept.department_name} ({dept.department_code})
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {departments.length === 0 && (
+                  <p className="text-xs text-red-600">No departments loaded. Check console for errors.</p>
+                )}
                 {(editForm.role === 'program_chair' || editForm.role === 'project_head' || editForm.role === 'staff') && (
                   <p className="text-xs text-slate-500">Required for Program Chair, Project Head, and Staff roles</p>
                 )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">
-                  Contact Number
-                </label>
-                <Input
-                  value={editForm.contact_number}
-                  onChange={(e) => setEditForm({...editForm, contact_number: e.target.value})}
-                  placeholder="e.g., +63 123 456 7890"
-                  className="border-slate-300"
-                />
               </div>
 
               <div className="space-y-2">

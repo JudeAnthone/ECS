@@ -55,8 +55,16 @@ export class AuthService {
     });
 
     if (!response.ok) {
-      const errorData: ErrorResponse = await response.json();
-      throw new Error(errorData.error || 'Login failed');
+      const contentType = response.headers.get('content-type');
+      let errorMessage = 'Login failed';
+      if (contentType && contentType.includes('application/json')) {
+        const errorData: ErrorResponse = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } else {
+        const text = await response.text();
+        errorMessage = text || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
 
     const result: AuthResponse = await response.json();
@@ -80,8 +88,16 @@ export class AuthService {
     });
 
     if (!response.ok) {
-      const errorData: ErrorResponse = await response.json();
-      throw new Error(errorData.error || 'Registration failed');
+      const contentType = response.headers.get('content-type');
+      let errorMessage = 'Registration failed';
+      if (contentType && contentType.includes('application/json')) {
+        const errorData: ErrorResponse = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } else {
+        const text = await response.text();
+        errorMessage = text || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
 
     const result: AuthResponse = await response.json();

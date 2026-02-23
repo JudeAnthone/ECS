@@ -1,25 +1,82 @@
+-- Extension Service System Database Schema
+-- ==========================================
+
+-- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Drop existing tables and types if they exist (for clean setup)
+DROP VIEW IF EXISTS vw_department_budget_summary CASCADE;
+DROP VIEW IF EXISTS vw_program_summary CASCADE;
+DROP TABLE IF EXISTS activity_logs CASCADE;
+DROP TABLE IF EXISTS sla_metrics CASCADE;
+DROP TABLE IF EXISTS task_assignments CASCADE;
+DROP TABLE IF EXISTS tasks CASCADE;
+DROP TABLE IF EXISTS projects CASCADE;
+DROP TABLE IF EXISTS project_requests CASCADE;
+DROP TABLE IF EXISTS programs CASCADE;
+DROP TABLE IF EXISTS departments CASCADE;
+DROP TABLE IF EXISTS blog_posts CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+
+DROP TYPE IF EXISTS creation_source_type CASCADE;
+DROP TYPE IF EXISTS approval_status CASCADE;
+DROP TYPE IF EXISTS program_status CASCADE;
+DROP TYPE IF EXISTS account_status CASCADE;
+DROP TYPE IF EXISTS user_role CASCADE;
+DROP TYPE IF EXISTS project_status CASCADE;
+DROP TYPE IF EXISTS proposal_status CASCADE;
+DROP TYPE IF EXISTS task_status CASCADE;
+DROP TYPE IF EXISTS task_priority CASCADE;
+DROP TYPE IF EXISTS auth_provider CASCADE;
+
+-- Create ENUM types
+CREATE TYPE auth_provider AS ENUM ('local', 'google');
 
 CREATE TYPE user_role AS ENUM (
     'admin',
-    'program_chair',
+    'program_chair', 
     'project_head',
     'staff',
-    'public_user'
+    'public_user',
+    'college',
+    'beneficiary'
 );
 
-CREATE TYPE section_type AS ENUM (
-    'section_a',
-    'section_b',
-    'section_c'
+CREATE TYPE account_status AS ENUM (
+    'active',
+    'deactivated',
+    'suspended',
+    'pending_approval',
+    'rejected'
+);
+
+CREATE TYPE program_status AS ENUM (
+    'draft',
+    'active',
+    'completed',
+    'cancelled'
 );
 
 CREATE TYPE project_status AS ENUM (
-    'proposed',
-    'pending',
-    'ongoing',
+    'draft',
+    'planning',
+    'pending_approval',
+    'approved',
+    'in_progress',
+    'on_hold',
     'completed',
     'cancelled'
+);
+
+CREATE TYPE approval_status AS ENUM (
+    'pending',
+    'approved',
+    'rejected'
+);
+
+CREATE TYPE creation_source_type AS ENUM (
+    'internal_proposal',
+    'public_request'
 );
 
 CREATE TYPE proposal_status AS ENUM (
@@ -29,326 +86,395 @@ CREATE TYPE proposal_status AS ENUM (
 );
 
 CREATE TYPE task_status AS ENUM (
-    'assigned',
+    'pending',
     'in_progress',
     'completed',
-    'overdue'
+    'cancelled'
 );
 
-CREATE TYPE report_status AS ENUM (
-    'submitted',
-    'reviewed',
-    'resolved'
+CREATE TYPE task_priority AS ENUM (
+    'low',
+    'medium',
+    'high',
+    'urgent'
 );
 
-CREATE TYPE auth_provider AS ENUM (
-    'local',
-    'google'
-);
-
-CREATE TYPE account_status AS ENUM (
-    'pending_approval',
-    'active',
-    'rejected',
-    'deactivated'
-);
-
+-- ==========================================
+-- Users Table
+-- ==========================================
 CREATE TABLE users (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    first_name          VARCHAR(75) NOT NULL,
-    last_name           VARCHAR(75) NOT NULL,
+    username            VARCHAR(50) UNIQUE NOT NULL CHECK (username ~ '^[a-zA-Z0-9_]+$'),
+    first_name          VARCHAR(100) NOT NULL,
+    last_name           VARCHAR(100) NOT NULL,
     email               VARCHAR(150) UNIQUE NOT NULL,
-    username            VARCHAR(50) UNIQUE NOT NULL,
-    password_hash       TEXT,
-    auth_provider       auth_provider NOT NULL DEFAULT 'local',
-    google_id           VARCHAR(255) UNIQUE,
-    avatar_url          TEXT,
+    password_hash       VARCHAR(255) NOT NULL,
     role                user_role NOT NULL DEFAULT 'public_user',
     department          VARCHAR(100),
     contact_number      VARCHAR(15),
     account_status      account_status NOT NULL DEFAULT 'pending_approval',
-    approved_by         UUID REFERENCES users(id) ON DELETE SET NULL,
-    approved_at         TIMESTAMPTZ,
+    avatar_url          VARCHAR(255),
     last_active         TIMESTAMPTZ,
-    is_active           BOOLEAN NOT NULL GENERATED ALWAYS AS (account_status = 'active') STORED,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- Constraints
     CONSTRAINT chk_department_role CHECK (
         (role IN ('program_chair', 'project_head', 'staff') AND department IS NOT NULL)
         OR
         (role IN ('admin', 'public_user'))
-    ),
-    CONSTRAINT chk_username_format CHECK (username ~ '^[a-zA-Z0-9_]{3,50}$'),
-    CONSTRAINT chk_local_auth CHECK (
-        (auth_provider = 'local' AND password_hash IS NOT NULL)
-        OR
-        (auth_provider = 'google' AND google_id IS NOT NULL)
     )
 );
 
+-- Indexes for users table
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_account_status ON users(account_status);
+CREATE INDEX idx_users_last_active ON users(last_active);
+
+-- ==========================================
+-- Departments/Colleges Table
+-- ==========================================
+CREATE TABLE departments (
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    department_name         VARCHAR(100) NOT NULL UNIQUE,
+    department_code         VARCHAR(20) UNIQUE,
+    program_chair_id        UUID REFERENCES users(id) ON DELETE SET NULL,
+    budget_allocation       DECIMAL(12, 2) DEFAULT 0,
+    spent_budget            DECIMAL(12, 2) DEFAULT 0,
+    description             TEXT,
+    is_active               BOOLEAN DEFAULT TRUE,
+    created_at              TIMESTAMPTZ DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ DEFAULT NOW(),
+    
+    CONSTRAINT chk_budget CHECK (spent_budget <= budget_allocation)
+);
+
+CREATE INDEX idx_departments_program_chair ON departments(program_chair_id);
+CREATE INDEX idx_departments_active ON departments(is_active);
+
+-- ==========================================
+-- Programs Table
+-- ==========================================
+CREATE TABLE programs (
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    program_name            VARCHAR(200) NOT NULL,
+    program_description     VARCHAR(1000),
+    program_category        VARCHAR(100),
+    department_id           UUID REFERENCES departments(id) ON DELETE SET NULL,
+    program_chair_id        UUID REFERENCES users(id) ON DELETE SET NULL,
+    objectives              VARCHAR(2000),
+    target_beneficiaries    VARCHAR(500),
+    budget_allocation       DECIMAL(12, 2),
+    spent_budget            DECIMAL(12, 2) DEFAULT 0,
+    start_date              DATE,
+    end_date                DATE,
+    status                  program_status NOT NULL DEFAULT 'draft',
+    approval_status         approval_status NOT NULL DEFAULT 'pending',
+    approved_by             UUID REFERENCES users(id) ON DELETE SET NULL,
+    approved_at             TIMESTAMPTZ,
+    created_at              TIMESTAMPTZ DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ DEFAULT NOW(),
+    
+    CONSTRAINT chk_program_budget CHECK (spent_budget <= budget_allocation),
+    CONSTRAINT chk_program_dates CHECK (end_date >= start_date OR end_date IS NULL)
+);
+
+CREATE INDEX idx_programs_status ON programs(status);
+CREATE INDEX idx_programs_approval_status ON programs(approval_status);
+CREATE INDEX idx_programs_program_chair ON programs(program_chair_id);
+CREATE INDEX idx_programs_category ON programs(program_category);
+CREATE INDEX idx_programs_department ON programs(department_id);
+
+-- ==========================================
+-- Project Requests Table
+-- ==========================================
+CREATE TABLE project_requests (
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    request_title           VARCHAR(200) NOT NULL,
+    request_description     VARCHAR(2000) NOT NULL,
+    requested_by            UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    requested_department    VARCHAR(100),
+    estimated_budget        DECIMAL(12, 2),
+    target_beneficiaries    VARCHAR(500),
+    justification           VARCHAR(2000),
+    status                  approval_status NOT NULL DEFAULT 'pending',
+    reviewed_by             UUID REFERENCES users(id) ON DELETE SET NULL,
+    reviewed_at             TIMESTAMPTZ,
+    review_notes            TEXT,
+    assigned_program_id     UUID REFERENCES programs(id) ON DELETE SET NULL,
+    created_at              TIMESTAMPTZ DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_project_requests_status ON project_requests(status);
+CREATE INDEX idx_project_requests_requested_by ON project_requests(requested_by);
+CREATE INDEX idx_project_requests_department ON project_requests(requested_department);
+
+-- ==========================================
+-- Projects Table
+-- ==========================================
 CREATE TABLE projects (
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_name            VARCHAR(200) NOT NULL,
+    project_description     VARCHAR(2000),
+    program_id              UUID REFERENCES programs(id) ON DELETE SET NULL,
+    department_id           UUID REFERENCES departments(id) ON DELETE SET NULL,
+    project_head_id         UUID REFERENCES users(id) ON DELETE SET NULL,
+    department              VARCHAR(100),
+    objectives              VARCHAR(2000),
+    budget                  DECIMAL(12, 2),
+    start_date              DATE,
+    end_date                DATE,
+    progress_percentage     INTEGER DEFAULT 0 CHECK (progress_percentage >= 0 AND progress_percentage <= 100),
+    status                  project_status NOT NULL DEFAULT 'draft',
+    approval_status         approval_status NOT NULL DEFAULT 'pending',
+    approved_by             UUID REFERENCES users(id) ON DELETE SET NULL,
+    approved_at             TIMESTAMPTZ,
+    creation_source         creation_source_type,
+    request_id              UUID REFERENCES project_requests(id) ON DELETE SET NULL,
+    created_by              UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    updated_by              UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at              TIMESTAMPTZ DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ DEFAULT NOW(),
+    
+    CONSTRAINT chk_project_dates CHECK (end_date >= start_date OR end_date IS NULL)
+);
+
+CREATE INDEX idx_projects_status ON projects(status);
+CREATE INDEX idx_projects_department ON projects(department);
+CREATE INDEX idx_projects_created_by ON projects(created_by);
+CREATE INDEX idx_projects_program_id ON projects(program_id);
+CREATE INDEX idx_projects_department_id ON projects(department_id);
+CREATE INDEX idx_projects_project_head_id ON projects(project_head_id);
+CREATE INDEX idx_projects_approval_status ON projects(approval_status);
+CREATE INDEX idx_projects_creation_source ON projects(creation_source);
+CREATE INDEX idx_projects_request_id ON projects(request_id);
+
+-- ==========================================
+-- Tasks Table
+-- ==========================================
+CREATE TABLE tasks (
     id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id          UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     title               VARCHAR(255) NOT NULL,
     description         TEXT,
-    status              project_status NOT NULL DEFAULT 'pending',
-    created_by          UUID REFERENCES users(id) ON DELETE SET NULL,
-    assigned_head_id    UUID REFERENCES users(id) ON DELETE SET NULL,
-    start_date          DATE,
-    end_date            DATE,
-    is_public_visible   BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    status              task_status NOT NULL DEFAULT 'pending',
+    priority            task_priority NOT NULL DEFAULT 'medium',
+    assigned_to         UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_by          UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    due_date            DATE,
+    completed_at        TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE project_proposals (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    proposed_by     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title           VARCHAR(255) NOT NULL,
-    description     TEXT,
-    status          proposal_status NOT NULL DEFAULT 'pending',
-    reviewed_by     UUID REFERENCES users(id) ON DELETE SET NULL,
-    review_notes    TEXT,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE INDEX idx_tasks_project ON tasks(project_id);
+CREATE INDEX idx_tasks_assigned_to ON tasks(assigned_to);
+CREATE INDEX idx_tasks_status ON tasks(status);
+
+-- ==========================================
+-- Task Assignments Table
+-- ==========================================
+CREATE TABLE task_assignments (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    task_id             UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    assigned_at         TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(task_id, user_id)
 );
 
-CREATE TABLE tasks (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    assigned_by     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    assigned_to     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title           VARCHAR(255) NOT NULL,
-    description     TEXT,
-    status          task_status NOT NULL DEFAULT 'assigned',
-    due_date        DATE,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+CREATE INDEX idx_task_assignments_task ON task_assignments(task_id);
+CREATE INDEX idx_task_assignments_user ON task_assignments(user_id);
 
-CREATE TABLE reports (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    task_id         UUID REFERENCES tasks(id) ON DELETE SET NULL,
-    project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    submitted_by    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title           VARCHAR(255) NOT NULL,
-    content         TEXT NOT NULL,
-    status          report_status NOT NULL DEFAULT 'submitted',
-    reviewed_by     UUID REFERENCES users(id) ON DELETE SET NULL,
-    review_notes    TEXT,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
+-- ==========================================
+-- Blog Posts Table
+-- ==========================================
 CREATE TABLE blog_posts (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    author_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title           VARCHAR(255) NOT NULL,
-    content         TEXT NOT NULL,
-    is_published    BOOLEAN NOT NULL DEFAULT FALSE,
-    published_at    TIMESTAMPTZ,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title               VARCHAR(255) NOT NULL,
+    content             TEXT NOT NULL,
+    author_id           UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    published           BOOLEAN DEFAULT FALSE,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE analytics_snapshots (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    generated_by    UUID REFERENCES users(id) ON DELETE SET NULL,
-    scope           VARCHAR(50) NOT NULL,
-    data            JSONB NOT NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE INDEX idx_blog_author ON blog_posts(author_id);
+CREATE INDEX idx_blog_published ON blog_posts(published);
+
+-- ==========================================
+-- SLA Metrics Table
+-- ==========================================
+CREATE TABLE sla_metrics (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id          UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    metric_name         VARCHAR(100) NOT NULL,
+    target_value        DECIMAL(10, 2),
+    current_value       DECIMAL(10, 2),
+    measured_at         TIMESTAMPTZ DEFAULT NOW()
 );
 
-DO $$ BEGIN
+CREATE INDEX idx_sla_project ON sla_metrics(project_id);
+
+-- ==========================================
+-- Activity Logs Table
+-- ==========================================
+CREATE TABLE activity_logs (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID REFERENCES users(id) ON DELETE SET NULL,
+    action              VARCHAR(100) NOT NULL,
+    entity_type         VARCHAR(50),
+    entity_id           UUID,
+    details             JSONB,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_activity_user ON activity_logs(user_id);
+CREATE INDEX idx_activity_created ON activity_logs(created_at);
+
+-- ==========================================
+-- Views for Reporting
+-- ==========================================
+
+-- View: Department Budget Summary
+CREATE VIEW vw_department_budget_summary AS
+SELECT 
+    d.id,
+    d.department_name,
+    d.department_code,
+    d.budget_allocation,
+    d.spent_budget,
+    d.budget_allocation - d.spent_budget AS remaining_budget,
+    CASE 
+        WHEN d.budget_allocation > 0 THEN ROUND((d.spent_budget / d.budget_allocation * 100)::numeric, 2)
+        ELSE 0
+    END AS budget_utilization_percentage,
+    COUNT(DISTINCT p.id) AS total_programs,
+    COUNT(DISTINCT pr.id) AS total_projects,
+    u.first_name || ' ' || u.last_name AS program_chair_name
+FROM departments d
+LEFT JOIN programs p ON d.id = p.department_id
+LEFT JOIN projects pr ON d.id = pr.department_id
+LEFT JOIN users u ON d.program_chair_id = u.id
+GROUP BY d.id, d.department_name, d.department_code, d.budget_allocation, d.spent_budget, u.first_name, u.last_name;
+
+-- View: Program Summary
+CREATE VIEW vw_program_summary AS
+SELECT 
+    p.id,
+    p.program_name,
+    p.program_category,
+    p.status,
+    p.approval_status,
+    d.department_name,
+    u.first_name || ' ' || u.last_name AS program_chair_name,
+    COUNT(pr.id) AS total_projects,
+    SUM(CASE WHEN pr.status = 'completed' THEN 1 ELSE 0 END) AS completed_projects,
+    SUM(CASE WHEN pr.status = 'in_progress' THEN 1 ELSE 0 END) AS active_projects,
+    p.budget_allocation,
+    p.spent_budget,
+    p.start_date,
+    p.end_date
+FROM programs p
+LEFT JOIN departments d ON p.department_id = d.id
+LEFT JOIN users u ON p.program_chair_id = u.id
+LEFT JOIN projects pr ON p.id = pr.program_id
+GROUP BY p.id, d.department_name, u.first_name, u.last_name;
+
+-- ==========================================
+-- Row Level Security Setup
+-- ==========================================
+
+-- Create application roles
+DO $$ 
+BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_admin') THEN
-        CREATE ROLE app_admin NOLOGIN;
+        CREATE ROLE app_admin;
     END IF;
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_program_chair') THEN
-        CREATE ROLE app_program_chair NOLOGIN;
+        CREATE ROLE app_program_chair;
     END IF;
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_project_head') THEN
-        CREATE ROLE app_project_head NOLOGIN;
+        CREATE ROLE app_project_head;
     END IF;
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_staff') THEN
-        CREATE ROLE app_staff NOLOGIN;
+        CREATE ROLE app_staff;
     END IF;
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_public_user') THEN
-        CREATE ROLE app_public_user NOLOGIN;
+        CREATE ROLE app_public_user;
     END IF;
 END $$;
 
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO app_admin;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO app_admin;
+-- Grant permissions
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON users TO app_program_chair;
-GRANT SELECT, INSERT, UPDATE, DELETE ON projects TO app_program_chair;
-GRANT SELECT, INSERT, UPDATE, DELETE ON project_proposals TO app_program_chair;
-GRANT SELECT, INSERT, UPDATE, DELETE ON tasks TO app_program_chair;
-GRANT SELECT, INSERT, UPDATE, DELETE ON reports TO app_program_chair;
-GRANT SELECT ON analytics_snapshots TO app_program_chair;
-GRANT SELECT ON blog_posts TO app_program_chair;
+-- Admin: Full access
+GRANT ALL ON ALL TABLES IN SCHEMA public TO app_admin;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO app_admin;
 
-GRANT SELECT, INSERT, UPDATE ON projects TO app_project_head;
-GRANT SELECT, INSERT ON project_proposals TO app_project_head;
-GRANT SELECT, INSERT, UPDATE ON tasks TO app_project_head;
-GRANT SELECT, INSERT, UPDATE ON reports TO app_project_head;
-GRANT SELECT ON users TO app_project_head;
+-- Program Chair: Full access to programs, departments, projects
+GRANT SELECT, INSERT, UPDATE ON departments, programs, projects, project_requests TO app_program_chair;
+GRANT SELECT ON users TO app_program_chair;
 
-GRANT SELECT ON tasks TO app_staff;
-GRANT SELECT, INSERT, UPDATE ON reports TO app_staff;
-GRANT SELECT ON projects TO app_staff;
+-- Project Head: Read programs, full access to projects
+GRANT SELECT ON departments, programs TO app_project_head;
+GRANT SELECT, INSERT, UPDATE ON projects, tasks TO app_project_head;
+GRANT SELECT ON users, project_requests TO app_project_head;
 
+-- Staff: View and update tasks
+GRANT SELECT ON departments, programs, projects, users TO app_staff;
+GRANT SELECT, UPDATE ON tasks TO app_staff;
+
+-- Public User: View projects, submit requests
 GRANT SELECT ON projects TO app_public_user;
-GRANT SELECT ON blog_posts TO app_public_user;
-GRANT SELECT, INSERT ON project_proposals TO app_public_user;
+GRANT SELECT, INSERT ON project_requests TO app_public_user;
 
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE project_proposals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
-ALTER TABLE blog_posts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE analytics_snapshots ENABLE ROW LEVEL SECURITY;
+-- ==========================================
+-- Seed Data
+-- ==========================================
 
-CREATE POLICY admin_all_users ON users
-    TO app_admin
-    USING (true)
-    WITH CHECK (true);
+-- Insert default departments
+INSERT INTO departments (department_name, department_code, description, is_active) VALUES
+    ('College of Arts, Sciences and Education', 'CASE', 'Liberal arts, sciences, and teacher education programs', true),
+    ('College of Engineering and Architecture', 'CEA', 'Engineering and architecture disciplines', true),
+    ('College of Business and Public Administration', 'CBPA', 'Business, accounting, and public administration programs', true),
+    ('College of Hospitality and Tourism Management', 'CHTM', 'Hospitality, tourism, and culinary programs', true),
+    ('College of Criminal Justice Education', 'CCJE', 'Criminology and law enforcement education', true),
+    ('College of Information Technology', 'CIT', 'Computer science and IT programs', true),
+    ('College of Computer Studies', 'CCS', 'Software development and computing programs', true);
 
--- Program chairs can view and manage users (application will filter by department)
-CREATE POLICY chair_manage_users ON users
-    TO app_program_chair
-    USING (true)
-    WITH CHECK (role IN ('project_head', 'staff'));
+-- Insert admin user
+-- Password: 'password' (hashed with bcrypt)
+INSERT INTO users (
+    id,
+    username,
+    first_name,
+    last_name,
+    email,
+    password_hash,
+    role,
+    department,
+    contact_number,
+    account_status
+) VALUES (
+    uuid_generate_v4(),
+    'admin',
+    'System',
+    'Administrator',
+    'admin@extensionservice.com',
+    '$2a$10$8jy3mYZ0z3QxJxKJ3K3QxJxKJ3K3QxJxKJ3K3QxJxKJ3K3QxJxKJ3',
+    'admin',
+    NULL,
+    NULL,
+    'active'
+);
 
-CREATE POLICY head_view_users ON users
-    TO app_project_head
-    USING (true);
+-- ==========================================
+-- Triggers for updated_at
+-- ==========================================
 
-CREATE POLICY staff_own_user ON users
-    TO app_staff
-    USING (id = current_setting('app.current_user_id')::UUID);
-
-CREATE POLICY admin_all_projects ON projects
-    TO app_admin
-    USING (true)
-    WITH CHECK (true);
-
--- Program chairs can view and manage all projects (application will filter by department)
-CREATE POLICY chair_manage_projects ON projects
-    TO app_program_chair
-    USING (true)
-    WITH CHECK (true);
-
-CREATE POLICY head_own_projects ON projects
-    TO app_project_head
-    USING (assigned_head_id = current_setting('app.current_user_id')::UUID)
-    WITH CHECK (assigned_head_id = current_setting('app.current_user_id')::UUID);
-
-CREATE POLICY staff_view_projects ON projects
-    TO app_staff
-    USING (
-        is_public_visible = TRUE
-        OR id IN (
-            SELECT DISTINCT project_id FROM tasks
-            WHERE assigned_to = current_setting('app.current_user_id')::UUID
-        )
-    );
-
-CREATE POLICY public_view_projects ON projects
-    TO app_public_user
-    USING (is_public_visible = TRUE AND status NOT IN ('cancelled'));
-
-CREATE POLICY admin_all_proposals ON project_proposals
-    TO app_admin USING (true) WITH CHECK (true);
-
--- Program chairs can view and manage all proposals (application will filter by department)
-CREATE POLICY chair_manage_proposals ON project_proposals
-    TO app_program_chair
-    USING (true)
-    WITH CHECK (true);
-
-CREATE POLICY head_own_proposals ON project_proposals
-    TO app_project_head
-    USING (proposed_by = current_setting('app.current_user_id')::UUID)
-    WITH CHECK (proposed_by = current_setting('app.current_user_id')::UUID);
-
-CREATE POLICY public_own_proposals ON project_proposals
-    TO app_public_user
-    USING (proposed_by = current_setting('app.current_user_id')::UUID)
-    WITH CHECK (proposed_by = current_setting('app.current_user_id')::UUID);
-
-CREATE POLICY admin_all_tasks ON tasks
-    TO app_admin USING (true) WITH CHECK (true);
-
--- Program chairs can view all tasks (application will filter by department)
-CREATE POLICY chair_view_tasks ON tasks
-    TO app_program_chair
-    USING (true);
-
-CREATE POLICY head_own_tasks ON tasks
-    TO app_project_head
-    USING (assigned_by = current_setting('app.current_user_id')::UUID)
-    WITH CHECK (assigned_by = current_setting('app.current_user_id')::UUID);
-
-CREATE POLICY staff_own_tasks ON tasks
-    TO app_staff
-    USING (assigned_to = current_setting('app.current_user_id')::UUID);
-
-CREATE POLICY admin_all_reports ON reports
-    TO app_admin USING (true) WITH CHECK (true);
-
--- Program chairs can view all reports (application will filter by department)
-CREATE POLICY chair_view_reports ON reports
-    TO app_program_chair
-    USING (true);
-
-CREATE POLICY head_section_reports ON reports
-    TO app_project_head
-    USING (
-        project_id IN (
-            SELECT id FROM projects
-            WHERE assigned_head_id = current_setting('app.current_user_id')::UUID
-        )
-    );
-
-CREATE POLICY staff_own_reports ON reports
-    TO app_staff
-    USING (submitted_by = current_setting('app.current_user_id')::UUID)
-    WITH CHECK (submitted_by = current_setting('app.current_user_id')::UUID);
-
-CREATE POLICY admin_all_blog ON blog_posts
-    TO app_admin USING (true) WITH CHECK (true);
-
-CREATE POLICY public_read_blog ON blog_posts
-    TO app_program_chair, app_project_head, app_staff, app_public_user
-    USING (is_published = TRUE);
-
-CREATE POLICY admin_all_analytics ON analytics_snapshots
-    TO app_admin USING (true) WITH CHECK (true);
-
--- Program chairs can view global analytics (application will filter by department for specific data)
-CREATE POLICY chair_view_analytics ON analytics_snapshots
-    TO app_program_chair
-    USING (scope = 'global');
-
-CREATE INDEX idx_users_role ON users(role);
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_last_active ON users(last_active);
-CREATE INDEX idx_users_account_status ON users(account_status);
-CREATE INDEX idx_users_google_id ON users(google_id);
-CREATE INDEX idx_users_auth_provider ON users(auth_provider);
-CREATE INDEX idx_projects_status ON projects(status);
-CREATE INDEX idx_projects_assigned_head ON projects(assigned_head_id);
-CREATE INDEX idx_tasks_assigned_to ON tasks(assigned_to);
-CREATE INDEX idx_tasks_assigned_by ON tasks(assigned_by);
-CREATE INDEX idx_tasks_project ON tasks(project_id);
-CREATE INDEX idx_reports_submitted_by ON reports(submitted_by);
-CREATE INDEX idx_reports_project ON reports(project_id);
-CREATE INDEX idx_proposals_proposed_by ON project_proposals(proposed_by);
-CREATE INDEX idx_blog_published ON blog_posts(is_published, published_at);
-
-CREATE OR REPLACE FUNCTION update_timestamp()
+CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
@@ -356,32 +482,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_users_updated BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER trg_projects_updated BEFORE UPDATE ON projects
-    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+CREATE TRIGGER update_departments_updated_at BEFORE UPDATE ON departments
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER trg_tasks_updated BEFORE UPDATE ON tasks
-    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+CREATE TRIGGER update_programs_updated_at BEFORE UPDATE ON programs
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER trg_reports_updated BEFORE UPDATE ON reports
-    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+CREATE TRIGGER update_project_requests_updated_at BEFORE UPDATE ON project_requests
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER trg_proposals_updated BEFORE UPDATE ON project_proposals
-    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER trg_blog_updated BEFORE UPDATE ON blog_posts
-    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+CREATE TRIGGER update_tasks_updated_at BEFORE UPDATE ON tasks
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-INSERT INTO users (first_name, last_name, email, username, password_hash, auth_provider, role, account_status)
-VALUES (
-    'System',
-    'Administrator',
-    'admin@extensionservice.com',
-    'admin',
-    '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
-    'local',
-    'admin',
-    'active'
-);
+CREATE TRIGGER update_blog_posts_updated_at BEFORE UPDATE ON blog_posts
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

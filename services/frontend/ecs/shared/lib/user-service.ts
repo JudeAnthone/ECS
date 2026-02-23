@@ -47,8 +47,16 @@ export const userService = {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to approve user');
+      const contentType = response.headers.get('content-type');
+      let errorMessage = 'Failed to approve user';
+      if (contentType && contentType.includes('application/json')) {
+        const error = await response.json();
+        errorMessage = error.error || errorMessage;
+      } else {
+        const text = await response.text();
+        errorMessage = text || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
   },
 
@@ -62,8 +70,16 @@ export const userService = {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to reject user');
+      const contentType = response.headers.get('content-type');
+      let errorMessage = 'Failed to reject user';
+      if (contentType && contentType.includes('application/json')) {
+        const error = await response.json();
+        errorMessage = error.error || errorMessage;
+      } else {
+        const text = await response.text();
+        errorMessage = text || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
   },
 
@@ -77,8 +93,16 @@ export const userService = {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to delete user');
+      const contentType = response.headers.get('content-type');
+      let errorMessage = 'Failed to delete user';
+      if (contentType && contentType.includes('application/json')) {
+        const error = await response.json();
+        errorMessage = error.error || errorMessage;
+      } else {
+        const text = await response.text();
+        errorMessage = text || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
   },
 
@@ -93,8 +117,16 @@ export const userService = {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update user');
+      const contentType = response.headers.get('content-type');
+      let errorMessage = 'Failed to update user';
+      if (contentType && contentType.includes('application/json')) {
+        const error = await response.json();
+        errorMessage = error.error || errorMessage;
+      } else {
+        const text = await response.text();
+        errorMessage = text || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
   },
 };
