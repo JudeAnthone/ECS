@@ -45,6 +45,7 @@ func SetupRoutes() *mux.Router {
 	api.Handle("/users", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.GetAllUsers))).Methods("GET")
 	api.Handle("/users/{id}/approve", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.ApproveUser))).Methods("PUT")
 	api.Handle("/users/{id}/reject", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.RejectUser))).Methods("PUT")
+	api.Handle("/users/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.UpdateUser))).Methods("PUT")
 	api.Handle("/users/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.DeleteUser))).Methods("DELETE")
 
 	return r

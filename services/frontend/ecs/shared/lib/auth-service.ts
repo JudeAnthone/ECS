@@ -9,9 +9,11 @@ export interface RegisterRequest {
   first_name: string;
   last_name: string;
   email: string;
+  username: string;
   password: string;
   role?: string;
-  section?: string;
+  department?: string;
+  contact_number?: string;
 }
 
 export interface UserDTO {
@@ -19,10 +21,13 @@ export interface UserDTO {
   first_name: string;
   last_name: string;
   email: string;
+  username: string;
   role: string;
-  section?: string;
+  department?: string;
+  contact_number?: string;
   account_status: string;
   avatar_url?: string;
+  last_active?: string;
   created_at: string;
 }
 

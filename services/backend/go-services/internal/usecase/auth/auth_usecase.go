@@ -41,6 +41,9 @@ func (u *authUsecase) Login(ctx context.Context, req *dto.LoginRequest) (*dto.Au
 		return nil, fmt.Errorf("account is not active. Status: %s", user.AccountStatus)
 	}
 
+	// Update last active timestamp (use background context to avoid cancellation)
+	go u.userRepo.UpdateLastActive(context.Background(), user.ID)
+
 	// Generate JWT token
 	token, expiresIn, err := jwtutil.GenerateToken(
 		user.ID,
@@ -60,11 +63,13 @@ func (u *authUsecase) Login(ctx context.Context, req *dto.LoginRequest) (*dto.Au
 		ExpiresIn: expiresIn,
 		User: &dto.UserDTO{
 			ID:            user.ID,
+			Username:      user.Username,
 			FirstName:     user.FirstName,
 			LastName:      user.LastName,
 			Email:         user.Email,
 			Role:          user.Role,
-			Section:       user.Section,
+			Department:    user.Department,
+			ContactNumber: user.ContactNumber,
 			AccountStatus: user.AccountStatus,
 			AvatarURL:     user.AvatarURL,
 			CreatedAt:     user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -73,10 +78,16 @@ func (u *authUsecase) Login(ctx context.Context, req *dto.LoginRequest) (*dto.Au
 }
 
 func (u *authUsecase) Register(ctx context.Context, req *dto.RegisterRequest) (*dto.AuthResponse, error) {
-	// Check if user already exists
+	// Check if user already exists by email
 	existingUser, _ := u.userRepo.GetByEmail(ctx, req.Email)
 	if existingUser != nil {
 		return nil, fmt.Errorf("user with this email already exists")
+	}
+
+	// Check if username already exists
+	existingUsername, _ := u.userRepo.GetByUsername(ctx, req.Username)
+	if existingUsername != nil {
+		return nil, fmt.Errorf("username is already taken")
 	}
 
 	// Hash password
@@ -93,18 +104,16 @@ func (u *authUsecase) Register(ctx context.Context, req *dto.RegisterRequest) (*
 
 	// Create user
 	user := &domain.User{
+		Username:      req.Username,
 		FirstName:     req.FirstName,
 		LastName:      req.LastName,
 		Email:         req.Email,
 		PasswordHash:  hashedPassword,
 		AuthProvider:  domain.AuthProviderLocal,
 		Role:          role,
+		Department:    req.Department,
+		ContactNumber: req.ContactNumber,
 		AccountStatus: domain.AccountPendingApproval,
-	}
-
-	// Set section if provided
-	if req.Section != "" {
-		user.Section = &req.Section
 	}
 
 	// Save user to database
@@ -117,11 +126,13 @@ func (u *authUsecase) Register(ctx context.Context, req *dto.RegisterRequest) (*
 		return &dto.AuthResponse{
 			User: &dto.UserDTO{
 				ID:            user.ID,
+				Username:      user.Username,
 				FirstName:     user.FirstName,
 				LastName:      user.LastName,
 				Email:         user.Email,
 				Role:          user.Role,
-				Section:       user.Section,
+				Department:    user.Department,
+				ContactNumber: user.ContactNumber,
 				AccountStatus: user.AccountStatus,
 				CreatedAt:     user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			},
@@ -146,11 +157,13 @@ func (u *authUsecase) Register(ctx context.Context, req *dto.RegisterRequest) (*
 		ExpiresIn: expiresIn,
 		User: &dto.UserDTO{
 			ID:            user.ID,
+			Username:      user.Username,
 			FirstName:     user.FirstName,
 			LastName:      user.LastName,
 			Email:         user.Email,
 			Role:          user.Role,
-			Section:       user.Section,
+			Department:    user.Department,
+			ContactNumber: user.ContactNumber,
 			AccountStatus: user.AccountStatus,
 			CreatedAt:     user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		},

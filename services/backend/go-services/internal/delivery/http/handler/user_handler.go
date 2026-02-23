@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
+	"github.com/Xschema-dev/Earist-Extension-Service/internal/delivery/http/dto"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/user"
 	"github.com/gorilla/mux"
 )
@@ -85,5 +87,27 @@ func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 
 	respondWithJSON(w, http.StatusOK, map[string]string{
 		"message": "User deleted successfully",
+	})
+}
+
+func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID := vars["id"]
+
+	var updates dto.UpdateUserDTO
+	err := json.NewDecoder(r.Body).Decode(&updates)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	err = h.userUsecase.UpdateUser(r.Context(), userID, &updates)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, map[string]string{
+		"message": "User updated successfully",
 	})
 }

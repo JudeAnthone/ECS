@@ -5,10 +5,13 @@ export interface User {
   first_name: string;
   last_name: string;
   email: string;
+  username: string;
   role: string;
-  section?: string;
+  department?: string;
+  contact_number?: string;
   account_status: string;
   avatar_url?: string;
+  last_active?: string;
   created_at: string;
 }
 
@@ -76,6 +79,22 @@ export const userService = {
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Failed to delete user');
+    }
+  },
+
+  async updateUser(userId: string, updates: Partial<Omit<User, 'id' | 'created_at' | 'avatar_url' | 'last_active'>>, token: string): Promise<void> {
+    const response = await fetch(`${API_URL}/users/${userId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updates),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update user');
     }
   },
 };

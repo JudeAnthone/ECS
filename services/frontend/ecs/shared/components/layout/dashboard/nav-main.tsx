@@ -36,14 +36,14 @@ const roleNavigation: RoleNavigation = {
       { title: "Chatbot", href: "/admin-chatbot" },
     ],
   },
-  "project-chair": {
-    label: "Project Chair",
+  "program-chair": {
+    label: "Program Chair",
     items: [
-      { title: "Dashboard", href: "/project-chair-dashboard" },
-      { title: "Project List", href: "/project-chair-project-list" },
-      { title: "Project Recommendation", href: "/project-chair-project-recommendation" },
-      { title: "Funds and Budget", href: "/project-chair-funds-and-budget" },
-      { title: "Analytics", href: "/project-chair-analytics" },
+      { title: "Dashboard", href: "/program-chair-dashboard" },
+      { title: "Project List", href: "/program-chair-project-list" },
+      { title: "Project Recommendation", href: "/program-chair-project-recommendation" },
+      { title: "Funds and Budget", href: "/program-chair-funds-and-budget" },
+      { title: "Analytics", href: "/program-chair-analytics" },
     ],
   },
   "project-head": {

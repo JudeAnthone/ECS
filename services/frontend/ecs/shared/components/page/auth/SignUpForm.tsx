@@ -31,9 +31,11 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     first_name: "",
     last_name: "",
     email: "",
+    username: "",
     password: "",
     confirmPassword: "",
-    section: "",
+    department: "",
+    contact_number: "",
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -65,8 +67,10 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
         first_name: formData.first_name,
         last_name: formData.last_name,
         email: formData.email,
+        username: formData.username,
         password: formData.password,
-        section: formData.section || undefined,
+        department: formData.department || undefined,
+        contact_number: formData.contact_number || undefined,
       });
 
       // Check account status
@@ -77,9 +81,11 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
           first_name: "",
           last_name: "",
           email: "",
+          username: "",
           password: "",
           confirmPassword: "",
-          section: "",
+          department: "",
+          contact_number: "",
         });
       } else {
         // Account is active, redirect to dashboard based on role
@@ -88,8 +94,8 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
           const role = response.user.role;
           if (role === 'admin') {
             router.push('/admin/admin-dashboard');
-          } else if (role === 'project_chair') {
-            router.push('/project-chair/project-chair-dashboard');
+          } else if (role === 'program_chair') {
+            router.push('/program-chair/program-chair-dashboard');
           } else if (role === 'project_head') {
             router.push('/project-head/project-head-dashboard');
           } else if (role === 'staff') {
@@ -171,6 +177,22 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
               </FieldDescription>
             </Field>
             <Field>
+              <FieldLabel htmlFor="username">Username<span className="text-destructive">*</span></FieldLabel>
+              <Input
+                id="username"
+                name="username"
+                type="text"
+                placeholder="johndoe"
+                value={formData.username}
+                onChange={handleInputChange}
+                disabled={isLoading}
+                required
+              />
+              <FieldDescription>
+                Must be unique and alphanumeric (3-50 characters)
+              </FieldDescription>
+            </Field>
+            <Field>
               <FieldLabel htmlFor="password">Password<span className="text-destructive">*</span></FieldLabel>
               <Input 
                 id="password" 
@@ -200,13 +222,25 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
               />
             </Field>
             <Field>
-              <FieldLabel htmlFor="section">Department / Section</FieldLabel>
+              <FieldLabel htmlFor="department">Department</FieldLabel>
               <Input
-                id="section"
-                name="section"
+                id="department"
+                name="department"
                 type="text"
-                placeholder="College of Engineering (Optional)"
-                value={formData.section}
+                placeholder="e.g., College of Engineering (Optional)"
+                value={formData.department}
+                onChange={handleInputChange}
+                disabled={isLoading}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="contact_number">Contact Number</FieldLabel>
+              <Input
+                id="contact_number"
+                name="contact_number"
+                type="text"
+                placeholder="e.g., +63 123 456 7890 (Optional)"
+                value={formData.contact_number}
                 onChange={handleInputChange}
                 disabled={isLoading}
               />

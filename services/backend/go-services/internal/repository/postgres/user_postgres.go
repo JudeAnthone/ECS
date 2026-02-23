@@ -20,21 +20,23 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 
 func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	query := `
-		INSERT INTO users (first_name, last_name, email, password_hash, auth_provider, role, section, account_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO users (username, first_name, last_name, email, password_hash, auth_provider, role, department, contact_number, account_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, created_at, updated_at
 	`
 
 	err := r.db.QueryRow(
 		ctx,
 		query,
+		user.Username,
 		user.FirstName,
 		user.LastName,
 		user.Email,
 		user.PasswordHash,
 		user.AuthProvider,
 		user.Role,
-		user.Section,
+		user.Department,
+		user.ContactNumber,
 		user.AccountStatus,
 	).Scan(&user.ID, &user.CreatedAt, &user.UpdatedAt)
 
@@ -47,8 +49,8 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
-		       role, section, account_status, approved_by, approved_at, is_active,
+		SELECT id, username, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
+		       role, department, contact_number, account_status, approved_by, approved_at, is_active, last_active,
 		       created_at, updated_at
 		FROM users
 		WHERE email = $1
@@ -57,6 +59,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 	user := &domain.User{}
 	err := r.db.QueryRow(ctx, query, email).Scan(
 		&user.ID,
+		&user.Username,
 		&user.FirstName,
 		&user.LastName,
 		&user.Email,
@@ -65,11 +68,13 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 		&user.GoogleID,
 		&user.AvatarURL,
 		&user.Role,
-		&user.Section,
+		&user.Department,
+		&user.ContactNumber,
 		&user.AccountStatus,
 		&user.ApprovedBy,
 		&user.ApprovedAt,
 		&user.IsActive,
+		&user.LastActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -86,8 +91,8 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
-		       role, section, account_status, approved_by, approved_at, is_active,
+		SELECT id, username, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
+		       role, department, contact_number, account_status, approved_by, approved_at, is_active, last_active,
 		       created_at, updated_at
 		FROM users
 		WHERE id = $1
@@ -96,6 +101,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 	user := &domain.User{}
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&user.ID,
+		&user.Username,
 		&user.FirstName,
 		&user.LastName,
 		&user.Email,
@@ -104,11 +110,13 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 		&user.GoogleID,
 		&user.AvatarURL,
 		&user.Role,
-		&user.Section,
+		&user.Department,
+		&user.ContactNumber,
 		&user.AccountStatus,
 		&user.ApprovedBy,
 		&user.ApprovedAt,
 		&user.IsActive,
+		&user.LastActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -126,19 +134,21 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	query := `
 		UPDATE users
-		SET first_name = $1, last_name = $2, email = $3, role = $4, section = $5, 
-		    account_status = $6, avatar_url = $7
-		WHERE id = $8
+		SET username = $1, first_name = $2, last_name = $3, email = $4, role = $5, department = $6, 
+		    contact_number = $7, account_status = $8, avatar_url = $9
+		WHERE id = $10
 	`
 
 	_, err := r.db.Exec(
 		ctx,
 		query,
+		user.Username,
 		user.FirstName,
 		user.LastName,
 		user.Email,
 		user.Role,
-		user.Section,
+		user.Department,
+		user.ContactNumber,
 		user.AccountStatus,
 		user.AvatarURL,
 		user.ID,
@@ -174,8 +184,8 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 
 func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*domain.User, error) {
 	query := `
-		SELECT id, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
-		       role, section, account_status, approved_by, approved_at, is_active,
+		SELECT id, username, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
+		       role, department, contact_number, account_status, approved_by, approved_at, is_active, last_active,
 		       created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC
@@ -192,6 +202,7 @@ func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*domain.User, error
 		user := &domain.User{}
 		err := rows.Scan(
 			&user.ID,
+			&user.Username,
 			&user.FirstName,
 			&user.LastName,
 			&user.Email,
@@ -200,11 +211,13 @@ func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*domain.User, error
 			&user.GoogleID,
 			&user.AvatarURL,
 			&user.Role,
-			&user.Section,
+			&user.Department,
+			&user.ContactNumber,
 			&user.AccountStatus,
 			&user.ApprovedBy,
 			&user.ApprovedAt,
 			&user.IsActive,
+			&user.LastActive,
 			&user.CreatedAt,
 			&user.UpdatedAt,
 		)
@@ -236,5 +249,56 @@ func (r *UserRepository) UpdateAccountStatus(ctx context.Context, userID string,
 		return fmt.Errorf("failed to update account status: %w", err)
 	}
 
+	return nil
+}
+
+func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
+	query := `
+		SELECT id, username, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
+		       role, department, contact_number, account_status, approved_by, approved_at, is_active, last_active,
+		       created_at, updated_at
+		FROM users
+		WHERE username = $1
+	`
+
+	user := &domain.User{}
+	err := r.db.QueryRow(ctx, query, username).Scan(
+		&user.ID,
+		&user.Username,
+		&user.FirstName,
+		&user.LastName,
+		&user.Email,
+		&user.PasswordHash,
+		&user.AuthProvider,
+		&user.GoogleID,
+		&user.AvatarURL,
+		&user.Role,
+		&user.Department,
+		&user.ContactNumber,
+		&user.AccountStatus,
+		&user.ApprovedBy,
+		&user.ApprovedAt,
+		&user.IsActive,
+		&user.LastActive,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return user, nil
+}
+
+func (r *UserRepository) UpdateLastActive(ctx context.Context, userID string) error {
+	query := `UPDATE users SET last_active = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update last active: %w", err)
+	}
 	return nil
 }

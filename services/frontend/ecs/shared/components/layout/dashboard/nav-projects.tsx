@@ -39,7 +39,7 @@ export function NavProjects({
   /*
   ! Make sure that the project names are base on the hierarchy of the users: 
   ! Admin - show all projects, 
-  ! project chairs - show their sections of projects, 
+  ! program chairs - show their sections of projects, 
   ! project heads - show their respective projects only, 
   ! staffs - shows their assigned projects only
    */

@@ -39,8 +39,8 @@ export function LoginForm({
       const role = response.user.role
       if (role === 'admin') {
         router.push('/admin/admin-dashboard')
-      } else if (role === 'project_chair') {
-        router.push('/project-chair/project-chair-dashboard')
+      } else if (role === 'program_chair') {
+        router.push('/program-chair/program-chair-dashboard')
       } else if (role === 'project_head') {
         router.push('/project-head/project-head-dashboard')
       } else if (role === 'staff') {

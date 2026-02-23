@@ -11,4 +11,5 @@ type UseCase interface {
 	ApproveUser(ctx context.Context, userID string, approvedByID string) error
 	RejectUser(ctx context.Context, userID string, approvedByID string) error
 	DeleteUser(ctx context.Context, userID string) error
+	UpdateUser(ctx context.Context, userID string, updates *dto.UpdateUserDTO) error
 }

@@ -7,6 +7,7 @@ import (
 // User represents a user in the system
 type User struct {
 	ID            string
+	Username      string
 	FirstName     string
 	LastName      string
 	Email         string
@@ -15,11 +16,13 @@ type User struct {
 	GoogleID      *string
 	AvatarURL     *string
 	Role          string
-	Section       *string
+	Department    *string
+	ContactNumber *string
 	AccountStatus string
 	ApprovedBy    *string
 	ApprovedAt    *time.Time
 	IsActive      bool
+	LastActive    *time.Time
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
@@ -32,7 +35,7 @@ func (u *User) GetFullName() string {
 // UserRole constants
 const (
 	RoleAdmin        = "admin"
-	RoleProjectChair = "project_chair"
+	RoleProgramChair = "program_chair"
 	RoleProjectHead  = "project_head"
 	RoleStaff        = "staff"
 	RolePublicUser   = "public_user"

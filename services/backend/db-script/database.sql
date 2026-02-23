@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TYPE user_role AS ENUM (
     'admin',
-    'project_chair',
+    'program_chair',
     'project_head',
     'staff',
     'public_user'
@@ -58,24 +58,28 @@ CREATE TABLE users (
     first_name          VARCHAR(75) NOT NULL,
     last_name           VARCHAR(75) NOT NULL,
     email               VARCHAR(150) UNIQUE NOT NULL,
+    username            VARCHAR(50) UNIQUE NOT NULL,
     password_hash       TEXT,
     auth_provider       auth_provider NOT NULL DEFAULT 'local',
     google_id           VARCHAR(255) UNIQUE,
     avatar_url          TEXT,
     role                user_role NOT NULL DEFAULT 'public_user',
-    section             section_type,
+    department          VARCHAR(100),
+    contact_number      VARCHAR(15),
     account_status      account_status NOT NULL DEFAULT 'pending_approval',
     approved_by         UUID REFERENCES users(id) ON DELETE SET NULL,
     approved_at         TIMESTAMPTZ,
+    last_active         TIMESTAMPTZ,
     is_active           BOOLEAN NOT NULL GENERATED ALWAYS AS (account_status = 'active') STORED,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
-    CONSTRAINT chk_section_role CHECK (
-        (role IN ('project_chair', 'project_head', 'staff') AND section IS NOT NULL)
+    CONSTRAINT chk_department_role CHECK (
+        (role IN ('program_chair', 'project_head', 'staff') AND department IS NOT NULL)
         OR
-        (role IN ('admin', 'public_user') AND section IS NULL)
+        (role IN ('admin', 'public_user'))
     ),
+    CONSTRAINT chk_username_format CHECK (username ~ '^[a-zA-Z0-9_]{3,50}$'),
     CONSTRAINT chk_local_auth CHECK (
         (auth_provider = 'local' AND password_hash IS NOT NULL)
         OR
@@ -88,7 +92,6 @@ CREATE TABLE projects (
     title               VARCHAR(255) NOT NULL,
     description         TEXT,
     status              project_status NOT NULL DEFAULT 'pending',
-    section             section_type,
     created_by          UUID REFERENCES users(id) ON DELETE SET NULL,
     assigned_head_id    UUID REFERENCES users(id) ON DELETE SET NULL,
     start_date          DATE,
@@ -103,7 +106,6 @@ CREATE TABLE project_proposals (
     proposed_by     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title           VARCHAR(255) NOT NULL,
     description     TEXT,
-    section         section_type,
     status          proposal_status NOT NULL DEFAULT 'pending',
     reviewed_by     UUID REFERENCES users(id) ON DELETE SET NULL,
     review_notes    TEXT,
@@ -161,8 +163,8 @@ DO $$ BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_admin') THEN
         CREATE ROLE app_admin NOLOGIN;
     END IF;
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_project_chair') THEN
-        CREATE ROLE app_project_chair NOLOGIN;
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_program_chair') THEN
+        CREATE ROLE app_program_chair NOLOGIN;
     END IF;
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_project_head') THEN
         CREATE ROLE app_project_head NOLOGIN;
@@ -178,13 +180,13 @@ END $$;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO app_admin;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO app_admin;
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON users TO app_project_chair;
-GRANT SELECT, INSERT, UPDATE, DELETE ON projects TO app_project_chair;
-GRANT SELECT, INSERT, UPDATE, DELETE ON project_proposals TO app_project_chair;
-GRANT SELECT, INSERT, UPDATE, DELETE ON tasks TO app_project_chair;
-GRANT SELECT, INSERT, UPDATE, DELETE ON reports TO app_project_chair;
-GRANT SELECT ON analytics_snapshots TO app_project_chair;
-GRANT SELECT ON blog_posts TO app_project_chair;
+GRANT SELECT, INSERT, UPDATE, DELETE ON users TO app_program_chair;
+GRANT SELECT, INSERT, UPDATE, DELETE ON projects TO app_program_chair;
+GRANT SELECT, INSERT, UPDATE, DELETE ON project_proposals TO app_program_chair;
+GRANT SELECT, INSERT, UPDATE, DELETE ON tasks TO app_program_chair;
+GRANT SELECT, INSERT, UPDATE, DELETE ON reports TO app_program_chair;
+GRANT SELECT ON analytics_snapshots TO app_program_chair;
+GRANT SELECT ON blog_posts TO app_program_chair;
 
 GRANT SELECT, INSERT, UPDATE ON projects TO app_project_head;
 GRANT SELECT, INSERT ON project_proposals TO app_project_head;
@@ -213,17 +215,15 @@ CREATE POLICY admin_all_users ON users
     USING (true)
     WITH CHECK (true);
 
-CREATE POLICY chair_section_users ON users
-    TO app_project_chair
-    USING (section = current_setting('app.current_user_section')::section_type)
-    WITH CHECK (
-        section = current_setting('app.current_user_section')::section_type
-        AND role IN ('project_head', 'staff')
-    );
+-- Program chairs can view and manage users (application will filter by department)
+CREATE POLICY chair_manage_users ON users
+    TO app_program_chair
+    USING (true)
+    WITH CHECK (role IN ('project_head', 'staff'));
 
-CREATE POLICY head_section_users ON users
+CREATE POLICY head_view_users ON users
     TO app_project_head
-    USING (section = current_setting('app.current_user_section')::section_type);
+    USING (true);
 
 CREATE POLICY staff_own_user ON users
     TO app_staff
@@ -234,21 +234,16 @@ CREATE POLICY admin_all_projects ON projects
     USING (true)
     WITH CHECK (true);
 
-CREATE POLICY chair_section_projects ON projects
-    TO app_project_chair
-    USING (section = current_setting('app.current_user_section')::section_type)
-    WITH CHECK (section = current_setting('app.current_user_section')::section_type);
+-- Program chairs can view and manage all projects (application will filter by department)
+CREATE POLICY chair_manage_projects ON projects
+    TO app_program_chair
+    USING (true)
+    WITH CHECK (true);
 
 CREATE POLICY head_own_projects ON projects
     TO app_project_head
-    USING (
-        section = current_setting('app.current_user_section')::section_type
-        AND assigned_head_id = current_setting('app.current_user_id')::UUID
-    )
-    WITH CHECK (
-        section = current_setting('app.current_user_section')::section_type
-        AND assigned_head_id = current_setting('app.current_user_id')::UUID
-    );
+    USING (assigned_head_id = current_setting('app.current_user_id')::UUID)
+    WITH CHECK (assigned_head_id = current_setting('app.current_user_id')::UUID);
 
 CREATE POLICY staff_view_projects ON projects
     TO app_staff
@@ -267,10 +262,11 @@ CREATE POLICY public_view_projects ON projects
 CREATE POLICY admin_all_proposals ON project_proposals
     TO app_admin USING (true) WITH CHECK (true);
 
-CREATE POLICY chair_section_proposals ON project_proposals
-    TO app_project_chair
-    USING (section = current_setting('app.current_user_section')::section_type)
-    WITH CHECK (section = current_setting('app.current_user_section')::section_type);
+-- Program chairs can view and manage all proposals (application will filter by department)
+CREATE POLICY chair_manage_proposals ON project_proposals
+    TO app_program_chair
+    USING (true)
+    WITH CHECK (true);
 
 CREATE POLICY head_own_proposals ON project_proposals
     TO app_project_head
@@ -285,14 +281,10 @@ CREATE POLICY public_own_proposals ON project_proposals
 CREATE POLICY admin_all_tasks ON tasks
     TO app_admin USING (true) WITH CHECK (true);
 
-CREATE POLICY chair_section_tasks ON tasks
-    TO app_project_chair
-    USING (
-        project_id IN (
-            SELECT id FROM projects
-            WHERE section = current_setting('app.current_user_section')::section_type
-        )
-    );
+-- Program chairs can view all tasks (application will filter by department)
+CREATE POLICY chair_view_tasks ON tasks
+    TO app_program_chair
+    USING (true);
 
 CREATE POLICY head_own_tasks ON tasks
     TO app_project_head
@@ -306,14 +298,10 @@ CREATE POLICY staff_own_tasks ON tasks
 CREATE POLICY admin_all_reports ON reports
     TO app_admin USING (true) WITH CHECK (true);
 
-CREATE POLICY chair_section_reports ON reports
-    TO app_project_chair
-    USING (
-        project_id IN (
-            SELECT id FROM projects
-            WHERE section = current_setting('app.current_user_section')::section_type
-        )
-    );
+-- Program chairs can view all reports (application will filter by department)
+CREATE POLICY chair_view_reports ON reports
+    TO app_program_chair
+    USING (true);
 
 CREATE POLICY head_section_reports ON reports
     TO app_project_head
@@ -333,25 +321,23 @@ CREATE POLICY admin_all_blog ON blog_posts
     TO app_admin USING (true) WITH CHECK (true);
 
 CREATE POLICY public_read_blog ON blog_posts
-    TO app_project_chair, app_project_head, app_staff, app_public_user
+    TO app_program_chair, app_project_head, app_staff, app_public_user
     USING (is_published = TRUE);
 
 CREATE POLICY admin_all_analytics ON analytics_snapshots
     TO app_admin USING (true) WITH CHECK (true);
 
-CREATE POLICY chair_section_analytics ON analytics_snapshots
-    TO app_project_chair
-    USING (
-        scope = 'global'
-        OR scope = current_setting('app.current_user_section')
-    );
+-- Program chairs can view global analytics (application will filter by department for specific data)
+CREATE POLICY chair_view_analytics ON analytics_snapshots
+    TO app_program_chair
+    USING (scope = 'global');
 
 CREATE INDEX idx_users_role ON users(role);
-CREATE INDEX idx_users_section ON users(section);
+CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX idx_users_last_active ON users(last_active);
 CREATE INDEX idx_users_account_status ON users(account_status);
 CREATE INDEX idx_users_google_id ON users(google_id);
 CREATE INDEX idx_users_auth_provider ON users(auth_provider);
-CREATE INDEX idx_projects_section ON projects(section);
 CREATE INDEX idx_projects_status ON projects(status);
 CREATE INDEX idx_projects_assigned_head ON projects(assigned_head_id);
 CREATE INDEX idx_tasks_assigned_to ON tasks(assigned_to);
@@ -388,11 +374,12 @@ CREATE TRIGGER trg_proposals_updated BEFORE UPDATE ON project_proposals
 CREATE TRIGGER trg_blog_updated BEFORE UPDATE ON blog_posts
     FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
-INSERT INTO users (first_name, last_name, email, password_hash, auth_provider, role, account_status)
+INSERT INTO users (first_name, last_name, email, username, password_hash, auth_provider, role, account_status)
 VALUES (
     'System',
     'Administrator',
     'admin@extensionservice.com',
+    'admin',
     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'local',
     'admin',

@@ -26,15 +26,24 @@ func (uc *userUseCase) GetAllUsers(ctx context.Context) ([]*dto.UserDTO, error) 
 
 	userDTOs := make([]*dto.UserDTO, 0, len(users))
 	for _, user := range users {
+		var lastActive *string
+		if user.LastActive != nil {
+			formatted := user.LastActive.Format("2006-01-02T15:04:05Z07:00")
+			lastActive = &formatted
+		}
+
 		userDTOs = append(userDTOs, &dto.UserDTO{
 			ID:            user.ID,
+			Username:      user.Username,
 			FirstName:     user.FirstName,
 			LastName:      user.LastName,
 			Email:         user.Email,
 			Role:          user.Role,
-			Section:       user.Section,
+			Department:    user.Department,
+			ContactNumber: user.ContactNumber,
 			AccountStatus: user.AccountStatus,
 			AvatarURL:     user.AvatarURL,
+			LastActive:    lastActive,
 			CreatedAt:     user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
@@ -100,6 +109,84 @@ func (uc *userUseCase) DeleteUser(ctx context.Context, userID string) error {
 	err = uc.userRepo.Delete(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
+	}
+
+	return nil
+}
+
+func (uc *userUseCase) UpdateUser(ctx context.Context, userID string, updates *dto.UpdateUserDTO) error {
+	// Verify the user exists
+	user, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user: %w", err)
+	}
+
+	// Check if username is being changed and if it's already taken
+	if updates.Username != nil && *updates.Username != user.Username {
+		existingUser, _ := uc.userRepo.GetByUsername(ctx, *updates.Username)
+		if existingUser != nil && existingUser.ID != userID {
+			return fmt.Errorf("username is already taken")
+		}
+		user.Username = *updates.Username
+	}
+
+	// Check if email is being changed and if it's already taken
+	if updates.Email != nil && *updates.Email != user.Email {
+		existingUser, _ := uc.userRepo.GetByEmail(ctx, *updates.Email)
+		if existingUser != nil && existingUser.ID != userID {
+			return fmt.Errorf("email is already taken")
+		}
+		user.Email = *updates.Email
+	}
+
+	// Update fields if provided
+	if updates.FirstName != nil {
+		user.FirstName = *updates.FirstName
+	}
+	if updates.LastName != nil {
+		user.LastName = *updates.LastName
+	}
+	
+	// Process department BEFORE role to avoid constraint violations
+	if updates.Department != nil {
+		if *updates.Department == "" {
+			user.Department = nil
+		} else {
+			user.Department = updates.Department
+		}
+	}
+	
+	if updates.Role != nil {
+		newRole := *updates.Role
+		user.Role = newRole
+		
+		// Handle department constraints based on role
+		if newRole == "admin" || newRole == "public_user" {
+			// Admin and public_user don't need department
+			user.Department = nil
+		} else if newRole == "program_chair" || newRole == "project_head" || newRole == "staff" {
+			// These roles MUST have department
+			if user.Department == nil {
+				return fmt.Errorf("program_chair, project_head, and staff roles require department to be set")
+			}
+		}
+	}
+	
+	if updates.ContactNumber != nil {
+		if *updates.ContactNumber == "" {
+			user.ContactNumber = nil
+		} else {
+			user.ContactNumber = updates.ContactNumber
+		}
+	}
+	if updates.AccountStatus != nil {
+		user.AccountStatus = *updates.AccountStatus
+	}
+
+	// Update the user
+	err = uc.userRepo.Update(ctx, user)
+	if err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
 	}
 
 	return nil

@@ -25,6 +25,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/DropdownMenu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/shared/components/ui/Dialog';
 import { 
   Users,
   Search,
@@ -47,6 +55,22 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    username: '',
+    role: '',
+    department: '',
+    contact_number: '',
+    account_status: '',
+  });
+
+  // Check if currently editing own account
+  const isEditingSelf = editingUser?.id === currentUserId;
 
   const loadUsers = async () => {
     try {
@@ -70,6 +94,16 @@ export default function UserManagement() {
   };
 
   useEffect(() => {
+    // Load current user ID from localStorage
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        setCurrentUserId(user.id);
+      } catch (err) {
+        console.error('Failed to parse user from localStorage:', err);
+      }
+    }
     loadUsers();
   }, []);
 
@@ -154,9 +188,76 @@ export default function UserManagement() {
   };
 
   const handleEdit = (userId: string) => {
-    // TODO: Implement edit user functionality
-    console.log('Edit user:', userId);
-    alert('Edit user functionality coming soon!');
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    
+    setEditingUser(user);
+    setEditForm({
+      first_name: user.first_name,
+      last_name: user.last_name,
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      department: user.department || '',
+      contact_number: user.contact_number || '',
+      account_status: user.account_status,
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
+
+    try {
+      setProcessingId(editingUser.id);
+      setError(null);
+
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        setError('Not authenticated. Please login first.');
+        return;
+      }
+
+      // Validate department for roles that require it
+      if ((editForm.role === 'program_chair' || editForm.role === 'project_head' || editForm.role === 'staff') && !editForm.department.trim()) {
+        setError('Department is required for Program Chair, Project Head, and Staff roles');
+        setProcessingId(null);
+        return;
+      }
+
+      const updates: any = {};
+      if (editForm.first_name !== editingUser.first_name) updates.first_name = editForm.first_name;
+      if (editForm.last_name !== editingUser.last_name) updates.last_name = editForm.last_name;
+      if (editForm.email !== editingUser.email) updates.email = editForm.email;
+      if (editForm.username !== editingUser.username) updates.username = editForm.username;
+      if (editForm.role !== editingUser.role) {
+        updates.role = editForm.role;
+        // If changing to a role that requires department, always include department in update
+        if (editForm.role === 'program_chair' || editForm.role === 'project_head' || editForm.role === 'staff') {
+          updates.department = editForm.department;
+        }
+      }
+      // Only update department if it changed AND we're not already including it from role change
+      if (!updates.department && editForm.department !== (editingUser.department || '')) {
+        updates.department = editForm.department || null;
+      }
+      if (editForm.contact_number !== (editingUser.contact_number || '')) updates.contact_number = editForm.contact_number || null;
+      if (editForm.account_status !== editingUser.account_status) updates.account_status = editForm.account_status;
+
+      await userService.updateUser(editingUser.id, updates, token);
+      
+      // Reload users to reflect the change
+      await loadUsers();
+      
+      setIsEditDialogOpen(false);
+      alert('User updated successfully!');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update user');
+      console.error('Error updating user:', err);
+      alert(`Failed to update user: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setProcessingId(null);
+    }
   };
 
   // Filter users based on search, role, and status (excluding pending approvals - they have their own section)
@@ -175,10 +276,10 @@ export default function UserManagement() {
     
     return matchesSearch && matchesRole && matchesStatus;
   }).sort((a, b) => {
-    // Sort by role priority: admin > project_chair > project_head > staff > public_user
+    // Sort by role priority: admin > program_chair > project_head > staff > public_user
     const rolePriority: Record<string, number> = {
       admin: 1,
-      project_chair: 2,
+      program_chair: 2,
       project_head: 3,
       staff: 4,
       public_user: 5,
@@ -206,7 +307,7 @@ export default function UserManagement() {
   const getRoleBadgeColor = (role: string) => {
     const colors: Record<string, string> = {
       admin: 'bg-purple-100 text-purple-700 border-purple-300',
-      project_chair: 'bg-blue-100 text-blue-700 border-blue-300',
+      program_chair: 'bg-blue-100 text-blue-700 border-blue-300',
       project_head: 'bg-green-100 text-green-700 border-green-300',
       staff: 'bg-orange-100 text-orange-700 border-orange-300',
       public_user: 'bg-gray-100 text-gray-700 border-gray-300',
@@ -230,8 +331,31 @@ export default function UserManagement() {
     }
   };
 
+  const formatLastActive = (dateString?: string) => {
+    if (!dateString) return 'Never';
+    try {
+      const lastActive = new Date(dateString);
+      const now = new Date();
+      const diffMs = now.getTime() - lastActive.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+
+      if (diffMins < 1) return 'Just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return lastActive.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return 'Never';
+    }
+  };
+
   // All roles in priority order
-  const rolePriorityOrder = ['admin', 'project_chair', 'project_head', 'staff', 'public_user'];
+  const rolePriorityOrder = ['admin', 'program_chair', 'project_head', 'staff', 'public_user'];
   const roles = rolePriorityOrder;
 
   // Get pending approval users (sorted by role priority)
@@ -240,7 +364,7 @@ export default function UserManagement() {
     .sort((a, b) => {
       const rolePriority: Record<string, number> = {
         admin: 1,
-        project_chair: 2,
+        program_chair: 2,
         project_head: 3,
         staff: 4,
         public_user: 5,
@@ -333,8 +457,11 @@ export default function UserManagement() {
                       <TableHead className="text-slate-700 font-semibold">User ID</TableHead>
                       <TableHead className="text-slate-700 font-semibold">Full Name</TableHead>
                       <TableHead className="text-slate-700 font-semibold">Email</TableHead>
+                      <TableHead className="text-slate-700 font-semibold">Username</TableHead>
                       <TableHead className="text-slate-700 font-semibold">Role</TableHead>
-                      <TableHead className="text-slate-700 font-semibold">Section</TableHead>
+                      <TableHead className="text-slate-700 font-semibold">Department</TableHead>
+                      <TableHead className="text-slate-700 font-semibold">Contact</TableHead>
+                      <TableHead className="text-slate-700 font-semibold">Last Active</TableHead>
                       <TableHead className="text-slate-700 font-semibold">Date Registered</TableHead>
                       <TableHead className="text-slate-700 font-semibold text-right">Actions</TableHead>
                     </TableRow>
@@ -356,13 +483,22 @@ export default function UserManagement() {
                         <TableCell className="text-slate-700 text-sm">
                           {user.email}
                         </TableCell>
+                        <TableCell className="text-slate-700 font-medium">
+                          {user.username}
+                        </TableCell>
                         <TableCell>
                           <Badge className={`${getRoleBadgeColor(user.role)} border font-medium`}>
                             {user.role.replace('_', ' ').toUpperCase()}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-slate-700">
-                          {user.section || '-'}
+                          {user.department || '-'}
+                        </TableCell>
+                        <TableCell className="text-slate-700 text-sm">
+                          {user.contact_number || '-'}
+                        </TableCell>
+                        <TableCell className="text-slate-600 text-sm">
+                          {formatLastActive(user.last_active)}
                         </TableCell>
                         <TableCell className="text-slate-600 text-sm">
                           {formatDate(user.created_at)}
@@ -499,8 +635,11 @@ export default function UserManagement() {
                         <TableHead className="text-slate-700 font-semibold">User ID</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Full Name</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Email</TableHead>
+                        <TableHead className="text-slate-700 font-semibold">Username</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Role</TableHead>
-                        <TableHead className="text-slate-700 font-semibold">Section</TableHead>
+                        <TableHead className="text-slate-700 font-semibold">Department</TableHead>
+                        <TableHead className="text-slate-700 font-semibold">Contact</TableHead>
+                        <TableHead className="text-slate-700 font-semibold">Last Active</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Status</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Date Joined</TableHead>
                         <TableHead className="text-slate-700 font-semibold text-right">Actions</TableHead>
@@ -509,7 +648,7 @@ export default function UserManagement() {
                     <TableBody>
                       {filteredUsers.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="text-center py-8 text-slate-500">
+                          <TableCell colSpan={11} className="text-center py-8 text-slate-500">
                             No users found matching your search criteria
                           </TableCell>
                         </TableRow>
@@ -530,13 +669,22 @@ export default function UserManagement() {
                             <TableCell className="text-slate-700 text-sm">
                               {user.email}
                             </TableCell>
+                            <TableCell className="text-slate-700 font-medium">
+                              {user.username}
+                            </TableCell>
                             <TableCell>
                               <Badge className={`${getRoleBadgeColor(user.role)} border font-medium`}>
                                 {user.role.replace('_', ' ').toUpperCase()}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-slate-700">
-                              {user.section || '-'}
+                              {user.department || '-'}
+                            </TableCell>
+                            <TableCell className="text-slate-700 text-sm">
+                              {user.contact_number || '-'}
+                            </TableCell>
+                            <TableCell className="text-slate-600 text-sm">
+                              {formatLastActive(user.last_active)}
                             </TableCell>
                             <TableCell>
                               <Badge className={`${getStatusColor(user.account_status)} border font-medium`}>
@@ -622,6 +770,213 @@ export default function UserManagement() {
             )}
           </CardContent>
         </Card>
+
+        {/* Edit User Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="bg-white max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-2xl text-slate-900">Edit User</DialogTitle>
+              <DialogDescription className="text-slate-600">
+                Update user information. Fields marked with * are required.
+              </DialogDescription>
+              {isEditingSelf && (
+                <Alert className="mt-3 border-orange-200 bg-orange-50">
+                  <AlertDescription className="text-orange-800 text-sm">
+                    ⚠️ You are editing your own account. Role and Account Status fields are disabled to prevent self-lockout.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </DialogHeader>
+            
+            <div className="grid gap-4 py-4">
+              {/* User ID Display */}
+              {editingUser && (
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500 font-medium mb-1">User ID</p>
+                      <p className="text-sm font-mono text-slate-900 break-all">{editingUser.id}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(editingUser.id);
+                        alert('User ID copied to clipboard!');
+                      }}
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    First Name *
+                  </label>
+                  <Input
+                    value={editForm.first_name}
+                    onChange={(e) => setEditForm({...editForm, first_name: e.target.value})}
+                    placeholder="First name"
+                    className="border-slate-300"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Last Name *
+                  </label>
+                  <Input
+                    value={editForm.last_name}
+                    onChange={(e) => setEditForm({...editForm, last_name: e.target.value})}
+                    placeholder="Last name"
+                    className="border-slate-300"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Email *
+                </label>
+                <Input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({...editForm, email: e.target.value})}
+                  placeholder="email@example.com"
+                  className="border-slate-300"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Username *
+                </label>
+                <Input
+                  value={editForm.username}
+                  onChange={(e) => setEditForm({...editForm, username: e.target.value})}
+                  placeholder="username"
+                  className="border-slate-300"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Role *
+                </label>
+                <Select 
+                  value={editForm.role} 
+                  onValueChange={(value) => setEditForm({...editForm, role: value})}
+                  disabled={isEditingSelf}
+                >
+                  <SelectTrigger className="border-slate-300">
+                    <SelectValue placeholder="Select role" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="program_chair">Program Chair</SelectItem>
+                    <SelectItem value="project_head">Project Head</SelectItem>
+                    <SelectItem value="staff">Staff</SelectItem>
+                    <SelectItem value="public_user">Public User</SelectItem>
+                  </SelectContent>
+                </Select>
+                {isEditingSelf && (
+                  <p className="text-xs text-orange-600">Cannot change your own role</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Department {(editForm.role === 'program_chair' || editForm.role === 'project_head' || editForm.role === 'staff') && '*'}
+                </label>
+                <Input
+                  value={editForm.department}
+                  onChange={(e) => setEditForm({...editForm, department: e.target.value})}
+                  placeholder="e.g., Computer Science, Engineering"
+                  className="border-slate-300"
+                />
+                {(editForm.role === 'program_chair' || editForm.role === 'project_head' || editForm.role === 'staff') && (
+                  <p className="text-xs text-slate-500">Required for Program Chair, Project Head, and Staff roles</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Contact Number
+                </label>
+                <Input
+                  value={editForm.contact_number}
+                  onChange={(e) => setEditForm({...editForm, contact_number: e.target.value})}
+                  placeholder="e.g., +63 123 456 7890"
+                  className="border-slate-300"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700">
+                  Account Status *
+                </label>
+                <Select 
+                  value={editForm.account_status} 
+                  onValueChange={(value) => setEditForm({...editForm, account_status: value})}
+                  disabled={isEditingSelf}
+                >
+                  <SelectTrigger className="border-slate-300">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="active">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                        <span>Active</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="deactivated">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                        <span>Deactivated</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="pending_approval">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                        <span>Pending Approval</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {isEditingSelf ? (
+                  <p className="text-xs text-orange-600">Cannot change your own account status</p>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    {editForm.account_status === 'active' && 'User can access the system'}
+                    {editForm.account_status === 'deactivated' && 'User cannot access the system'}
+                    {editForm.account_status === 'pending_approval' && 'User awaiting admin approval'}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+                className="border-slate-300"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleUpdateUser}
+                disabled={processingId === editingUser?.id}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {processingId === editingUser?.id ? 'Updating...' : 'Update User'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
