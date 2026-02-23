@@ -28,6 +28,7 @@ DROP TYPE IF EXISTS proposal_status CASCADE;
 DROP TYPE IF EXISTS task_status CASCADE;
 DROP TYPE IF EXISTS task_priority CASCADE;
 DROP TYPE IF EXISTS auth_provider CASCADE;
+DROP TYPE IF EXISTS request_workflow_stage CASCADE;
 
 -- Create ENUM types
 CREATE TYPE auth_provider AS ENUM ('local', 'google');
@@ -97,6 +98,22 @@ CREATE TYPE task_priority AS ENUM (
     'medium',
     'high',
     'urgent'
+);
+
+CREATE TYPE request_workflow_stage AS ENUM (
+    'submitted',                    -- Public user just submitted
+    'under_program_chair_review',   -- Program chair reviewing
+    'feedback_provided',            -- Program chair gave feedback to public user
+    'assigned_to_department',       -- Assigned to department, waiting for project head
+    'project_head_reviewing',       -- Project head is reviewing the recommendation
+    'project_head_accepted',        -- Project head accepted, creating proposal
+    'project_head_declined',        -- Project head declined the recommendation
+    'proposal_submitted',           -- Proposal created and submitted for review
+    'proposal_under_review',        -- Program chair reviewing the proposal
+    'proposal_changes_requested',   -- Program chair requested changes to proposal
+    'pending_final_approval',       -- Waiting for admin final approval
+    'approved',                     -- Final approval granted (ready to convert to project)
+    'rejected'                      -- Rejected at any stage
 );
 
 -- ==========================================
@@ -191,26 +208,72 @@ CREATE INDEX idx_programs_department ON programs(department_id);
 -- Project Requests Table
 -- ==========================================
 CREATE TABLE project_requests (
-    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    request_title           VARCHAR(200) NOT NULL,
-    request_description     VARCHAR(2000) NOT NULL,
-    requested_by            UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    requested_department    VARCHAR(100),
-    estimated_budget        DECIMAL(12, 2),
-    target_beneficiaries    VARCHAR(500),
-    justification           VARCHAR(2000),
-    status                  approval_status NOT NULL DEFAULT 'pending',
-    reviewed_by             UUID REFERENCES users(id) ON DELETE SET NULL,
-    reviewed_at             TIMESTAMPTZ,
-    review_notes            TEXT,
-    assigned_program_id     UUID REFERENCES programs(id) ON DELETE SET NULL,
-    created_at              TIMESTAMPTZ DEFAULT NOW(),
-    updated_at              TIMESTAMPTZ DEFAULT NOW()
+    id                          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    request_title               VARCHAR(200) NOT NULL,
+    request_description         VARCHAR(2000) NOT NULL,
+    requested_by                UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    requested_department        VARCHAR(100),
+    estimated_budget            DECIMAL(12, 2),
+    target_beneficiaries        VARCHAR(500),
+    justification               VARCHAR(2000),
+    status                      approval_status NOT NULL DEFAULT 'pending',
+    reviewed_by                 UUID REFERENCES users(id) ON DELETE SET NULL,
+    reviewed_at                 TIMESTAMPTZ,
+    review_notes                TEXT,
+    assigned_program_id         UUID REFERENCES programs(id) ON DELETE SET NULL,
+    
+    -- Department assignment tracking
+    assigned_department_id      UUID REFERENCES departments(id) ON DELETE SET NULL,
+    assigned_to_project_head    UUID REFERENCES users(id) ON DELETE SET NULL,
+    department_assignment_date  TIMESTAMPTZ,
+    assignment_notes            TEXT,
+    
+    -- Project Head response tracking
+    project_head_response       VARCHAR(20) CHECK (project_head_response IN ('accepted', 'declined', 'pending')),
+    project_head_response_date  TIMESTAMPTZ,
+    project_head_notes          TEXT,
+    
+    -- Proposal tracking
+    proposal_document_url       VARCHAR(500),
+    proposal_submitted_date     TIMESTAMPTZ,
+    proposal_reviewed_by        UUID REFERENCES users(id) ON DELETE SET NULL,
+    proposal_review_date        TIMESTAMPTZ,
+    proposal_review_notes       TEXT,
+    
+    -- Workflow stage tracking
+    workflow_stage              request_workflow_stage NOT NULL DEFAULT 'submitted',
+    
+    -- Program chair feedback tracking
+    program_chair_feedback      TEXT,
+    feedback_provided_date      TIMESTAMPTZ,
+    
+    -- Final approval tracking (admin)
+    final_approved_by           UUID REFERENCES users(id) ON DELETE SET NULL,
+    final_approval_date         TIMESTAMPTZ,
+    final_approval_notes        TEXT,
+    
+    created_at                  TIMESTAMPTZ DEFAULT NOW(),
+    updated_at                  TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_project_requests_status ON project_requests(status);
 CREATE INDEX idx_project_requests_requested_by ON project_requests(requested_by);
 CREATE INDEX idx_project_requests_department ON project_requests(requested_department);
+CREATE INDEX idx_project_requests_workflow_stage ON project_requests(workflow_stage);
+CREATE INDEX idx_project_requests_assigned_dept ON project_requests(assigned_department_id);
+CREATE INDEX idx_project_requests_assigned_project_head ON project_requests(assigned_to_project_head);
+CREATE INDEX idx_project_requests_project_head_response ON project_requests(project_head_response);
+CREATE INDEX idx_project_requests_proposal_reviewed_by ON project_requests(proposal_reviewed_by);
+CREATE INDEX idx_project_requests_final_approved_by ON project_requests(final_approved_by);
+
+-- Comments for documentation
+COMMENT ON COLUMN project_requests.workflow_stage IS 'Current stage in the request approval workflow';
+COMMENT ON COLUMN project_requests.assigned_department_id IS 'Department assigned by program chair for this request';
+COMMENT ON COLUMN project_requests.assigned_to_project_head IS 'Specific project head assigned to handle this request';
+COMMENT ON COLUMN project_requests.project_head_response IS 'Whether project head accepted or declined the recommendation';
+COMMENT ON COLUMN project_requests.proposal_document_url IS 'URL/path to uploaded proposal document';
+COMMENT ON COLUMN project_requests.program_chair_feedback IS 'Feedback provided to public user by program chair';
+COMMENT ON COLUMN project_requests.final_approved_by IS 'Admin who gave final approval (can be different from reviewed_by)';
 
 -- ==========================================
 -- Projects Table
