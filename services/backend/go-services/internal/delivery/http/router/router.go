@@ -11,6 +11,8 @@ import (
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/auth"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/department"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/program"
+	projectuc "github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/project"
+	requestuc "github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/request"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/user"
 	"github.com/gorilla/mux"
 )
@@ -22,18 +24,24 @@ func SetupRoutes() *mux.Router {
 	userRepo := postgres.NewUserRepository(database.DB)
 	departmentRepo := postgres.NewDepartmentRepository(database.DB)
 	programRepo := postgres.NewProgramRepository(database.DB)
+	projectRepo := postgres.NewProjectRepository(database.DB)
+	requestRepo := postgres.NewRequestRepository(database.DB)
 
 	// Initialize usecases
 	authUsecase := auth.NewAuthUsecase(userRepo, config.AppConfig)
 	userUsecase := user.NewUserUseCase(userRepo)
 	departmentUsecase := department.NewDepartmentUseCase(departmentRepo)
 	programUsecase := program.NewProgramUseCase(programRepo)
+	projectUsecase := projectuc.NewProjectUseCase(projectRepo)
+	requestUsecase := requestuc.NewRequestUseCase(requestRepo)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authUsecase)
 	userHandler := handler.NewUserHandler(userUsecase)
 	departmentHandler := handler.NewDepartmentHandler(departmentUsecase)
 	programHandler := handler.NewProgramHandler(programUsecase)
+	projectHandler := handler.NewProjectHandler(projectUsecase)
+	requestHandler := handler.NewRequestHandler(requestUsecase)
 
 	// Root endpoint
 	r.HandleFunc("/", handler.RootHandler).Methods("GET")
@@ -63,10 +71,39 @@ func SetupRoutes() *mux.Router {
 	api.Handle("/programs/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.UpdateProgram))).Methods("PUT")
 	api.Handle("/programs/{id}/status", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.UpdateProgramStatus))).Methods("PATCH")
 	api.Handle("/programs/{id}/approval", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.UpdateProgramApproval))).Methods("PATCH")
+	api.Handle("/programs/{id}/assign-chair", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.AssignProgramChair))).Methods("PATCH")
 	api.Handle("/programs/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.DeleteProgram))).Methods("DELETE")
+
+	// Project routes
+	api.Handle("/projects", middleware.AdminOnlyMiddleware(http.HandlerFunc(projectHandler.CreateProject))).Methods("POST")
+	api.HandleFunc("/projects", projectHandler.GetProjects).Methods("GET")
+	api.Handle("/projects/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(projectHandler.UpdateProject))).Methods("PUT")
+	api.Handle("/projects/{id}/assign-head", middleware.AdminOnlyMiddleware(http.HandlerFunc(projectHandler.AssignProjectHead))).Methods("PATCH")
+	api.Handle("/projects/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(projectHandler.DeleteProject))).Methods("DELETE")
+
+	// Request (Extension Service) routes
+	// POST   /requests          — any authenticated user submits a request
+	// GET    /requests          — role-branched: admin=all, chair=by-program, head=assigned, user=own
+	// GET    /requests/{id}     — single request
+	// PATCH  /requests/{id}/review          — program_chair reviews
+	// PATCH  /requests/{id}/assign          — program_chair assigns to project head
+	// PATCH  /requests/{id}/respond         — project_head accepts/declines
+	// PATCH  /requests/{id}/proposal        — project_head submits proposal
+	// PATCH  /requests/{id}/review-proposal — admin reviews proposal
+	// PATCH  /requests/{id}/approve         — admin final approval
+	api.HandleFunc("/requests", requestHandler.SubmitRequest).Methods("POST")
+	api.HandleFunc("/requests", requestHandler.GetRequests).Methods("GET")
+	api.HandleFunc("/requests/{id}", requestHandler.GetRequestByID).Methods("GET")
+	api.HandleFunc("/requests/{id}/review", requestHandler.ProgramChairReview).Methods("PATCH")
+	api.HandleFunc("/requests/{id}/assign", requestHandler.AssignToHead).Methods("PATCH")
+	api.HandleFunc("/requests/{id}/respond", requestHandler.ProjectHeadRespond).Methods("PATCH")
+	api.HandleFunc("/requests/{id}/proposal", requestHandler.SubmitProposal).Methods("PATCH")
+	api.Handle("/requests/{id}/review-proposal", middleware.AdminOnlyMiddleware(http.HandlerFunc(requestHandler.ReviewProposal))).Methods("PATCH")
+	api.Handle("/requests/{id}/approve", middleware.AdminOnlyMiddleware(http.HandlerFunc(requestHandler.FinalApprove))).Methods("PATCH")
 
 	// User management routes (admin only)
 	api.Handle("/users", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.GetAllUsers))).Methods("GET")
+	api.HandleFunc("/users/by-role", userHandler.GetUsersByRole).Methods("GET")
 	api.Handle("/users/{id}/approve", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.ApproveUser))).Methods("PUT")
 	api.Handle("/users/{id}/reject", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.RejectUser))).Methods("PUT")
 	api.Handle("/users/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.UpdateUser))).Methods("PUT")

@@ -16,5 +16,6 @@ type UseCase interface {
 	UpdateProgram(ctx context.Context, id string, req *domain.UpdateProgramRequest) (*domain.Program, error)
 	UpdateProgramStatus(ctx context.Context, id string, status string) error
 	UpdateProgramApproval(ctx context.Context, id string, req *domain.UpdateProgramApprovalRequest, approvedBy string) error
+	AssignProgramChair(ctx context.Context, programID string, chairID *string) error
 	DeleteProgram(ctx context.Context, id string) error
 }

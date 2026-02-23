@@ -16,7 +16,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/shared/components/ui/Sidebar"
-import { useParams } from "next/navigation"
+import { useParams, usePathname } from "next/navigation"
 
 import { AppSidebar } from "@/shared/components/layout/dashboard/app-sidebar"
 
@@ -24,11 +24,20 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
+function toPageTitle(slug: string) {
+  return slug.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
 export default function Layout({ children }: LayoutProps) {
   const params = useParams();
+  const pathname = usePathname();
   const role = (params?.role as string) || 'admin';
-  const roleDisplayName = role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-  
+  const roleDisplayName = toPageTitle(role);
+
+  const segments = pathname?.split('/').filter(Boolean) ?? [];
+  const lastSegment = segments[segments.length - 1] ?? '';
+  const pageName = lastSegment === role ? `${roleDisplayName} Dashboard` : toPageTitle(lastSegment);
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -49,7 +58,7 @@ export default function Layout({ children }: LayoutProps) {
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
-                  <BreadcrumbPage>Current Page</BreadcrumbPage>
+                  <BreadcrumbPage>{pageName}</BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>

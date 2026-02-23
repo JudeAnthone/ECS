@@ -2,11 +2,18 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/pkg/jwt"
 )
+
+func jsonError(w http.ResponseWriter, message string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
 
 // AuthMiddleware validates JWT tokens and extracts user information
 func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
@@ -14,14 +21,14 @@ func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				http.Error(w, "Authorization header required", http.StatusUnauthorized)
+				jsonError(w, "Authorization header required", http.StatusUnauthorized)
 				return
 			}
 
 			// Extract token from "Bearer <token>"
 			parts := strings.Split(authHeader, " ")
 			if len(parts) != 2 || parts[0] != "Bearer" {
-				http.Error(w, "Invalid authorization header format", http.StatusUnauthorized)
+				jsonError(w, "Invalid authorization header format", http.StatusUnauthorized)
 				return
 			}
 
@@ -30,7 +37,7 @@ func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 			// Validate token
 			claims, err := jwt.ValidateToken(tokenString, jwtSecret)
 			if err != nil {
-				http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+				jsonError(w, "Invalid or expired token", http.StatusUnauthorized)
 				return
 			}
 
@@ -50,7 +57,7 @@ func AdminOnlyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		role, ok := r.Context().Value("role").(string)
 		if !ok || role != "admin" {
-			http.Error(w, "Admin access required", http.StatusForbidden)
+			jsonError(w, "Admin access required", http.StatusForbidden)
 			return
 		}
 

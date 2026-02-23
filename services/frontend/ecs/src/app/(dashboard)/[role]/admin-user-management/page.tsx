@@ -47,6 +47,14 @@ import {
 import { userService, type User } from '@/shared/lib/user-service';
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert';
 
+function UserAvatar({ user, size = 'md' }: { user: User; size?: 'sm' | 'md' | 'lg' }) {
+  const sz = size === 'sm' ? 'h-7 w-7 text-xs' : size === 'lg' ? 'h-12 w-12 text-base' : 'h-9 w-9 text-sm';
+  const initials = `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase();
+  return user.avatar_url
+    ? <img src={user.avatar_url} alt={initials} className={`${sz} rounded-full object-cover shrink-0`} />
+    : <div className={`${sz} rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center shrink-0`}>{initials}</div>;
+}
+
 export default function UserManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
@@ -513,9 +521,7 @@ export default function UserManagement() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-white font-semibold text-xs">
-                              {user.first_name[0]}{user.last_name[0]}
-                            </div>
+                            <UserAvatar user={user} size="sm" />
                             <span className="text-slate-900 font-medium">{user.first_name} {user.last_name}</span>
                           </div>
                         </TableCell>
@@ -678,7 +684,7 @@ export default function UserManagement() {
                         <TableHead className="text-slate-700 font-semibold">Role</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Department</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Contact</TableHead>
-                        <TableHead className="text-slate-700 font-semibold">Last Active</TableHead>
+                        <TableHead className="text-slate-700 font-semibold">Last Logged</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Status</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Date Joined</TableHead>
                         <TableHead className="text-slate-700 font-semibold text-right">Actions</TableHead>
@@ -699,9 +705,7 @@ export default function UserManagement() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-semibold text-xs">
-                                  {user.first_name[0]}{user.last_name[0]}
-                                </div>
+                                <UserAvatar user={user} size="sm" />
                                 <span className="text-slate-900 font-medium">{user.first_name} {user.last_name}</span>
                               </div>
                             </TableCell>
@@ -831,21 +835,23 @@ export default function UserManagement() {
               {/* User ID Display */}
               {editingUser && (
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-center gap-3">
+                    <UserAvatar user={editingUser} size="lg" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">{editingUser.first_name} {editingUser.last_name}</p>
+                      <p className="text-xs text-slate-500 truncate">{editingUser.email}</p>
+                    </div>
+                    <div className="text-right shrink-0">
                       <p className="text-xs text-slate-500 font-medium mb-1">User ID</p>
-                      <p className="text-sm font-mono text-slate-900 break-all">{editingUser.id}</p>
+                      <p className="text-xs font-mono text-slate-700">{editingUser.id.substring(0, 8)}...</p>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => {
-                        navigator.clipboard.writeText(editingUser.id);
-                        alert('User ID copied to clipboard!');
-                      }}
-                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      onClick={() => { navigator.clipboard.writeText(editingUser.id); }}
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 shrink-0"
                     >
-                      Copy
+                      Copy ID
                     </Button>
                   </div>
                 </div>

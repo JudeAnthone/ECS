@@ -443,3 +443,16 @@ func (r *programRepository) Delete(ctx context.Context, id string) error {
 
 	return nil
 }
+
+// AssignProgramChair sets or clears the program_chair_id on a program
+func (r *programRepository) AssignProgramChair(ctx context.Context, programID string, chairID *string) error {
+	query := `UPDATE programs SET program_chair_id = $1, updated_at = NOW() WHERE id = $2`
+	result, err := r.db.Exec(ctx, query, chairID, programID)
+	if err != nil {
+		return fmt.Errorf("failed to assign program chair: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("program not found")
+	}
+	return nil
+}

@@ -56,8 +56,8 @@ func (uc *programUseCase) CreateProgram(ctx context.Context, req *domain.CreateP
 		SpentBudget:         0,
 		StartDate:           startDate,
 		EndDate:             endDate,
-		Status:              "draft",
-		ApprovalStatus:      "pending",
+		Status:              "active",
+		ApprovalStatus:      "approved",
 	}
 
 	err := uc.programRepo.Create(ctx, program)
@@ -208,5 +208,13 @@ func (uc *programUseCase) DeleteProgram(ctx context.Context, id string) error {
 		return fmt.Errorf("failed to delete program: %w", err)
 	}
 
+	return nil
+}
+
+// AssignProgramChair assigns or removes a program chair from a program
+func (uc *programUseCase) AssignProgramChair(ctx context.Context, programID string, chairID *string) error {
+	if err := uc.programRepo.AssignProgramChair(ctx, programID, chairID); err != nil {
+		return fmt.Errorf("failed to assign program chair: %w", err)
+	}
 	return nil
 }

@@ -179,3 +179,23 @@ func (h *ProgramHandler) DeleteProgram(w http.ResponseWriter, r *http.Request) {
 		"message": "Program deleted successfully",
 	})
 }
+
+// AssignProgramChair handles PATCH /api/v1/programs/{id}/assign-chair
+func (h *ProgramHandler) AssignProgramChair(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	var body struct {
+		ProgramChairID *string `json:"program_chair_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	if err := h.programUsecase.AssignProgramChair(r.Context(), id, body.ProgramChairID); err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Program chair assigned"})
+}

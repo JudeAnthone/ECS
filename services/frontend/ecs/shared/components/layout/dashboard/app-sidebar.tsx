@@ -90,7 +90,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain userRole={role || user?.role} />
-        <NavProjects projects={projects} />
+        {(role || user?.role) !== 'public-user' && (
+          <NavProjects projects={projects} />
+        )}
         <NavSecondary items={navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>

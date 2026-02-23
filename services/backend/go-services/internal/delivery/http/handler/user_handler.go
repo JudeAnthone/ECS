@@ -111,3 +111,18 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		"message": "User updated successfully",
 	})
 }
+
+// GetUsersByRole handles GET /api/v1/users/by-role?role=<role>
+func (h *UserHandler) GetUsersByRole(w http.ResponseWriter, r *http.Request) {
+	role := r.URL.Query().Get("role")
+	if role == "" {
+		respondWithError(w, http.StatusBadRequest, "role query parameter is required")
+		return
+	}
+	users, err := h.userUsecase.GetUsersByRole(r.Context(), role)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{"users": users})
+}

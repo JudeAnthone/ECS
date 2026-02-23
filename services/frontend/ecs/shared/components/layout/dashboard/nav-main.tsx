@@ -30,7 +30,6 @@ const roleNavigation: RoleNavigation = {
       { title: "Dashboard", href: "/admin-dashboard" },
       { title: "User Management", href: "/admin-user-management" },
       { title: "Program Management", href: "/admin-program-management" },
-      { title: "Project Management", href: "/admin-project-management" },
       { title: "Analytics", href: "/admin-analytics" },
       { title: "Reports", href: "/admin-report" },
       { title: "Blog", href: "/admin-blog" },
@@ -70,7 +69,7 @@ const roleNavigation: RoleNavigation = {
     label: "Public User",
     items: [
       { title: "Dashboard", href: "/public-user-dashboard" },
-      { title: "Project List", href: "/public-user-project-list" },
+      { title: "Browse Programs", href: "/public-user-project-list" },
       { title: "Request Form", href: "/public-user-request-form" },
     ],
   },

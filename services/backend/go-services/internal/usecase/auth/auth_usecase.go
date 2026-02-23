@@ -109,7 +109,6 @@ func (u *authUsecase) Register(ctx context.Context, req *dto.RegisterRequest) (*
 		LastName:      req.LastName,
 		Email:         req.Email,
 		PasswordHash:  hashedPassword,
-		AuthProvider:  domain.AuthProviderLocal,
 		Role:          role,
 		Department:    req.Department,
 		ContactNumber: req.ContactNumber,

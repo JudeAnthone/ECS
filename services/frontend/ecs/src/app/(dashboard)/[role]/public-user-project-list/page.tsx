@@ -1,240 +1,332 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/Card";
 import { Badge } from "@/shared/components/ui/Badge";
 import { Input } from "@/shared/components/ui/Input";
+import { Button } from "@/shared/components/ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/components/ui/Select";
-import { Search, Calendar, DollarSign, Building2, AlertCircle } from "lucide-react";
-import { useState } from "react";
+import {
+  Search, Calendar, ArrowLeft, FolderOpen,
+  Layers, RefreshCw, Target, Wallet, CalendarRange
+} from "lucide-react";
+import { useState, useEffect } from "react";
 
-// Types
-interface Project {
-  id: string;
-  title: string;
-  status: "completed" | "in-progress" | "late";
-  budget: number;
-  department: string;
-  description: string;
-  deadline: string;
+const API = 'http://localhost:8081/api/v1';
+function getToken() { return localStorage.getItem('auth_token'); }
+function authHeaders(): HeadersInit {
+  return { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' };
 }
 
-// Mock data - replace with your actual data source
-const mockProjects: Project[] = [
-  {
-    id: "1",
-    title: "Campus Network Infrastructure Upgrade",
-    status: "in-progress",
-    budget: 250000,
-    department: "IT Department",
-    description: "Comprehensive upgrade of the university's network infrastructure including fiber optic installation, switch replacements, and wireless access point deployment across all buildings.",
-    deadline: "2024-03-15"
-  },
-  {
-    id: "2",
-    title: "Student Information System Modernization",
-    status: "late",
-    budget: 180000,
-    department: "Academic Affairs",
-    description: "Migration from legacy student information system to cloud-based solution with improved UI/UX, mobile accessibility, and integrated analytics dashboard.",
-    deadline: "2024-01-30"
-  },
-  {
-    id: "3",
-    title: "Research Lab Equipment Procurement",
-    status: "completed",
-    budget: 450000,
-    department: "Research & Development",
-    description: "Acquisition of advanced laboratory equipment for the engineering and science departments, including spectroscopy systems, 3D printers, and computational servers.",
-    deadline: "2023-12-20"
-  },
-  {
-    id: "4",
-    title: "Library Digital Archive Initiative",
-    status: "in-progress",
-    budget: 95000,
-    department: "Library Services",
-    description: "Digitization of historical documents, thesis archives, and rare collections with implementation of digital asset management system and public access portal.",
-    deadline: "2024-04-10"
-  },
-  {
-    id: "5",
-    title: "Campus Safety and Security Enhancement",
-    status: "late",
-    budget: 320000,
-    department: "Security & Safety",
-    description: "Installation of AI-powered CCTV systems, emergency response systems, access control upgrades, and integration with campus mobile app for real-time alerts.",
-    deadline: "2024-02-01"
-  },
-  {
-    id: "6",
-    title: "Renewable Energy Solar Panel Installation",
-    status: "in-progress",
-    budget: 580000,
-    department: "Facilities Management",
-    description: "Implementation of solar panel systems on campus buildings to reduce energy costs and carbon footprint, including battery storage and smart grid integration.",
-    deadline: "2024-05-30"
-  }
-];
+interface Program {
+  id: string;
+  program_name: string;
+  program_description?: string;
+  program_category?: string;
+  objectives?: string;
+  target_beneficiaries?: string;
+  budget_allocation?: number;
+  start_date?: string;
+  end_date?: string;
+  status: string;
+  approval_status: string;
+}
 
-export default function ProjectsViewPage() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterDepartment, setFilterDepartment] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
+interface Project {
+  id: string;
+  project_name: string;
+  project_description?: string;
+  objectives?: string;
+  budget_allocated?: number;
+  budget_used: number;
+  start_date?: string;
+  end_date?: string;
+  status: string;
+  approval_status: string;
+  program_id: string;
+}
 
-  // Get unique departments
-  const departments = Array.from(new Set(mockProjects.map(p => p.department)));
-
-  // Filter projects
-  const filteredProjects = mockProjects.filter(project => {
-    const matchesSearch = project.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         project.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDepartment = filterDepartment === "all" || project.department === filterDepartment;
-    const matchesStatus = filterStatus === "all" || project.status === filterStatus;
-    
-    return matchesSearch && matchesDepartment && matchesStatus;
-  });
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0
-    }).format(amount);
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, string> = {
+    draft: 'bg-gray-100 text-gray-700',
+    active: 'bg-green-100 text-green-700',
+    completed: 'bg-blue-100 text-blue-700',
+    cancelled: 'bg-red-100 text-red-700',
+    pending: 'bg-orange-100 text-orange-700',
+    approved: 'bg-green-100 text-green-700',
+    rejected: 'bg-red-100 text-red-700',
+    in_progress: 'bg-green-100 text-green-700',
+    planning: 'bg-purple-100 text-purple-700',
+    on_hold: 'bg-yellow-100 text-yellow-700',
   };
+  return (
+    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${map[status] ?? 'bg-gray-100 text-gray-700'}`}>
+      {status.replace(/_/g, ' ')}
+    </span>
+  );
+}
 
-  const getStatusBadge = (status: Project["status"]) => {
-    switch (status) {
-      case "completed":
-        return <Badge className="bg-green-500 hover:bg-green-600">Completed</Badge>;
-      case "in-progress":
-        return <Badge className="bg-blue-500 hover:bg-blue-600">In Progress</Badge>;
-      case "late":
-        return (
-          <Badge className="bg-red-500 hover:bg-red-600 flex items-center gap-1">
-            <AlertCircle className="h-3 w-3" />
-            Late
-          </Badge>
-        );
+function fmt(n?: number | null) {
+  return n == null ? '—' : new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(n);
+}
+
+function fmtDate(d?: string | null) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// ── Program card (drill-down) ─────────────────────────────────────────────────
+function ProgramCard({ program, onClick }: { program: Program; onClick: () => void }) {
+  return (
+    <div
+      onClick={onClick}
+      className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group"
+    >
+      <div className="p-5">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <h3 className="font-semibold text-slate-800 text-base leading-snug group-hover:text-indigo-600 transition-colors">
+            {program.program_name}
+          </h3>
+          <StatusBadge status={program.status} />
+        </div>
+        {program.program_description && (
+          <p className="text-sm text-slate-500 leading-relaxed line-clamp-2 mb-3">
+            {program.program_description}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 mt-3 pt-3 border-t border-slate-100">
+          {program.program_category && (
+            <span className="flex items-center gap-1">
+              <Layers className="w-3 h-3" /> {program.program_category}
+            </span>
+          )}
+          {program.budget_allocation != null && (
+            <span className="flex items-center gap-1">
+              <Wallet className="w-3 h-3" /> {fmt(program.budget_allocation)} allocated
+            </span>
+          )}
+          {program.start_date && (
+            <span className="flex items-center gap-1">
+              <CalendarRange className="w-3 h-3" />
+              {fmtDate(program.start_date)} – {fmtDate(program.end_date)}
+            </span>
+          )}
+          {program.target_beneficiaries && (
+            <span className="flex items-center gap-1">
+              <Target className="w-3 h-3" /> {program.target_beneficiaries}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 rounded-b-xl flex items-center justify-between">
+        <span className="text-xs text-slate-400">Click to view projects</span>
+        <FolderOpen className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+      </div>
+    </div>
+  );
+}
+
+// ── Project card ──────────────────────────────────────────────────────────────
+function ProjectCard({ project }: { project: Project }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+      <div className="p-5">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <h3 className="font-semibold text-slate-800 text-base leading-snug">{project.project_name}</h3>
+          <StatusBadge status={project.status} />
+        </div>
+        {project.project_description && (
+          <p className="text-sm text-slate-500 leading-relaxed line-clamp-3 mb-3">
+            {project.project_description}
+          </p>
+        )}
+        {project.objectives && (
+          <div className="mb-3">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Objectives</p>
+            <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">{project.objectives}</p>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 pt-3 border-t border-slate-100">
+          <span className="flex items-center gap-1">
+            <Wallet className="w-3 h-3 text-slate-400" />
+            <span className="font-medium text-slate-700">{fmt(project.budget_allocated)}</span> budget
+          </span>
+          {project.start_date && (
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-slate-400" />
+              {fmtDate(project.start_date)} – {fmtDate(project.end_date)}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function ProjectsViewPage() {
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [loadingPrograms, setLoadingPrograms] = useState(true);
+
+  const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+
+  // Load programs on mount
+  useEffect(() => {
+    setLoadingPrograms(true);
+    fetch(`${API}/programs`, { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then(data => setPrograms(data.programs ?? data ?? []))
+      .catch(() => setPrograms([]))
+      .finally(() => setLoadingPrograms(false));
+  }, []);
+
+  // Load projects when a program is selected
+  const openProgram = async (program: Program) => {
+    setSelectedProgram(program);
+    setProjects([]);
+    setSearch('');
+    setStatusFilter('all');
+    setLoadingProjects(true);
+    try {
+      const r = await fetch(`${API}/projects?program_id=${program.id}`, { headers: authHeaders() });
+      const data = r.ok ? await r.json() : {};
+      setProjects(data.projects ?? []);
+    } catch {
+      setProjects([]);
+    } finally {
+      setLoadingProjects(false);
     }
   };
 
+  const filtered = projects.filter(p => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || p.project_name.toLowerCase().includes(q) || (p.project_description ?? '').toLowerCase().includes(q);
+    const matchStatus = statusFilter === 'all' || p.status === statusFilter;
+    return matchSearch && matchStatus;
+  });
+
+  // ── Programs list view ──────────────────────────────────────────────────────
+  if (!selectedProgram) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+        <div className="max-w-6xl mx-auto space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Extension Projects Directory</h1>
+              <p className="text-slate-500 mt-1">Browse active programs and their projects</p>
+            </div>
+            <Badge className="bg-indigo-600 text-white px-4 py-2">
+              <FolderOpen className="h-4 w-4 mr-2" /> Programs
+            </Badge>
+          </div>
+
+          {/* Programs grid */}
+          {loadingPrograms ? (
+            <div className="flex items-center justify-center py-20 text-slate-400">
+              <RefreshCw className="w-6 h-6 animate-spin mr-2" /> Loading programs...
+            </div>
+          ) : programs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+              <FolderOpen className="w-12 h-12 mb-3 opacity-30" />
+              <p className="text-base font-medium">No programs available yet</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {programs.map(p => (
+                <ProgramCard key={p.id} program={p} onClick={() => openProgram(p)} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Projects drill-down view ────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+      <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-            Extension Projects Directory
-          </h1>
-          <p className="text-slate-600 dark:text-slate-400">
-            View all projects from higher-tier departments. Read-only access for monitoring and reference.
-          </p>
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={() => setSelectedProgram(null)} className="shrink-0">
+            <ArrowLeft className="w-4 h-4 mr-1" /> Programs
+          </Button>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-slate-900 truncate">{selectedProgram.program_name}</h1>
+            <p className="text-slate-500 text-sm mt-0.5">Projects in this program</p>
+          </div>
+          <StatusBadge status={selectedProgram.status} />
+        </div>
+
+        {/* Program info strip */}
+        <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600">
+          {selectedProgram.program_category && (
+            <span className="flex items-center gap-1.5"><Layers className="w-4 h-4 text-slate-400" /> {selectedProgram.program_category}</span>
+          )}
+          {selectedProgram.budget_allocation != null && (
+            <span className="flex items-center gap-1.5"><Wallet className="w-4 h-4 text-slate-400" /> {fmt(selectedProgram.budget_allocation)} budget</span>
+          )}
+          {selectedProgram.start_date && (
+            <span className="flex items-center gap-1.5">
+              <CalendarRange className="w-4 h-4 text-slate-400" />
+              {fmtDate(selectedProgram.start_date)} – {fmtDate(selectedProgram.end_date)}
+            </span>
+          )}
+          {selectedProgram.target_beneficiaries && (
+            <span className="flex items-center gap-1.5"><Target className="w-4 h-4 text-slate-400" /> {selectedProgram.target_beneficiaries}</span>
+          )}
         </div>
 
         {/* Filters */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                placeholder="Search projects..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            
-            <Select value={filterDepartment} onValueChange={setFilterDepartment}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by Department" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Departments</SelectItem>
-                {departments.map(dept => (
-                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="in-progress">In Progress</SelectItem>
-                <SelectItem value="late">Late</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Search projects..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-9"
+            />
           </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="All Statuses" />
+            </SelectTrigger>
+            <SelectContent className="bg-white">
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="planning">Planning</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="on_hold">On Hold</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Project Count */}
-        <div className="mb-4">
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Showing <span className="font-semibold">{filteredProjects.length}</span> of <span className="font-semibold">{mockProjects.length}</span> projects
-          </p>
-        </div>
+        {/* Count */}
+        <p className="text-sm text-slate-500">
+          Showing <span className="font-semibold text-slate-700">{filtered.length}</span>
+          {filtered.length !== projects.length && <> of <span className="font-semibold text-slate-700">{projects.length}</span></>} projects
+        </p>
 
-        {/* Projects Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {filteredProjects.map((project) => (
-            <Card key={project.id} className="hover:shadow-lg transition-shadow duration-300 border-slate-200 dark:border-slate-700">
-              <CardHeader>
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100 leading-tight">
-                    {project.title}
-                  </CardTitle>
-                  {getStatusBadge(project.status)}
-                </div>
-                <CardDescription className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-                  <Building2 className="h-4 w-4" />
-                  {project.department}
-                </CardDescription>
-              </CardHeader>
-              
-              <CardContent>
-                <p className="text-slate-700 dark:text-slate-300 mb-4 leading-relaxed">
-                  {project.description}
-                </p>
-                
-                <div className="flex flex-wrap gap-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {formatCurrency(project.budget)}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    <span className="text-sm text-slate-600 dark:text-slate-400">
-                      Deadline: {new Date(project.deadline).toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: 'short', 
-                        day: 'numeric' 
-                      })}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Empty State */}
-        {filteredProjects.length === 0 && (
-          <div className="text-center py-12">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 mb-4">
-              <Search className="h-8 w-8 text-slate-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">
-              No projects found
-            </h3>
-            <p className="text-slate-600 dark:text-slate-400">
-              Try adjusting your search or filters
-            </p>
+        {/* Project grid */}
+        {loadingProjects ? (
+          <div className="flex items-center justify-center py-20 text-slate-400">
+            <RefreshCw className="w-6 h-6 animate-spin mr-2" /> Loading projects...
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+            <Search className="w-10 h-10 mb-3 opacity-30" />
+            <p className="font-medium">{projects.length === 0 ? 'No projects in this program yet' : 'No projects match your search'}</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {filtered.map(p => <ProjectCard key={p.id} project={p} />)}
           </div>
         )}
       </div>

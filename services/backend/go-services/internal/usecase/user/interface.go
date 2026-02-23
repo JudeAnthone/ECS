@@ -8,6 +8,7 @@ import (
 
 type UseCase interface {
 	GetAllUsers(ctx context.Context) ([]*dto.UserDTO, error)
+	GetUsersByRole(ctx context.Context, role string) ([]*dto.UserDTO, error)
 	ApproveUser(ctx context.Context, userID string, approvedByID string) error
 	RejectUser(ctx context.Context, userID string, approvedByID string) error
 	DeleteUser(ctx context.Context, userID string) error

@@ -30,7 +30,16 @@ export const userService = {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch users');
+      const contentType = response.headers.get('content-type');
+      let errorMessage = 'Failed to fetch users';
+      if (contentType && contentType.includes('application/json')) {
+        const error = await response.json();
+        errorMessage = error.error || errorMessage;
+      } else {
+        const text = await response.text();
+        errorMessage = text || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
 
     const data: UsersResponse = await response.json();

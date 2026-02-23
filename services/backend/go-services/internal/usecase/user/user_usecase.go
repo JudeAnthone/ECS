@@ -191,3 +191,27 @@ func (uc *userUseCase) UpdateUser(ctx context.Context, userID string, updates *d
 
 	return nil
 }
+
+// GetUsersByRole returns active users filtered by role as UserDTOs
+func (uc *userUseCase) GetUsersByRole(ctx context.Context, role string) ([]*dto.UserDTO, error) {
+	users, err := uc.userRepo.GetUsersByRole(ctx, role)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users by role: %w", err)
+	}
+	var result []*dto.UserDTO
+	for _, u := range users {
+		result = append(result, &dto.UserDTO{
+			ID:         u.ID,
+			Username:   u.Username,
+			FirstName:  u.FirstName,
+			LastName:   u.LastName,
+			Email:      u.Email,
+			Role:       u.Role,
+			Department: u.Department,
+		})
+	}
+	if result == nil {
+		result = []*dto.UserDTO{}
+	}
+	return result, nil
+}

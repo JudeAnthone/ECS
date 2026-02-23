@@ -46,7 +46,7 @@ export function LoginForm({
       } else if (role === 'staff') {
         router.push('/staff/staff-dashboard')
       } else {
-        router.push('/public-user/public-user-project-list')
+        router.push('/public-user/public-user-dashboard')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')

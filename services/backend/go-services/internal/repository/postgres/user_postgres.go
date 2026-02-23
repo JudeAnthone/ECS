@@ -20,8 +20,8 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 
 func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	query := `
-		INSERT INTO users (username, first_name, last_name, email, password_hash, auth_provider, role, department, contact_number, account_status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO users (username, first_name, last_name, email, password_hash, role, department, contact_number, account_status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		RETURNING id, created_at, updated_at
 	`
 
@@ -33,7 +33,6 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 		user.LastName,
 		user.Email,
 		user.PasswordHash,
-		user.AuthProvider,
 		user.Role,
 		user.Department,
 		user.ContactNumber,
@@ -49,8 +48,8 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, username, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
-		       role, department, contact_number, account_status, approved_by, approved_at, is_active, last_active,
+		SELECT id, username, first_name, last_name, email, password_hash, avatar_url,
+		       role, department, contact_number, account_status, last_active,
 		       created_at, updated_at
 		FROM users
 		WHERE email = $1
@@ -64,16 +63,11 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 		&user.LastName,
 		&user.Email,
 		&user.PasswordHash,
-		&user.AuthProvider,
-		&user.GoogleID,
 		&user.AvatarURL,
 		&user.Role,
 		&user.Department,
 		&user.ContactNumber,
 		&user.AccountStatus,
-		&user.ApprovedBy,
-		&user.ApprovedAt,
-		&user.IsActive,
 		&user.LastActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -91,8 +85,8 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
-		SELECT id, username, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
-		       role, department, contact_number, account_status, approved_by, approved_at, is_active, last_active,
+		SELECT id, username, first_name, last_name, email, password_hash, avatar_url,
+		       role, department, contact_number, account_status, last_active,
 		       created_at, updated_at
 		FROM users
 		WHERE id = $1
@@ -106,16 +100,11 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 		&user.LastName,
 		&user.Email,
 		&user.PasswordHash,
-		&user.AuthProvider,
-		&user.GoogleID,
 		&user.AvatarURL,
 		&user.Role,
 		&user.Department,
 		&user.ContactNumber,
 		&user.AccountStatus,
-		&user.ApprovedBy,
-		&user.ApprovedAt,
-		&user.IsActive,
 		&user.LastActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -184,8 +173,8 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 
 func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*domain.User, error) {
 	query := `
-		SELECT id, username, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
-		       role, department, contact_number, account_status, approved_by, approved_at, is_active, last_active,
+		SELECT id, username, first_name, last_name, email, password_hash, avatar_url,
+		       role, department, contact_number, account_status, last_active,
 		       created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC
@@ -207,16 +196,11 @@ func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*domain.User, error
 			&user.LastName,
 			&user.Email,
 			&user.PasswordHash,
-			&user.AuthProvider,
-			&user.GoogleID,
 			&user.AvatarURL,
 			&user.Role,
 			&user.Department,
 			&user.ContactNumber,
 			&user.AccountStatus,
-			&user.ApprovedBy,
-			&user.ApprovedAt,
-			&user.IsActive,
 			&user.LastActive,
 			&user.CreatedAt,
 			&user.UpdatedAt,
@@ -238,13 +222,11 @@ func (r *UserRepository) UpdateAccountStatus(ctx context.Context, userID string,
 	query := `
 		UPDATE users
 		SET account_status = $1::account_status,
-		    approved_by = $2,
-		    approved_at = CASE WHEN $1::text = 'active' THEN NOW() ELSE NULL END,
 		    updated_at = NOW()
-		WHERE id = $3
+		WHERE id = $2
 	`
 
-	_, err := r.db.Exec(ctx, query, status, approvedByID, userID)
+	_, err := r.db.Exec(ctx, query, status, userID)
 	if err != nil {
 		return fmt.Errorf("failed to update account status: %w", err)
 	}
@@ -254,8 +236,8 @@ func (r *UserRepository) UpdateAccountStatus(ctx context.Context, userID string,
 
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
 	query := `
-		SELECT id, username, first_name, last_name, email, password_hash, auth_provider, google_id, avatar_url,
-		       role, department, contact_number, account_status, approved_by, approved_at, is_active, last_active,
+		SELECT id, username, first_name, last_name, email, password_hash, avatar_url,
+		       role, department, contact_number, account_status, last_active,
 		       created_at, updated_at
 		FROM users
 		WHERE username = $1
@@ -269,16 +251,11 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*d
 		&user.LastName,
 		&user.Email,
 		&user.PasswordHash,
-		&user.AuthProvider,
-		&user.GoogleID,
 		&user.AvatarURL,
 		&user.Role,
 		&user.Department,
 		&user.ContactNumber,
 		&user.AccountStatus,
-		&user.ApprovedBy,
-		&user.ApprovedAt,
-		&user.IsActive,
 		&user.LastActive,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -301,4 +278,53 @@ func (r *UserRepository) UpdateLastActive(ctx context.Context, userID string) er
 		return fmt.Errorf("failed to update last active: %w", err)
 	}
 	return nil
+}
+
+// GetUsersByRole returns active users with the given role
+func (r *UserRepository) GetUsersByRole(ctx context.Context, role string) ([]*domain.User, error) {
+	query := `
+		SELECT id, username, first_name, last_name, email, password_hash, avatar_url,
+		       role, department, contact_number, account_status, last_active,
+		       created_at, updated_at
+		FROM users
+		WHERE role = $1 AND account_status = 'active'
+		ORDER BY last_name, first_name
+	`
+	rows, err := r.db.Query(ctx, query, role)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query users by role: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*domain.User
+	for rows.Next() {
+		user := &domain.User{}
+		err := rows.Scan(
+			&user.ID,
+			&user.Username,
+			&user.FirstName,
+			&user.LastName,
+			&user.Email,
+			&user.PasswordHash,
+			&user.AvatarURL,
+			&user.Role,
+			&user.Department,
+			&user.ContactNumber,
+			&user.AccountStatus,
+			&user.LastActive,
+			&user.CreatedAt,
+			&user.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, user)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+	if users == nil {
+		users = []*domain.User{}
+	}
+	return users, nil
 }

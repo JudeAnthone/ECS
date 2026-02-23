@@ -12,16 +12,11 @@ type User struct {
 	LastName      string
 	Email         string
 	PasswordHash  string
-	AuthProvider  string
-	GoogleID      *string
 	AvatarURL     *string
 	Role          string
 	Department    *string
 	ContactNumber *string
 	AccountStatus string
-	ApprovedBy    *string
-	ApprovedAt    *time.Time
-	IsActive      bool
 	LastActive    *time.Time
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
@@ -47,10 +42,4 @@ const (
 	AccountActive          = "active"
 	AccountRejected        = "rejected"
 	AccountDeactivated     = "deactivated"
-)
-
-// AuthProvider constants
-const (
-	AuthProviderLocal  = "local"
-	AuthProviderGoogle = "google"
 )
