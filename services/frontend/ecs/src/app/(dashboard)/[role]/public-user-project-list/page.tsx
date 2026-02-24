@@ -178,7 +178,16 @@ export default function ProjectsViewPage() {
     setLoadingPrograms(true);
     fetch(`${API}/programs`, { headers: authHeaders() })
       .then(r => r.ok ? r.json() : Promise.reject(r))
-      .then(data => setPrograms(data.programs ?? data ?? []))
+      .then(data => {
+        // Always set programs as an array
+        if (Array.isArray(data.programs)) {
+          setPrograms(data.programs);
+        } else if (Array.isArray(data)) {
+          setPrograms(data);
+        } else {
+          setPrograms([]);
+        }
+      })
       .catch(() => setPrograms([]))
       .finally(() => setLoadingPrograms(false));
   }, []);
@@ -229,7 +238,7 @@ export default function ProjectsViewPage() {
             <div className="flex items-center justify-center py-20 text-slate-400">
               <RefreshCw className="w-6 h-6 animate-spin mr-2" /> Loading programs...
             </div>
-          ) : programs.length === 0 ? (
+          ) : !Array.isArray(programs) || programs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-slate-400">
               <FolderOpen className="w-12 h-12 mb-3 opacity-30" />
               <p className="text-base font-medium">No programs available yet</p>

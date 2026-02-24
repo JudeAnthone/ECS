@@ -273,7 +273,14 @@ export default function PublicUserDashboard() {
       }
       if (progRes.ok) {
         const d = await progRes.json();
-        setPrograms(d.programs ?? d ?? []);
+        // Ensure programs is always an array
+        if (Array.isArray(d.programs)) {
+          setPrograms(d.programs);
+        } else if (Array.isArray(d)) {
+          setPrograms(d);
+        } else {
+          setPrograms([]);
+        }
       }
     } catch { /* ignore */ } finally {
       setLoading(false);
@@ -556,9 +563,9 @@ export default function PublicUserDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               {[
                 { step: '1', title: 'Submit a Request', desc: 'Fill out the request form with your project details and objectives.' },
-                { step: '2', title: 'Program Chair Review', desc: 'A program chair reviews your request and approves or provides feedback.' },
-                { step: '3', title: 'Department Assignment', desc: 'Approved requests are assigned to a department and a project head.' },
-                { step: '4', title: 'Proposal & Final Approval', desc: 'The project head prepares a proposal, which is submitted for final approval.' },
+                { step: '2', title: 'Program Chair Review', desc: 'A program chair reviews your request, may provide feedback, and assigns it to a department if approved.' },
+                { step: '3', title: 'Department & Project Head Assignment', desc: 'The assigned department and project head review the request and prepare a project proposal.' },
+                { step: '4', title: 'Final Approval & Launch', desc: 'The project proposal is submitted for final approval. Once approved, the project is launched and tracked.' },
               ].map((item, i, arr) => (
                 <div key={item.step} className="flex items-start gap-3">
                   <div className="flex flex-col items-center">

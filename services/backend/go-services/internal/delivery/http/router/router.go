@@ -6,6 +6,7 @@ import (
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/config"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/delivery/http/handler"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/delivery/http/middleware"
+	"github.com/Xschema-dev/Earist-Extension-Service/internal/domain"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/pkg/database"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/repository/postgres"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/auth"
@@ -33,7 +34,7 @@ func SetupRoutes() *mux.Router {
 	departmentUsecase := department.NewDepartmentUseCase(departmentRepo)
 	programUsecase := program.NewProgramUseCase(programRepo)
 	projectUsecase := projectuc.NewProjectUseCase(projectRepo)
-	requestUsecase := requestuc.NewRequestUseCase(requestRepo)
+	requestUsecase := requestuc.NewRequestUseCase(requestRepo, programRepo)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authUsecase)
@@ -63,16 +64,16 @@ func SetupRoutes() *mux.Router {
 	api.HandleFunc("/departments/code/{code}", departmentHandler.GetDepartmentByCode).Methods("GET")
 
 	// Program routes
-	api.Handle("/programs", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.CreateProgram))).Methods("POST")
+	api.Handle("/programs", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(programHandler.CreateProgram))).Methods("POST")
 	api.HandleFunc("/programs", programHandler.GetAllPrograms).Methods("GET")
 	api.HandleFunc("/programs/{id}", programHandler.GetProgramByID).Methods("GET")
 	api.HandleFunc("/programs/department/{departmentId}", programHandler.GetProgramsByDepartment).Methods("GET")
 	api.HandleFunc("/programs/program-chair/{programChairId}", programHandler.GetProgramsByProgramChair).Methods("GET")
-	api.Handle("/programs/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.UpdateProgram))).Methods("PUT")
-	api.Handle("/programs/{id}/status", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.UpdateProgramStatus))).Methods("PATCH")
+	api.Handle("/programs/{id}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(programHandler.UpdateProgram))).Methods("PUT")
+	api.Handle("/programs/{id}/status", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(programHandler.UpdateProgramStatus))).Methods("PATCH")
 	api.Handle("/programs/{id}/approval", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.UpdateProgramApproval))).Methods("PATCH")
 	api.Handle("/programs/{id}/assign-chair", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.AssignProgramChair))).Methods("PATCH")
-	api.Handle("/programs/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.DeleteProgram))).Methods("DELETE")
+	api.Handle("/programs/{id}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(programHandler.DeleteProgram))).Methods("DELETE")
 
 	// Project routes
 	api.Handle("/projects", middleware.AdminOnlyMiddleware(http.HandlerFunc(projectHandler.CreateProject))).Methods("POST")
@@ -94,10 +95,12 @@ func SetupRoutes() *mux.Router {
 	api.HandleFunc("/requests", requestHandler.SubmitRequest).Methods("POST")
 	api.HandleFunc("/requests", requestHandler.GetRequests).Methods("GET")
 	api.HandleFunc("/requests/{id}", requestHandler.GetRequestByID).Methods("GET")
+	api.HandleFunc("/requests/{id}", requestHandler.DeleteRequest).Methods("DELETE")
 	api.HandleFunc("/requests/{id}/review", requestHandler.ProgramChairReview).Methods("PATCH")
 	api.HandleFunc("/requests/{id}/assign", requestHandler.AssignToHead).Methods("PATCH")
 	api.HandleFunc("/requests/{id}/respond", requestHandler.ProjectHeadRespond).Methods("PATCH")
 	api.HandleFunc("/requests/{id}/proposal", requestHandler.SubmitProposal).Methods("PATCH")
+	api.HandleFunc("/requests/{id}/reroute", requestHandler.RerouteRequest).Methods("PATCH")
 	api.Handle("/requests/{id}/review-proposal", middleware.AdminOnlyMiddleware(http.HandlerFunc(requestHandler.ReviewProposal))).Methods("PATCH")
 	api.Handle("/requests/{id}/approve", middleware.AdminOnlyMiddleware(http.HandlerFunc(requestHandler.FinalApprove))).Methods("PATCH")
 

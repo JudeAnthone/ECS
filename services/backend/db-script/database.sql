@@ -180,10 +180,11 @@ CREATE TABLE users (
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     updated_at      TIMESTAMPTZ DEFAULT NOW(),
 
-    -- department required for internal roles
+    -- department required for college-based roles only;
+    -- program_chair is in Administration, not tied to a college department
     CONSTRAINT chk_department_role CHECK (
-        (role IN ('program_chair', 'project_head', 'staff') AND department IS NOT NULL)
-        OR (role IN ('admin', 'public_user'))
+        (role IN ('project_head', 'staff') AND department IS NOT NULL)
+        OR (role IN ('admin', 'program_chair', 'public_user'))
     )
 );
 
@@ -271,6 +272,8 @@ CREATE TABLE project_requests (
     request_description         VARCHAR(2000) NOT NULL,
     requested_by                UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     requested_department        VARCHAR(100),
+    -- UUID FK set when public user selects a department from the dropdown
+    requested_department_id     UUID REFERENCES departments(id) ON DELETE SET NULL,
     estimated_budget            DECIMAL(12, 2),
     target_beneficiaries        VARCHAR(500),
     justification               VARCHAR(2000),

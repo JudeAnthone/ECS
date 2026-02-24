@@ -10,11 +10,12 @@ import (
 
 type requestUseCase struct {
 	requestRepo repository.RequestRepository
+	programRepo repository.ProgramRepository
 }
 
 // NewRequestUseCase creates a new request use case.
-func NewRequestUseCase(requestRepo repository.RequestRepository) UseCase {
-	return &requestUseCase{requestRepo: requestRepo}
+func NewRequestUseCase(requestRepo repository.RequestRepository, programRepo repository.ProgramRepository) UseCase {
+	return &requestUseCase{requestRepo: requestRepo, programRepo: programRepo}
 }
 
 // SubmitRequest creates a brand-new extension service request.
@@ -27,13 +28,14 @@ func (uc *requestUseCase) SubmitRequest(ctx context.Context, userID string, inpu
 	}
 
 	req := &domain.ProjectRequest{
-		RequestTitle:        input.RequestTitle,
-		RequestDescription:  input.RequestDescription,
-		RequestedBy:         userID,
-		RequestedDepartment: input.RequestedDepartment,
-		EstimatedBudget:     input.EstimatedBudget,
-		TargetBeneficiaries: input.TargetBeneficiaries,
-		Justification:       input.Justification,
+		RequestTitle:          input.RequestTitle,
+		RequestDescription:    input.RequestDescription,
+		RequestedBy:           userID,
+		RequestedDepartment:   input.RequestedDepartment,
+		RequestedDepartmentID: input.RequestedDepartmentID,
+		EstimatedBudget:       input.EstimatedBudget,
+		TargetBeneficiaries:   input.TargetBeneficiaries,
+		Justification:         input.Justification,
 	}
 
 	if err := uc.requestRepo.Create(ctx, req); err != nil {
@@ -65,12 +67,57 @@ func (uc *requestUseCase) ProgramChairReview(ctx context.Context, chairID, id st
 	return uc.requestRepo.ProgramChairReview(ctx, id, chairID, input)
 }
 
-// AssignToHead routes a request to a project head.
+// AssignToHead routes a request to a department (project head assignment is optional).
 func (uc *requestUseCase) AssignToHead(ctx context.Context, chairID, id string, input *domain.AssignToHeadInput) error {
-	if input.AssignedToProjectHead == "" {
-		return fmt.Errorf("assigned_to_project_head is required")
+	if input.AssignedDepartmentID == "" {
+		return fmt.Errorf("assigned_department_id is required")
 	}
-	return uc.requestRepo.AssignToHead(ctx, id, input)
+	err := uc.requestRepo.AssignToHead(ctx, id, input)
+	if err != nil {
+		return err
+	}
+	// Fetch the request to get details
+	req, err := uc.requestRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	// Only create program if approved and assigned
+	if req.Status == "approved" && req.AssignedDepartmentID != nil {
+		program := &domain.Program{
+			ProgramName:         req.RequestTitle,
+			ProgramDescription:  &req.RequestDescription,
+			DepartmentID:        req.AssignedDepartmentID,
+			Objectives:          req.Justification,
+			TargetBeneficiaries: req.TargetBeneficiaries,
+			BudgetAllocation:    req.EstimatedBudget,
+			ApprovalStatus:      "approved",
+			Status:              "active",
+			// Set other fields as needed
+		}
+		err = uc.programRepo.Create(ctx, program)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DeleteRequest removes a request by ID.
+func (uc *requestUseCase) DeleteRequest(ctx context.Context, id string) error {
+	return uc.requestRepo.Delete(ctx, id)
+}
+
+// GetRequestsByDepartmentChair returns all requests targeted at departments managed by this chair.
+func (uc *requestUseCase) GetRequestsByDepartmentChair(ctx context.Context, chairID string) ([]*domain.ProjectRequest, error) {
+	return uc.requestRepo.GetByDepartmentChair(ctx, chairID)
+}
+
+// RerouteRequest redirects a request to a different department.
+func (uc *requestUseCase) RerouteRequest(ctx context.Context, requestID, departmentID string) error {
+	if departmentID == "" {
+		return fmt.Errorf("target_department_id is required")
+	}
+	return uc.requestRepo.RerouteRequest(ctx, requestID, departmentID)
 }
 
 // GetRequestsByProgram returns requests for a specific program.
@@ -78,9 +125,15 @@ func (uc *requestUseCase) GetRequestsByProgram(ctx context.Context, programID st
 	return uc.requestRepo.GetByAssignedProgram(ctx, programID)
 }
 
-// GetRequestsByHead returns requests assigned to a project head.
+// GetRequestsByHead returns requests assigned to a specific project head user ID (legacy).
 func (uc *requestUseCase) GetRequestsByHead(ctx context.Context, headID string) ([]*domain.ProjectRequest, error) {
 	return uc.requestRepo.GetByAssignedProjectHead(ctx, headID)
+}
+
+// GetRequestsForProjectHead returns requests assigned to the department
+// that the given project head user belongs to.
+func (uc *requestUseCase) GetRequestsForProjectHead(ctx context.Context, headID string) ([]*domain.ProjectRequest, error) {
+	return uc.requestRepo.GetForProjectHead(ctx, headID)
 }
 
 // ProjectHeadRespond records the project head's acceptance or rejection.

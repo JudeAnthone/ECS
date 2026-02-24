@@ -76,12 +76,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="#">
-                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <Command className="size-4" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{user?.role?.replace('_', ' ').toUpperCase() || 'Role'}</span>
-                  <span className="truncate text-xs">{user?.section || 'Department'}</span>
+                <div className="flex items-center gap-3">
+                  {/* User profile picture or styled initials */}
+                  {user?.avatar_url ? (
+                    <img src={user.avatar_url} alt="Profile" className="rounded-full w-8 h-8 object-cover shadow border border-slate-200" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-200 via-blue-100 to-slate-50 text-blue-900 font-bold flex items-center justify-center text-base shadow border border-slate-200">
+                      {user ? `${(user.first_name?.[0] || '').toUpperCase()}${(user.last_name?.[0] || '').toUpperCase()}` : 'U'}
+                    </div>
+                  )}
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-medium">{user ? `${user.first_name} ${user.last_name}` : 'User'}</span>
+                    <span className="truncate text-xs">{user?.role?.replace('_', ' ').toUpperCase() || 'Role'}{user?.section ? ` • ${user.section}` : ''}</span>
+                  </div>
                 </div>
               </Link>
             </SidebarMenuButton>

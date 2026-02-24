@@ -58,10 +58,14 @@ type RequestRepository interface {
 	GetByRequestedBy(ctx context.Context, userID string) ([]*domain.ProjectRequest, error)
 	GetByAssignedProjectHead(ctx context.Context, headID string) ([]*domain.ProjectRequest, error)
 	GetByAssignedProgram(ctx context.Context, programID string) ([]*domain.ProjectRequest, error)
+	GetForProjectHead(ctx context.Context, headUserID string) ([]*domain.ProjectRequest, error)
 	ProgramChairReview(ctx context.Context, id string, reviewerID string, input *domain.ProgramChairReviewInput) error
 	AssignToHead(ctx context.Context, id string, input *domain.AssignToHeadInput) error
 	ProjectHeadRespond(ctx context.Context, id string, input *domain.ProjectHeadRespondInput) error
 	SubmitProposal(ctx context.Context, id string, input *domain.SubmitProposalInput) error
 	ReviewProposal(ctx context.Context, id string, reviewerID string, notes *string, approved bool) error
 	FinalApprove(ctx context.Context, id string, approverID string, input *domain.FinalApprovalInput) error
+	Delete(ctx context.Context, id string) error
+	GetByDepartmentChair(ctx context.Context, chairID string) ([]*domain.ProjectRequest, error)
+	RerouteRequest(ctx context.Context, requestID, departmentID string) error
 }

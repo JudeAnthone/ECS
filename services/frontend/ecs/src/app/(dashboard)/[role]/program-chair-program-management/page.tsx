@@ -19,8 +19,9 @@ import {
   Search, Filter, MoreVertical, Edit, Trash2, Eye,
   CheckCircle, XCircle, Plus, ChevronRight, ArrowLeft,
   FolderOpen, Layers, Users, Tag, Target,
-  CalendarRange, FileText, Building2, Wallet, UserCog
+  CalendarRange, FileText, Building2, Wallet, UserCog,
 } from 'lucide-react';
+import { AuthService } from '@/shared/lib/auth-service';
 import ProgramChairRequestManagement from '../program-chair-request-management/page';
 
 interface Program {
@@ -74,64 +75,6 @@ interface UserOption {
   avatar_url?: string | null;
 }
 
-function UserAvatar({ user, size = 'md' }: { user: UserOption; size?: 'sm' | 'md' | 'lg' }) {
-  const szClass = size === 'sm' ? 'w-7 h-7 text-xs' : size === 'lg' ? 'w-12 h-12 text-base' : 'w-9 h-9 text-sm';
-  const initials = `${user.first_name[0] ?? ''}${user.last_name[0] ?? ''}`.toUpperCase();
-  return user.avatar_url
-    ? <img src={user.avatar_url} alt={initials} className={`${szClass} rounded-full object-cover shrink-0`} />
-    : <div className={`${szClass} rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center shrink-0`}>{initials}</div>;
-}
-
-function UserPickerList({ users, value, onChange, emptyLabel }: {
-  users: UserOption[];
-  value: string;
-  onChange: (id: string) => void;
-  emptyLabel: string;
-}) {
-  return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden">
-      <button
-        type="button"
-        onClick={() => onChange('__none__')}
-        className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-          value === '__none__' ? 'bg-slate-100 font-medium' : 'hover:bg-slate-50'
-        }`}
-      >
-        <div className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center shrink-0">
-          <span className="text-slate-400 text-xs">—</span>
-        </div>
-        <span className="text-slate-500">None (remove assignment)</span>
-        {value === '__none__' && <span className="ml-auto text-slate-400 text-xs">✓</span>}
-      </button>
-      {users.length === 0 ? (
-        <div className="px-4 py-5 text-center text-sm text-slate-400 border-t border-slate-100">
-          {emptyLabel}
-        </div>
-      ) : (
-        <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
-          {users.map(u => (
-            <button
-              key={u.id}
-              type="button"
-              onClick={() => onChange(u.id)}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors ${
-                value === u.id ? 'bg-indigo-50' : 'hover:bg-slate-50'
-              }`}
-            >
-              <UserAvatar user={u} size="sm" />
-              <div className="flex flex-col items-start min-w-0">
-                <span className="text-sm font-medium text-slate-800 truncate">{u.first_name} {u.last_name}</span>
-                <span className="text-xs text-slate-400 truncate">{u.email}</span>
-              </div>
-              {value === u.id && <span className="ml-auto text-indigo-500 text-xs font-medium">✓</span>}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 const API = 'http://localhost:8081/api/v1';
 
 function getToken() { return localStorage.getItem('auth_token'); }
@@ -167,8 +110,6 @@ function ProgramForm({ formData, setFormData, departments, onSubmit, onCancel, s
 }) {
   return (
     <div className="space-y-5 pt-1">
-
-      {/* Basic Info */}
       <div className="rounded-lg border border-slate-200 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
           <FileText className="w-4 h-4 text-slate-500" />
@@ -216,7 +157,6 @@ function ProgramForm({ formData, setFormData, departments, onSubmit, onCancel, s
         </div>
       </div>
 
-      {/* Goals */}
       <div className="rounded-lg border border-slate-200 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
           <Target className="w-4 h-4 text-slate-500" />
@@ -243,7 +183,6 @@ function ProgramForm({ formData, setFormData, departments, onSubmit, onCancel, s
         </div>
       </div>
 
-      {/* Budget & Schedule */}
       <div className="rounded-lg border border-slate-200 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
           <Wallet className="w-4 h-4 text-slate-500" />
@@ -304,8 +243,6 @@ function ProjectForm({ formData, setFormData, onSubmit, onCancel, submitLabel, e
 }) {
   return (
     <div className="space-y-5 pt-1">
-
-      {/* Basic Info */}
       <div className="rounded-lg border border-slate-200 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
           <FileText className="w-4 h-4 text-slate-500" />
@@ -338,7 +275,6 @@ function ProjectForm({ formData, setFormData, onSubmit, onCancel, submitLabel, e
         </div>
       </div>
 
-      {/* Budget & Schedule */}
       <div className="rounded-lg border border-slate-200 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
           <Wallet className="w-4 h-4 text-slate-500" />
@@ -549,7 +485,7 @@ function ProjectsView({ program, departments, onBack }: {
   return (
     <div className="space-y-6">
       {pageError && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="flex items-start justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <div className="flex items-start gap-2">
             <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
             <span>{pageError}</span>
@@ -557,10 +493,9 @@ function ProjectsView({ program, departments, onBack }: {
           <button onClick={() => setPageError('')} className="text-red-400 hover:text-red-600">✕</button>
         </div>
       )}
-      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-slate-500">
         <button onClick={onBack} className="hover:text-slate-800 flex items-center gap-1">
-          <ArrowLeft className="w-4 h-4" /> Program Management
+          <ArrowLeft className="w-4 h-4" /> My Programs
         </button>
         <ChevronRight className="w-4 h-4" />
         <span className="text-slate-800 font-medium">{program.program_name}</span>
@@ -568,7 +503,6 @@ function ProjectsView({ program, departments, onBack }: {
         <span className="text-slate-800">Projects</span>
       </div>
 
-      {/* Program context card */}
       <div className="bg-white border border-slate-200 rounded-xl p-5">
         <div className="flex justify-between items-start">
           <div>
@@ -590,7 +524,6 @@ function ProjectsView({ program, departments, onBack }: {
           </div>
         </div>
 
-        {/* Budget tracker */}
         {programBudget > 0 && (
           <div className="mt-5 pt-4 border-t border-slate-100">
             <div className="flex justify-between items-center mb-2">
@@ -599,9 +532,7 @@ function ProjectsView({ program, departments, onBack }: {
             </div>
             <div className="w-full bg-slate-100 rounded-full h-2.5 mb-3">
               <div
-                className={`h-2.5 rounded-full transition-all ${
-                  usedPct >= 100 ? 'bg-red-500' : usedPct >= 75 ? 'bg-orange-400' : 'bg-green-500'
-                }`}
+                className={`h-2.5 rounded-full transition-all ${usedPct >= 100 ? 'bg-red-500' : usedPct >= 75 ? 'bg-orange-400' : 'bg-green-500'}`}
                 style={{ width: `${usedPct}%` }}
               />
             </div>
@@ -625,7 +556,6 @@ function ProjectsView({ program, departments, onBack }: {
         )}
       </div>
 
-      {/* Projects table */}
       <div className="bg-white border border-slate-200 rounded-xl">
         <div className="p-4 border-b border-slate-100 flex justify-between items-center">
           <div className="relative w-72">
@@ -705,7 +635,6 @@ function ProjectsView({ program, departments, onBack }: {
         )}
       </div>
 
-      {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={v => { setEditOpen(v); if (!v) setFormError(''); }}>
         <DialogContent className="bg-white max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -717,14 +646,11 @@ function ProjectsView({ program, departments, onBack }: {
         </DialogContent>
       </Dialog>
 
-      {/* Assign Project Head Dialog */}
       <Dialog open={assignHeadOpen} onOpenChange={v => { setAssignHeadOpen(v); if (!v) setAssignHeadError(''); }}>
         <DialogContent className="bg-white max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><UserCog className="w-5 h-5" /> Assign Project Head</DialogTitle>
-            <DialogDescription>
-              {assignHeadProject?.project_name}
-            </DialogDescription>
+            <DialogDescription>{assignHeadProject?.project_name}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             {assignHeadError && (
@@ -732,27 +658,42 @@ function ProjectsView({ program, departments, onBack }: {
                 <XCircle className="w-4 h-4 mt-0.5 shrink-0" /><span>{assignHeadError}</span>
               </div>
             )}
-            {assignHeadProject?.project_head_id && (() => {
-              const current = heads.find(h => h.id === assignHeadProject.project_head_id);
-              return current ? (
-                <div className="flex items-center gap-3 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
-                  <UserAvatar user={current} size="md" />
-                  <div>
-                    <p className="text-xs text-slate-400 mb-0.5">Currently assigned</p>
-                    <p className="text-sm font-medium text-slate-800">{current.first_name} {current.last_name}</p>
-                    <p className="text-xs text-slate-400">{current.email}</p>
-                  </div>
-                </div>
-              ) : null;
-            })()}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Select Project Head</label>
-              <UserPickerList
-                users={heads}
-                value={selectedHeadID}
-                onChange={setSelectedHeadID}
-                emptyLabel="No active project heads. Register a user with the project_head role first."
-              />
+              <div className="border border-slate-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto divide-y divide-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setSelectedHeadID('__none__')}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${selectedHeadID === '__none__' ? 'bg-slate-100 font-medium' : 'hover:bg-slate-50'}`}
+                >
+                  <div className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center shrink-0">
+                    <span className="text-slate-400 text-xs">—</span>
+                  </div>
+                  <span className="text-slate-500">None (remove assignment)</span>
+                  {selectedHeadID === '__none__' && <span className="ml-auto text-slate-400 text-xs">✓</span>}
+                </button>
+                {heads.length === 0 ? (
+                  <div className="px-4 py-5 text-center text-sm text-slate-400">
+                    No active project heads available.
+                  </div>
+                ) : heads.map(u => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => setSelectedHeadID(u.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors ${selectedHeadID === u.id ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
+                  >
+                    <div className="w-9 h-9 rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center shrink-0 text-sm">
+                      {u.first_name[0]}{u.last_name[0]}
+                    </div>
+                    <div className="flex flex-col items-start min-w-0">
+                      <span className="text-sm font-medium text-slate-800 truncate">{u.first_name} {u.last_name}</span>
+                      <span className="text-xs text-slate-400 truncate">{u.email}</span>
+                    </div>
+                    {selectedHeadID === u.id && <span className="ml-auto text-indigo-500 text-xs font-medium">✓</span>}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setAssignHeadOpen(false)}>Cancel</Button>
@@ -765,15 +706,13 @@ function ProjectsView({ program, departments, onBack }: {
   );
 }
 
-// ─── PROGRAMS VIEW (top level) ────────────────────────────────────────────────
-export default function AdminProgramManagement() {
-  const role = 'admin';
-
+// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
+export default function ProgramChairProgramManagement() {
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterDept, setFilterDept] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -782,11 +721,9 @@ export default function AdminProgramManagement() {
   const [drillProgram, setDrillProgram] = useState<Program | null>(null);
   const [programFormError, setProgramFormError] = useState('');
   const [programPageError, setProgramPageError] = useState('');
-  const [assignChairOpen, setAssignChairOpen] = useState(false);
-  const [assignChairProgram, setAssignChairProgram] = useState<Program | null>(null);
-  const [chairs, setChairs] = useState<UserOption[]>([]);
-  const [selectedChairID, setSelectedChairID] = useState('__none__');
-  const [assignChairError, setAssignChairError] = useState('');
+  const [activeTab, setActiveTab] = useState<'programs' | 'requests'>('programs');
+  const params = useParams();
+  const role = params?.role;
 
   const emptyForm = {
     program_name: '', program_description: '', program_category: '',
@@ -796,34 +733,28 @@ export default function AdminProgramManagement() {
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => {
-    loadPrograms();
-    loadDepartments(role);
-    fetch(`${API}/users/by-role?role=program_chair`, { headers: authHeaders() })
-      .then(r => r.ok ? r.json() : Promise.resolve({ users: [] }))
-      .then(d => setChairs(d.users || []))
-      .catch(() => setChairs([]));
+    const user = AuthService.getUser();
+    setCurrentUser(user);
+    loadDepartments();
+    if (user?.id) {
+      loadPrograms(user.id);
+    }
   }, []);
 
-  const loadPrograms = async () => {
+  const loadPrograms = async (userId: string) => {
     try {
-      const res = await fetch(`${API}/programs`, { headers: authHeaders() });
+      const res = await fetch(`${API}/programs/program-chair/${userId}`, { headers: authHeaders() });
       const data = await res.json();
       setPrograms(data.programs || []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
 
-  const loadDepartments = async (role: string) => {
+  const loadDepartments = async () => {
     try {
       const res = await fetch(`${API}/departments`, { headers: authHeaders() });
       const data = await res.json();
-      let filtered = data.departments || [];
-      if (role !== 'admin') {
-        filtered = filtered.filter(
-          (d: Department) => d.department_code !== 'ADMIN' && d.department_name.toLowerCase() !== 'administration'
-        );
-      }
-      setDepartments(filtered);
+      setDepartments(data.departments || []);
     } catch (e) { console.error(e); }
   };
 
@@ -842,13 +773,17 @@ export default function AdminProgramManagement() {
         budget_allocation: form.budget_allocation ? parseFloat(form.budget_allocation) : null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
-        // Admin creates = auto approved and active
-        status: 'active',
-        approval_status: 'approved',
       }),
     });
-    if (res.ok) { await loadPrograms(); setCreateOpen(false); setForm(emptyForm); setProgramFormError(''); }
-    else { const e = await res.json(); setProgramFormError(e.error || 'Failed to create program'); }
+    if (res.ok) {
+      await loadPrograms(currentUser?.id);
+      setCreateOpen(false);
+      setForm(emptyForm);
+      setProgramFormError('');
+    } else {
+      const e = await res.json();
+      setProgramFormError(e.error || 'Failed to create program');
+    }
   };
 
   const handleUpdate = async () => {
@@ -867,8 +802,16 @@ export default function AdminProgramManagement() {
         end_date: form.end_date || null,
       }),
     });
-    if (res.ok) { await loadPrograms(); setEditOpen(false); setSelected(null); setForm(emptyForm); setProgramFormError(''); }
-    else { const e = await res.json(); setProgramFormError(e.error || 'Failed to update program'); }
+    if (res.ok) {
+      await loadPrograms(currentUser?.id);
+      setEditOpen(false);
+      setSelected(null);
+      setForm(emptyForm);
+      setProgramFormError('');
+    } else {
+      const e = await res.json();
+      setProgramFormError(e.error || 'Failed to update program');
+    }
   };
 
   const handleStatusChange = async (id: string, status: string) => {
@@ -878,37 +821,15 @@ export default function AdminProgramManagement() {
       method: 'PATCH', headers: authHeaders(),
       body: JSON.stringify({ status }),
     });
-    if (res.ok) await loadPrograms();
+    if (res.ok) await loadPrograms(currentUser?.id);
     else { const e = await res.json(); setProgramPageError(e.error || `Failed to ${label} program`); }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this program? All its projects will also be affected.')) return;
     const res = await fetch(`${API}/programs/${id}`, { method: 'DELETE', headers: authHeaders() });
-    if (res.ok) await loadPrograms();
+    if (res.ok) await loadPrograms(currentUser?.id);
     else { const e = await res.json(); setProgramPageError(e.error || 'Failed to delete program'); }
-  };
-
-  const openAssignChair = (p: Program) => {
-    setAssignChairProgram(p);
-    setSelectedChairID(p.program_chair_id || '__none__');
-    setAssignChairError('');
-    setAssignChairOpen(true);
-  };
-
-  const handleAssignChair = async () => {
-    if (!assignChairProgram) return;
-    const res = await fetch(`${API}/programs/${assignChairProgram.id}/assign-chair`, {
-      method: 'PATCH', headers: authHeaders(),
-      body: JSON.stringify({ program_chair_id: selectedChairID === '__none__' ? null : selectedChairID }),
-    });
-    if (res.ok) { await loadPrograms(); setAssignChairOpen(false); }
-    else {
-      const text = await res.text();
-      let msg = 'Failed to assign program chair';
-      try { msg = JSON.parse(text).error || msg; } catch { msg = text || msg; }
-      setAssignChairError(msg);
-    }
   };
 
   const openEdit = (p: Program) => {
@@ -930,9 +851,8 @@ export default function AdminProgramManagement() {
   const filtered = programs.filter(p => {
     const s = p.program_name.toLowerCase().includes(search.toLowerCase()) ||
       p.program_description?.toLowerCase().includes(search.toLowerCase());
-    const d = filterDept === 'all' || p.department_id === filterDept;
     const st = filterStatus === 'all' || p.status === filterStatus;
-    return s && d && st;
+    return s && st;
   });
 
   const total = programs.length;
@@ -940,9 +860,17 @@ export default function AdminProgramManagement() {
   const completed = programs.filter(p => p.status === 'completed').length;
   const cancelled = programs.filter(p => p.status === 'cancelled').length;
 
-  const [activeTab, setActiveTab] = useState<'programs' | 'requests'>('programs');
-  // const params = useParams();
-  // const role = params?.role;
+  if (drillProgram) {
+    return (
+      <div className="container mx-auto p-6">
+        <ProjectsView
+          program={drillProgram}
+          departments={departments}
+          onBack={() => setDrillProgram(null)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
@@ -952,9 +880,9 @@ export default function AdminProgramManagement() {
           <Button variant={activeTab === 'requests' ? 'default' : 'outline'} onClick={() => setActiveTab('requests')}>Program Requests</Button>
         </div>
         {activeTab === 'programs' ? (
-          <div>
+          <>
             {programPageError && (
-              <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="flex items-start justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 <div className="flex items-start gap-2">
                   <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
                   <span>{programPageError}</span>
@@ -962,11 +890,10 @@ export default function AdminProgramManagement() {
                 <button onClick={() => setProgramPageError('')} className="text-red-400 hover:text-red-600">✕</button>
               </div>
             )}
-            {/* Header */}
             <div className="flex justify-between items-center">
               <div>
-                <h1 className="text-3xl font-bold text-slate-900">Program Management</h1>
-                <p className="text-slate-500 mt-1">Manage extension service programs and their projects</p>
+                <h1 className="text-3xl font-bold text-slate-900">My Programs</h1>
+                <p className="text-slate-500 mt-1">Manage extension service programs you chair</p>
               </div>
               <Dialog open={createOpen} onOpenChange={v => { setCreateOpen(v); if (!v) setProgramFormError(''); }}>
                 <DialogTrigger asChild>
@@ -977,18 +904,16 @@ export default function AdminProgramManagement() {
                 <DialogContent className="bg-white max-w-4xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Create New Program</DialogTitle>
-                    <DialogDescription>Add a new extension service program</DialogDescription>
+                    <DialogDescription>You will be automatically assigned as the program chair</DialogDescription>
                   </DialogHeader>
                   <ProgramForm formData={form} setFormData={setForm} departments={departments}
                     onSubmit={handleCreate} onCancel={() => { setCreateOpen(false); setProgramFormError(''); }} submitLabel="Create Program" error={programFormError} />
                 </DialogContent>
               </Dialog>
             </div>
-
-            {/* Stats */}
             <div className="grid grid-cols-4 gap-4">
               {[
-                { label: 'Total Programs', value: total, icon: Layers, color: 'text-slate-700', bg: 'bg-slate-50' },
+                { label: 'My Programs', value: total, icon: Layers, color: 'text-slate-700', bg: 'bg-slate-50' },
                 { label: 'Active', value: active, icon: CheckCircle, color: 'text-green-700', bg: 'bg-green-50' },
                 { label: 'Completed', value: completed, icon: FolderOpen, color: 'text-blue-700', bg: 'bg-blue-50' },
                 { label: 'Cancelled', value: cancelled, icon: XCircle, color: 'text-red-700', bg: 'bg-red-50' },
@@ -1002,8 +927,6 @@ export default function AdminProgramManagement() {
                 </div>
               ))}
             </div>
-
-            {/* Filters + Table */}
             <div className="bg-white border border-slate-200 rounded-xl">
               <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-3">
                 <div className="flex-1 relative">
@@ -1011,16 +934,6 @@ export default function AdminProgramManagement() {
                   <Input placeholder="Search programs..." value={search}
                     onChange={e => setSearch(e.target.value)} className="pl-9" />
                 </div>
-                <Select value={filterDept} onValueChange={setFilterDept}>
-                  <SelectTrigger className="w-[180px]">
-                    <Filter className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="All Departments" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white">
-                    <SelectItem value="all">All Departments</SelectItem>
-                    {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.department_code}</SelectItem>)}
-                  </SelectContent>
-                </Select>
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
                   <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Statuses" /></SelectTrigger>
                   <SelectContent className="bg-white">
@@ -1031,9 +944,7 @@ export default function AdminProgramManagement() {
                     <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
-
               </div>
-
               {loading ? (
                 <div className="text-center py-12 text-slate-400">Loading programs...</div>
               ) : (
@@ -1053,7 +964,7 @@ export default function AdminProgramManagement() {
                     {filtered.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-12 text-slate-400">
-                          No programs found
+                          {programs.length === 0 ? 'You have no programs yet. Create one to get started.' : 'No programs match your search.'}
                         </TableCell>
                       </TableRow>
                     ) : filtered.map(p => (
@@ -1087,9 +998,6 @@ export default function AdminProgramManagement() {
                               <DropdownMenuItem onClick={() => openEdit(p)}>
                                 <Edit className="w-4 h-4 mr-2" /> Edit
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => openAssignChair(p)}>
-                                <UserCog className="w-4 h-4 mr-2" /> Assign Program Chair
-                              </DropdownMenuItem>
                               {p.status === 'active' && (
                                 <DropdownMenuItem onClick={() => handleStatusChange(p.id, 'completed')} className="text-blue-600">
                                   <CheckCircle className="w-4 h-4 mr-2" /> Mark as Completed
@@ -1117,7 +1025,6 @@ export default function AdminProgramManagement() {
                 </Table>
               )}
             </div>
-
             {/* Edit Dialog */}
             <Dialog open={editOpen} onOpenChange={v => { setEditOpen(v); if (!v) setProgramFormError(''); }}>
               <DialogContent className="bg-white max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1129,51 +1036,6 @@ export default function AdminProgramManagement() {
                   onSubmit={handleUpdate} onCancel={() => { setEditOpen(false); setProgramFormError(''); }} submitLabel="Update Program" error={programFormError} />
               </DialogContent>
             </Dialog>
-
-            {/* Assign Program Chair Dialog */}
-            <Dialog open={assignChairOpen} onOpenChange={v => { setAssignChairOpen(v); if (!v) setAssignChairError(''); }}>
-              <DialogContent className="bg-white max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2"><UserCog className="w-5 h-5" /> Assign Program Chair</DialogTitle>
-                  <DialogDescription>{assignChairProgram?.program_name}</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 pt-2">
-                  {assignChairError && (
-                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                      <XCircle className="w-4 h-4 mt-0.5 shrink-0" /><span>{assignChairError}</span>
-                    </div>
-                  )}
-                  {assignChairProgram?.program_chair_id && (() => {
-                    const current = chairs.find(c => c.id === assignChairProgram.program_chair_id);
-                    return current ? (
-                      <div className="flex items-center gap-3 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
-                        <UserAvatar user={current} size="md" />
-                        <div>
-                          <p className="text-xs text-slate-400 mb-0.5">Currently assigned</p>
-                          <p className="text-sm font-medium text-slate-800">{current.first_name} {current.last_name}</p>
-                          <p className="text-xs text-slate-400">{current.email}</p>
-                          {current.department && <p className="text-xs text-slate-400">{current.department}</p>}
-                        </div>
-                      </div>
-                    ) : null;
-                  })()}
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700">Select Program Chair</label>
-                    <UserPickerList
-                      users={chairs}
-                      value={selectedChairID}
-                      onChange={setSelectedChairID}
-                      emptyLabel="No active program chairs. Register a user with the program_chair role first."
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setAssignChairOpen(false)}>Cancel</Button>
-                    <Button onClick={handleAssignChair}>Save Assignment</Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-
             {/* View Details Dialog */}
             <Dialog open={viewOpen} onOpenChange={setViewOpen}>
               <DialogContent className="bg-white max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1236,24 +1098,6 @@ export default function AdminProgramManagement() {
                         </p>
                       </div>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-slate-700">Program Chair</label>
-                      {(() => {
-                        const chair = chairs.find(c => c.id === selected.program_chair_id);
-                        return chair ? (
-                          <div className="mt-2 flex items-center gap-3 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
-                            <UserAvatar user={chair} size="lg" />
-                            <div>
-                              <p className="text-sm font-medium text-slate-800">{chair.first_name} {chair.last_name}</p>
-                              <p className="text-xs text-slate-400">{chair.email}</p>
-                              {chair.department && <p className="text-xs text-slate-400">{chair.department}</p>}
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="mt-1 text-slate-400 text-sm italic">No program chair assigned</p>
-                        );
-                      })()}
-                    </div>
                     <div className="flex justify-end pt-2">
                       <Button onClick={() => { setViewOpen(false); setDrillProgram(selected); }}>
                         <FolderOpen className="w-4 h-4 mr-2" /> View Projects
@@ -1263,7 +1107,7 @@ export default function AdminProgramManagement() {
                 )}
               </DialogContent>
             </Dialog>
-          </div>
+          </>
         ) : (
           <ProgramChairRequestManagement />
         )}

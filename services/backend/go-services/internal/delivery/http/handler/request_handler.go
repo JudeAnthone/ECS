@@ -61,12 +61,19 @@ func (h *RequestHandler) GetRequests(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{"requests": reqs})
 
 	case "program_chair":
+		// Program chairs are in Administration and oversee ALL incoming requests,
+		// not limited to a specific department.
 		programID := r.URL.Query().Get("program_id")
-		if programID == "" {
-			respondWithError(w, http.StatusBadRequest, "program_id query parameter required for program_chair role")
+		if programID != "" {
+			reqs, err := h.requestUsecase.GetRequestsByProgram(r.Context(), programID)
+			if err != nil {
+				respondWithError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			respondWithJSON(w, http.StatusOK, map[string]interface{}{"requests": reqs})
 			return
 		}
-		reqs, err := h.requestUsecase.GetRequestsByProgram(r.Context(), programID)
+		reqs, err := h.requestUsecase.GetAllRequests(r.Context())
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -74,7 +81,8 @@ func (h *RequestHandler) GetRequests(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{"requests": reqs})
 
 	case "project_head":
-		reqs, err := h.requestUsecase.GetRequestsByHead(r.Context(), userID)
+		// Project heads see requests that were assigned to their department.
+		reqs, err := h.requestUsecase.GetRequestsForProjectHead(r.Context(), userID)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -100,6 +108,39 @@ func (h *RequestHandler) GetRequestByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	respondWithJSON(w, http.StatusOK, req)
+}
+
+// DeleteRequest handles DELETE /api/v1/requests/{id}
+// Accessible by: program_chair, admin
+func (h *RequestHandler) DeleteRequest(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+	if err := h.requestUsecase.DeleteRequest(r.Context(), id); err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": "request deleted"})
+}
+
+// RerouteRequest handles PATCH /api/v1/requests/{id}/reroute
+// Allows a program chair to redirect a request to a different department.
+func (h *RequestHandler) RerouteRequest(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	var input domain.RerouteRequestInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, http.StatusBadRequest, "invalid request payload")
+		return
+	}
+	if input.TargetDepartmentID == "" {
+		respondWithError(w, http.StatusBadRequest, "target_department_id is required")
+		return
+	}
+
+	if err := h.requestUsecase.RerouteRequest(r.Context(), id, input.TargetDepartmentID); err != nil {
+		respondWithError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": "request rerouted"})
 }
 
 // ProgramChairReview handles PATCH /api/v1/requests/{id}/review
@@ -137,7 +178,7 @@ func (h *RequestHandler) AssignToHead(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	respondWithJSON(w, http.StatusOK, map[string]string{"message": "assigned to project head"})
+	respondWithJSON(w, http.StatusOK, map[string]string{"message": "assigned to department"})
 }
 
 // ProjectHeadRespond handles PATCH /api/v1/requests/{id}/respond

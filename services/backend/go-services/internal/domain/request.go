@@ -4,15 +4,16 @@ import "time"
 
 // ProjectRequest represents a public user's extension service request
 type ProjectRequest struct {
-	ID                  string   `json:"id" db:"id"`
-	RequestTitle        string   `json:"request_title" db:"request_title"`
-	RequestDescription  string   `json:"request_description" db:"request_description"`
-	RequestedBy         string   `json:"requested_by" db:"requested_by"`
-	RequestedDepartment *string  `json:"requested_department" db:"requested_department"`
-	EstimatedBudget     *float64 `json:"estimated_budget" db:"estimated_budget"`
-	TargetBeneficiaries *string  `json:"target_beneficiaries" db:"target_beneficiaries"`
-	Justification       *string  `json:"justification" db:"justification"`
-	Status              string   `json:"status" db:"status"`
+	ID                    string   `json:"id" db:"id"`
+	RequestTitle          string   `json:"request_title" db:"request_title"`
+	RequestDescription    string   `json:"request_description" db:"request_description"`
+	RequestedBy           string   `json:"requested_by" db:"requested_by"`
+	RequestedDepartment   *string  `json:"requested_department" db:"requested_department"`
+	RequestedDepartmentID *string  `json:"requested_department_id" db:"requested_department_id"`
+	EstimatedBudget       *float64 `json:"estimated_budget" db:"estimated_budget"`
+	TargetBeneficiaries   *string  `json:"target_beneficiaries" db:"target_beneficiaries"`
+	Justification         *string  `json:"justification" db:"justification"`
+	Status                string   `json:"status" db:"status"`
 
 	// Program Chair review
 	ReviewedBy           *string    `json:"reviewed_by" db:"reviewed_by"`
@@ -55,12 +56,17 @@ type ProjectRequest struct {
 // --- Request bodies ---
 
 type SubmitRequestInput struct {
-	RequestTitle        string   `json:"request_title" validate:"required,min=3,max=200"`
-	RequestDescription  string   `json:"request_description" validate:"required,min=10,max=2000"`
-	RequestedDepartment *string  `json:"requested_department"`
-	EstimatedBudget     *float64 `json:"estimated_budget"`
-	TargetBeneficiaries *string  `json:"target_beneficiaries"`
-	Justification       *string  `json:"justification"`
+	RequestTitle          string   `json:"request_title" validate:"required,min=3,max=200"`
+	RequestDescription    string   `json:"request_description" validate:"required,min=10,max=2000"`
+	RequestedDepartment   *string  `json:"requested_department"`
+	RequestedDepartmentID *string  `json:"requested_department_id"`
+	EstimatedBudget       *float64 `json:"estimated_budget"`
+	TargetBeneficiaries   *string  `json:"target_beneficiaries"`
+	Justification         *string  `json:"justification"`
+}
+
+type RerouteRequestInput struct {
+	TargetDepartmentID string `json:"target_department_id" validate:"required"`
 }
 
 type ProgramChairReviewInput struct {
@@ -71,8 +77,8 @@ type ProgramChairReviewInput struct {
 }
 
 type AssignToHeadInput struct {
-	AssignedDepartmentID  *string `json:"assigned_department_id"`
-	AssignedToProjectHead string  `json:"assigned_to_project_head" validate:"required"`
+	AssignedDepartmentID  string  `json:"assigned_department_id" validate:"required"`
+	AssignedToProjectHead *string `json:"assigned_to_project_head"` // optional — kept for future use
 	AssignmentNotes       *string `json:"assignment_notes"`
 }
 

@@ -22,9 +22,19 @@ type UseCase interface {
 	AssignToHead(ctx context.Context, chairID string, id string, input *domain.AssignToHeadInput) error
 	GetRequestsByProgram(ctx context.Context, programID string) ([]*domain.ProjectRequest, error)
 
-	// Project Head: view assigned, respond, submit proposal
+	// Project Head: view assigned (by department), respond, submit proposal
+	GetRequestsForProjectHead(ctx context.Context, headID string) ([]*domain.ProjectRequest, error)
 	GetRequestsByHead(ctx context.Context, headID string) ([]*domain.ProjectRequest, error)
 	ProjectHeadRespond(ctx context.Context, headID string, id string, input *domain.ProjectHeadRespondInput) error
 	SubmitProposal(ctx context.Context, headID string, id string, input *domain.SubmitProposalInput) error
 	ReviewProposal(ctx context.Context, reviewerID string, id string, notes *string, approved bool) error
+
+	// Program Chair / Admin: delete a request
+	DeleteRequest(ctx context.Context, id string) error
+
+	// Program Chair: view only their department's requests
+	GetRequestsByDepartmentChair(ctx context.Context, chairID string) ([]*domain.ProjectRequest, error)
+
+	// Program Chair: reroute a request to another department
+	RerouteRequest(ctx context.Context, requestID, departmentID string) error
 }

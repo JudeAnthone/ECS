@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/domain"
@@ -25,6 +26,15 @@ func (h *ProgramHandler) CreateProgram(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
 		return
+	}
+
+	// If the requester is a program chair, automatically assign them as the program chair
+	role, _ := r.Context().Value("role").(string)
+	if role == domain.RoleProgramChair {
+		userID, _ := r.Context().Value("user_id").(string)
+		if userID != "" {
+			req.ProgramChairID = &userID
+		}
 	}
 
 	program, err := h.programUsecase.CreateProgram(r.Context(), &req)
@@ -100,6 +110,11 @@ func (h *ProgramHandler) UpdateProgram(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
+	// Program chairs may only update programs they own
+	if err := requireProgramOwnership(h, w, r, id); err != nil {
+		return
+	}
+
 	var req domain.UpdateProgramRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
@@ -119,6 +134,11 @@ func (h *ProgramHandler) UpdateProgram(w http.ResponseWriter, r *http.Request) {
 func (h *ProgramHandler) UpdateProgramStatus(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
+
+	// Program chairs may only update status of programs they own
+	if err := requireProgramOwnership(h, w, r, id); err != nil {
+		return
+	}
 
 	var req struct {
 		Status string `json:"status"`
@@ -169,6 +189,11 @@ func (h *ProgramHandler) DeleteProgram(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 
+	// Program chairs may only delete programs they own
+	if err := requireProgramOwnership(h, w, r, id); err != nil {
+		return
+	}
+
 	err := h.programUsecase.DeleteProgram(r.Context(), id)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
@@ -178,6 +203,27 @@ func (h *ProgramHandler) DeleteProgram(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, map[string]interface{}{
 		"message": "Program deleted successfully",
 	})
+}
+
+// requireProgramOwnership is a helper that returns nil for admins and verifies
+// program chair ownership for the program_chair role. It writes an HTTP error
+// response and returns a non-nil error when access should be denied.
+func requireProgramOwnership(h *ProgramHandler, w http.ResponseWriter, r *http.Request, programID string) error {
+	role, _ := r.Context().Value("role").(string)
+	if role == domain.RoleAdmin {
+		return nil // admins always allowed
+	}
+	userID, _ := r.Context().Value("user_id").(string)
+	p, err := h.programUsecase.GetProgramByID(r.Context(), programID)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "Program not found")
+		return err
+	}
+	if p.ProgramChairID == nil || *p.ProgramChairID != userID {
+		respondWithError(w, http.StatusForbidden, "You are not the chair of this program")
+		return fmt.Errorf("not owner")
+	}
+	return nil
 }
 
 // AssignProgramChair handles PATCH /api/v1/programs/{id}/assign-chair

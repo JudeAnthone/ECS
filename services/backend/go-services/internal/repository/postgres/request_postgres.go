@@ -33,6 +33,7 @@ func scanRequest(row scanner) (*domain.ProjectRequest, error) {
 		&r.RequestDescription,
 		&r.RequestedBy,
 		&r.RequestedDepartment,
+		&r.RequestedDepartmentID,
 		&r.EstimatedBudget,
 		&r.TargetBeneficiaries,
 		&r.Justification,
@@ -78,7 +79,7 @@ func scanRequest(row scanner) (*domain.ProjectRequest, error) {
 const selectAllCols = `
 	SELECT
 		id, request_title, request_description, requested_by,
-		requested_department, estimated_budget, target_beneficiaries, justification, status,
+		requested_department, requested_department_id, estimated_budget, target_beneficiaries, justification, status,
 		reviewed_by, reviewed_at, review_notes, assigned_program_id,
 		program_chair_feedback, feedback_provided_date,
 		assigned_department_id, assigned_to_project_head, department_assignment_date, assignment_notes,
@@ -96,9 +97,10 @@ func (r *RequestRepository) Create(ctx context.Context, req *domain.ProjectReque
 	query := `
 		INSERT INTO project_requests (
 			request_title, request_description, requested_by,
-			requested_department, estimated_budget, target_beneficiaries, justification,
+			requested_department, requested_department_id,
+			estimated_budget, target_beneficiaries, justification,
 			status, workflow_stage
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 'submitted')
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', 'submitted')
 		RETURNING id, created_at, updated_at
 	`
 	err := r.db.QueryRow(ctx, query,
@@ -106,6 +108,7 @@ func (r *RequestRepository) Create(ctx context.Context, req *domain.ProjectReque
 		req.RequestDescription,
 		req.RequestedBy,
 		req.RequestedDepartment,
+		req.RequestedDepartmentID,
 		req.EstimatedBudget,
 		req.TargetBeneficiaries,
 		req.Justification,
@@ -176,6 +179,9 @@ func (r *RequestRepository) ProgramChairReview(ctx context.Context, id, reviewer
 	if input.Status == "rejected" {
 		stage = "rejected"
 		status = "rejected"
+	} else if input.Status == "approved" {
+		stage = "under_program_chair_review"
+		status = "approved"
 	} else if input.ProgramChairFeedback != nil && *input.ProgramChairFeedback != "" {
 		stage = "feedback_provided"
 	}
@@ -211,7 +217,7 @@ func (r *RequestRepository) ProgramChairReview(ctx context.Context, id, reviewer
 	return nil
 }
 
-// AssignToHead — program chair assigns request to a project head.
+// AssignToHead — program chair assigns request to a department (project head optional).
 func (r *RequestRepository) AssignToHead(ctx context.Context, id string, input *domain.AssignToHeadInput) error {
 	now := time.Now()
 	query := `
@@ -227,7 +233,7 @@ func (r *RequestRepository) AssignToHead(ctx context.Context, id string, input *
 	_, err := r.db.Exec(ctx, query,
 		id,
 		input.AssignedDepartmentID,
-		input.AssignedToProjectHead,
+		input.AssignedToProjectHead, // *string — may be nil
 		now,
 		input.AssignmentNotes,
 	)
@@ -327,6 +333,60 @@ func (r *RequestRepository) FinalApprove(ctx context.Context, id, approverID str
 	)
 	if err != nil {
 		return fmt.Errorf("final approve failed: %w", err)
+	}
+	return nil
+}
+
+// Delete removes a project request by ID.
+func (r *RequestRepository) Delete(ctx context.Context, id string) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM project_requests WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete request: %w", err)
+	}
+	return nil
+}
+
+// GetByDepartmentChair returns all requests whose requested_department_id belongs
+// to a department managed by the given program chair.
+func (r *RequestRepository) GetByDepartmentChair(ctx context.Context, chairID string) ([]*domain.ProjectRequest, error) {
+	query := selectAllCols + `
+		WHERE requested_department_id IN (
+			SELECT id FROM departments WHERE program_chair_id = $1
+		)
+		ORDER BY created_at DESC
+	`
+	return r.getMany(ctx, query, chairID)
+}
+
+// GetForProjectHead returns requests assigned to the department that the given
+// project-head user belongs to.  The user.department field (text) is matched
+// against department_code or department_name in the departments table.
+func (r *RequestRepository) GetForProjectHead(ctx context.Context, headUserID string) ([]*domain.ProjectRequest, error) {
+	query := selectAllCols + `
+		WHERE assigned_department_id IN (
+			SELECT d.id
+			FROM departments d
+			JOIN users u ON (
+				LOWER(u.department) = LOWER(d.department_code)
+				OR LOWER(u.department) = LOWER(d.department_name)
+			)
+			WHERE u.id = $1
+		)
+		ORDER BY created_at DESC
+	`
+	return r.getMany(ctx, query, headUserID)
+}
+
+// RerouteRequest changes the requested_department_id of a request to a new department,
+// allowing program chairs to redirect misdirected requests.
+func (r *RequestRepository) RerouteRequest(ctx context.Context, requestID, departmentID string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE project_requests
+		SET requested_department_id = $2, updated_at = NOW()
+		WHERE id = $1
+	`, requestID, departmentID)
+	if err != nil {
+		return fmt.Errorf("failed to reroute request: %w", err)
 	}
 	return nil
 }

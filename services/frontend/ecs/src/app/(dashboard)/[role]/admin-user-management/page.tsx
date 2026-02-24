@@ -56,6 +56,13 @@ function UserAvatar({ user, size = 'md' }: { user: User; size?: 'sm' | 'md' | 'l
 }
 
 export default function UserManagement() {
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    React.useEffect(() => {
+      if (toast) {
+        const timer = setTimeout(() => setToast(null), 3000);
+        return () => clearTimeout(timer);
+      }
+    }, [toast]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
@@ -77,6 +84,14 @@ export default function UserManagement() {
     contact_number: '',
     account_status: '',
   });
+  const [deleteDialogUserId, setDeleteDialogUserId] = useState<string | null>(null);
+
+  // Auto-set department for program chair
+  React.useEffect(() => {
+    if (editForm.role === 'program_chair' && editForm.department !== 'System Administration') {
+      setEditForm(prev => ({ ...prev, department: 'System Administration' }));
+    }
+  }, [editForm.role]);
 
   // Check if currently editing own account
   const isEditingSelf = editingUser?.id === currentUserId;
@@ -167,7 +182,7 @@ export default function UserManagement() {
       // Reload users to reflect the change
       await loadUsers();
       
-      alert('User approved successfully!');
+      setToast({ message: 'User approved successfully!', type: 'success' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to approve user');
       console.error('Error approving user:', err);
@@ -202,32 +217,29 @@ export default function UserManagement() {
   };
 
   const handleDelete = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      return;
-    }
+    setDeleteDialogUserId(userId);
+  };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteDialogUserId) return;
     try {
-      setProcessingId(userId);
+      setProcessingId(deleteDialogUserId);
       setError(null);
-
       const token = localStorage.getItem('auth_token');
       if (!token) {
         setError('Not authenticated. Please login first.');
+        setDeleteDialogUserId(null);
         return;
       }
-
-      await userService.deleteUser(userId, token);
-      
-      // Reload users to reflect the change
+      await userService.deleteUser(deleteDialogUserId, token);
       await loadUsers();
-      
-      alert('User deleted successfully!');
+      setToast({ message: 'User deleted successfully!', type: 'success' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete user');
-      console.error('Error deleting user:', err);
-      alert(`Failed to delete user: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setToast({ message: `Failed to delete user: ${err instanceof Error ? err.message : 'Unknown error'}`, type: 'error' });
     } finally {
       setProcessingId(null);
+      setDeleteDialogUserId(null);
     }
   };
 
@@ -266,8 +278,8 @@ export default function UserManagement() {
       }
 
       // Validate department for roles that require it
-      if ((editForm.role === 'program_chair' || editForm.role === 'project_head' || editForm.role === 'staff') && !editForm.department.trim()) {
-        setError('Department is required for Program Chair, Project Head, and Staff roles');
+      if ((editForm.role === 'project_head' || editForm.role === 'staff') && !editForm.department.trim()) {
+        setError('Department is required for Project Head and Staff roles');
         setProcessingId(null);
         return;
       }
@@ -297,11 +309,11 @@ export default function UserManagement() {
       await loadUsers();
       
       setIsEditDialogOpen(false);
-      alert('User updated successfully!');
+      setToast({ message: 'User updated successfully!', type: 'success' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update user');
       console.error('Error updating user:', err);
-      alert(`Failed to update user: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setToast({ message: `Failed to update user: ${err instanceof Error ? err.message : 'Unknown error'}`, type: 'error' });
     } finally {
       setProcessingId(null);
     }
@@ -664,6 +676,12 @@ export default function UserManagement() {
               </div>
             ) : (
               <>
+                {toast && (
+                  <div className={`fixed top-1/2 left-1/2 z-50 rounded-lg shadow-lg px-4 py-3 text-sm font-medium ${toast.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+                    style={{ transform: 'translate(-50%, -50%)' }}>
+                    {toast.message}
+                  </div>
+                )}
                 {/* Results Count */}
                 <div className="mb-4">
                   <p className="text-sm text-slate-600">
@@ -948,7 +966,7 @@ export default function UserManagement() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">
-                  Department {(editForm.role === 'program_chair' || editForm.role === 'project_head' || editForm.role === 'staff') && '*'}
+                  Department {(editForm.role === 'project_head' || editForm.role === 'staff') && '*'}
                 </label>
                 <Select 
                   value={editForm.department} 
@@ -958,14 +976,24 @@ export default function UserManagement() {
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
                   <SelectContent className="bg-white">
+                    <SelectItem value="None">None</SelectItem>
                     {departments.length === 0 ? (
                       <SelectItem value="loading" disabled>Loading departments...</SelectItem>
                     ) : (
-                      departments.map((dept) => (
-                        <SelectItem key={dept.id} value={dept.department_name}>
-                          {dept.department_name} ({dept.department_code})
-                        </SelectItem>
-                      ))
+                      departments
+                        .filter(dept => dept.department_name !== 'None')
+                        .filter(dept => {
+                          // Only show System Administration for program chairs and admins
+                          if (dept.department_name === 'System Administration' || dept.department_code === 'ADMIN') {
+                            return editForm.role === 'program_chair' || editForm.role === 'admin';
+                          }
+                          return true;
+                        })
+                        .map((dept) => (
+                          <SelectItem key={dept.id} value={dept.department_name}>
+                            {dept.department_name} ({dept.department_code})
+                          </SelectItem>
+                        ))
                     )}
                   </SelectContent>
                 </Select>
@@ -973,7 +1001,7 @@ export default function UserManagement() {
                   <p className="text-xs text-red-600">No departments loaded. Check console for errors.</p>
                 )}
                 {(editForm.role === 'program_chair' || editForm.role === 'project_head' || editForm.role === 'staff') && (
-                  <p className="text-xs text-slate-500">Required for Program Chair, Project Head, and Staff roles</p>
+                  <p className="text-xs text-slate-500">Required for Project Head and Staff roles</p>
                 )}
               </div>
 
@@ -1037,6 +1065,26 @@ export default function UserManagement() {
               >
                 {processingId === editingUser?.id ? 'Updating...' : 'Update User'}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={!!deleteDialogUserId} onOpenChange={open => !open && setDeleteDialogUserId(null)}>
+          <DialogContent className="max-w-md p-4">
+            <DialogHeader>
+              <DialogTitle className="text-base">Confirm Delete</DialogTitle>
+              <DialogDescription className="text-sm">
+                {(() => {
+                  const user = users.find(u => u.id === deleteDialogUserId);
+                  if (!user) return 'Are you sure you want to delete this user? This action cannot be undone.';
+                  return `Are you sure you want to delete user "${user.first_name} ${user.last_name}" (${user.username})? This action cannot be undone.`;
+                })()}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex gap-2 justify-end mt-4">
+              <Button variant="destructive" size="sm" onClick={handleConfirmDelete} disabled={processingId !== null}>Delete</Button>
+              <Button variant="outline" size="sm" onClick={() => setDeleteDialogUserId(null)} disabled={processingId !== null}>Cancel</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

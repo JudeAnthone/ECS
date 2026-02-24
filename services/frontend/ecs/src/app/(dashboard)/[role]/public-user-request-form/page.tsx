@@ -16,6 +16,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/shared/components/ui/Dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/shared/components/ui/Select';
 
 const API = 'http://localhost:8081/api/v1';
 function getToken() { return localStorage.getItem('auth_token'); }
@@ -31,6 +38,7 @@ interface RequestRecord {
   target_beneficiaries?: string | null;
   justification?: string | null;
   requested_department?: string | null;
+  requested_department_id?: string | null;
   status: string;
   workflow_stage: string;
   // review fields
@@ -207,6 +215,12 @@ function RequestDetailDialog({
   );
 }
 
+interface Department {
+  id: string;
+  department_name: string;
+  department_code?: string;
+}
+
 export default function PublicUserRequestFormPage() {
   // Form state
   const [formData, setFormData] = useState({
@@ -215,11 +229,15 @@ export default function PublicUserRequestFormPage() {
     justification: '',
     target_beneficiaries: '',
     requested_department: '',
+    requested_department_id: '',
     estimated_budget: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState<RequestRecord | null>(null);
+
+  // Departments dropdown
+  const [departments, setDepartments] = useState<Department[]>([]);
 
   // My requests state
   const [myRequests, setMyRequests] = useState<RequestRecord[]>([]);
@@ -242,7 +260,21 @@ export default function PublicUserRequestFormPage() {
     }
   };
 
-  useEffect(() => { fetchMyRequests(); }, []);
+  const fetchDepartments = async () => {
+    try {
+      const r = await fetch(`${API}/departments`, { headers: authHeaders() });
+      if (r.ok) {
+        const data = await r.json();
+        // Exclude 'Administration' (ADMIN) from department selection
+        const filtered = (data.departments ?? []).filter(
+          (d: Department) => d.department_code !== 'ADMIN' && d.department_name.toLowerCase() !== 'administration'
+        );
+        setDepartments(filtered);
+      }
+    } catch { /* silently fail */ }
+  };
+
+  useEffect(() => { fetchMyRequests(); fetchDepartments(); }, []);
 
   const handleSubmit = async () => {
     if (!formData.request_title.trim() || !formData.request_description.trim()) {
@@ -259,6 +291,7 @@ export default function PublicUserRequestFormPage() {
       if (formData.justification.trim()) body.justification = formData.justification.trim();
       if (formData.target_beneficiaries.trim()) body.target_beneficiaries = formData.target_beneficiaries.trim();
       if (formData.requested_department.trim()) body.requested_department = formData.requested_department.trim();
+      if (formData.requested_department_id) body.requested_department_id = formData.requested_department_id;
       if (formData.estimated_budget.trim()) body.estimated_budget = parseFloat(formData.estimated_budget);
 
       const r = await fetch(`${API}/requests`, {
@@ -272,7 +305,7 @@ export default function PublicUserRequestFormPage() {
         return;
       }
       setSubmitSuccess(data);
-      setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '', requested_department: '', estimated_budget: '' });
+      setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '', requested_department: '', requested_department_id: '', estimated_budget: '' });
       fetchMyRequests();
     } catch {
       setSubmitError('Network error. Please try again.');
@@ -282,7 +315,7 @@ export default function PublicUserRequestFormPage() {
   };
 
   const handleClear = () => {
-    setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '', requested_department: '', estimated_budget: '' });
+    setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '', requested_department: '', requested_department_id: '', estimated_budget: '' });
     setSubmitError('');
     setSubmitSuccess(null);
   };
@@ -299,12 +332,12 @@ export default function PublicUserRequestFormPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Project Request</h1>
-            <p className="text-slate-500 mt-1">Propose a new extension project for review</p>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Program Request</h1>
+            <p className="text-slate-500 mt-1">Request a new extension program for review by the program chair</p>
           </div>
           <Badge className="bg-purple-600 text-white px-4 py-2 text-sm">
             <Lightbulb className="h-4 w-4 mr-2" />
-            Submit Request
+            Request a Program
           </Badge>
         </div>
 
@@ -313,9 +346,9 @@ export default function PublicUserRequestFormPage() {
           <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 px-5 py-4">
             <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
             <div>
-              <p className="font-semibold text-green-900">Request Submitted Successfully!</p>
+              <p className="font-semibold text-green-900">Program Request Submitted Successfully!</p>
               <p className="text-sm text-green-700 mt-0.5">
-                Your request <span className="font-mono font-medium">#{submitSuccess.id.slice(0, 8)}</span> is now under review.
+                Your request <span className="font-mono font-medium">#{submitSuccess.id.slice(0, 8)}</span> is now under review by the program chair.
                 Track its progress in the <span className="font-medium">My Requests</span> section below.
               </p>
             </div>
@@ -326,8 +359,8 @@ export default function PublicUserRequestFormPage() {
         {/* Form card */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
           <div className="px-6 py-4 border-b border-slate-100">
-            <h2 className="text-lg font-semibold text-slate-800">Project Information</h2>
-            <p className="text-sm text-slate-500">Provide comprehensive details about your project recommendation</p>
+            <h2 className="text-lg font-semibold text-slate-800">Program Request Information</h2>
+            <p className="text-sm text-slate-500">Fill in the details of the program you would like to request</p>
           </div>
 
           <div className="p-6 space-y-5">
@@ -336,17 +369,17 @@ export default function PublicUserRequestFormPage() {
             <div className="rounded-lg border border-slate-200 overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
                 <FileText className="w-4 h-4 text-slate-500" />
-                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Project Details</span>
+                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Program Details</span>
               </div>
               <div className="p-4 space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-slate-700">
-                    Project / Request Title <span className="text-red-500">*</span>
+                    Program Name <span className="text-red-500">*</span>
                   </label>
                   <Input
                     value={formData.request_title}
                     onChange={e => setFormData({ ...formData, request_title: e.target.value })}
-                    placeholder="Enter a clear, descriptive title for your project"
+                    placeholder="Enter the name of the program you are requesting"
                     className="border-slate-300 focus:border-slate-500"
                   />
                 </div>
@@ -357,18 +390,18 @@ export default function PublicUserRequestFormPage() {
                   <textarea
                     value={formData.request_description}
                     onChange={e => setFormData({ ...formData, request_description: e.target.value })}
-                    placeholder="Describe what this project aims to achieve, its scope, and expected outcomes..."
+                    placeholder="Describe what this program aims to achieve, its scope, and expected outcomes..."
                     rows={4}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm resize-y focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-transparent transition"
                   />
                   <p className="text-xs text-slate-400">{formData.request_description.length} / 2000 characters</p>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700">Justification / Objectives</label>
+                  <label className="text-sm font-medium text-slate-700">Program Objectives</label>
                   <textarea
                     value={formData.justification}
                     onChange={e => setFormData({ ...formData, justification: e.target.value })}
-                    placeholder="Why is this project needed? List key objectives and the problem it addresses..."
+                    placeholder="What are the main goals and objectives of this program? What problem does it address?"
                     rows={3}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm resize-y focus:outline-none focus:ring-2 focus:ring-slate-400 focus:border-transparent transition"
                   />
@@ -395,13 +428,39 @@ export default function PublicUserRequestFormPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700">Requested / Preferred Department</label>
-                  <Input
-                    value={formData.requested_department}
-                    onChange={e => setFormData({ ...formData, requested_department: e.target.value })}
-                    placeholder="e.g. College of Engineering, College of Education (optional)"
-                    className="border-slate-300"
-                  />
+                  <label className="text-sm font-medium text-slate-700">Preferred Department (optional)</label>
+                  {departments.length > 0 ? (
+                    <Select
+                      value={formData.requested_department_id}
+                      onValueChange={val => {
+                        const dept = departments.find(d => d.id === val);
+                        setFormData({
+                          ...formData,
+                          requested_department_id: val,
+                          requested_department: dept?.department_name ?? '',
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="border-slate-300">
+                        <SelectValue placeholder="Select a department (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map(d => (
+                          <SelectItem key={d.id} value={d.id}>
+                            {d.department_name}{d.department_code ? ` (${d.department_code})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={formData.requested_department}
+                      onChange={e => setFormData({ ...formData, requested_department: e.target.value })}
+                      placeholder="e.g. College of Engineering (optional)"
+                      className="border-slate-300"
+                    />
+                  )}
+                  <p className="text-xs text-slate-400">Optional — the program chair will make the final department assignment.</p>
                 </div>
               </div>
             </div>
@@ -415,7 +474,7 @@ export default function PublicUserRequestFormPage() {
               <div className="p-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-                    <span className="text-slate-400 text-sm font-bold">₱</span> Estimated Budget
+                    <span className="text-slate-400 text-sm font-bold">₱</span> Budget Allocation
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">₱</span>

@@ -40,6 +40,7 @@ const roleNavigation: RoleNavigation = {
     label: "Program Chair",
     items: [
       { title: "Dashboard", href: "/program-chair-dashboard" },
+      { title: "Program Management", href: "/program-chair-program-management" },
       { title: "Project List", href: "/program-chair-project-list" },
       { title: "Project Recommendation", href: "/program-chair-project-recommendation" },
       { title: "Funds and Budget", href: "/program-chair-funds-and-budget" },
@@ -50,6 +51,7 @@ const roleNavigation: RoleNavigation = {
     label: "Project Head",
     items: [
       { title: "Dashboard", href: "/project-head-dashboard" },
+      { title: "Request Management", href: "/project-head-request-management" },
       { title: "Finance Request", href: "/project-head-finance-request" },
       { title: "Project Proposal", href: "/project-head-project-proposal" },
       { title: "Report Submission", href: "/project-head-report-submission" },

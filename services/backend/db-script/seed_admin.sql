@@ -21,7 +21,8 @@ INSERT INTO users (
     'active'
 );
 
--- Verify insertion
+
+-- Verify admin user
 SELECT id, username, email, role, account_status, created_at
 FROM users
 WHERE username = 'admin';
