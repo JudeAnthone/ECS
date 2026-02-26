@@ -165,7 +165,6 @@ export default function ProgramChairRequestManagement() {
   // Dialog states
   const [detailReq, setDetailReq] = useState<Request | null>(null)
   const [reviewReq, setReviewReq] = useState<Request | null>(null)
-  const [assignReq, setAssignReq] = useState<Request | null>(null)
   const [deleteReq, setDeleteReq] = useState<Request | null>(null)
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
@@ -173,13 +172,9 @@ export default function ProgramChairRequestManagement() {
   const [reviewStatus, setReviewStatus] = useState<'approved' | 'rejected'>('approved')
   const [reviewNotes, setReviewNotes] = useState('')
   const [reviewFeedback, setReviewFeedback] = useState('')
-  const [reviewDepartmentId, setReviewDepartmentId] = useState('')
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
 
-  // Assign form — department is required; project head is not
-  const [assignDept, setAssignDept] = useState('')
-  const [assignNotes, setAssignNotes] = useState('')
-  const [assignSubmitting, setAssignSubmitting] = useState(false)
+  // Assign form removed — assignment moved to Program Management
 
   // Reroute form
   const [rerouteReq, setRerouteReq] = useState<Request | null>(null)
@@ -243,7 +238,6 @@ export default function ProgramChairRequestManagement() {
       const body: Record<string, unknown> = { status: reviewStatus }
       if (reviewNotes) body.review_notes = reviewNotes
       if (reviewFeedback) body.program_chair_feedback = reviewFeedback
-      if (reviewDepartmentId) body.assigned_department_id = reviewDepartmentId
       const res = await fetch(`${API}/requests/${reviewReq.id}/review`, {
         method: 'PATCH',
         headers: authHeaders(),
@@ -257,38 +251,11 @@ export default function ProgramChairRequestManagement() {
       setReviewReq(null)
       setReviewNotes('')
       setReviewFeedback('')
-      setReviewDepartmentId('')
       setReviewStatus('approved')
       await fetchData()
     } finally {
       setReviewSubmitting(false)
     }
-  }
-
-  // ── Quick approve ────────────────────────────────────────────────────────
-  async function handleQuickApprove(req: Request) {
-    try {
-      const res = await fetch(`${API}/requests/${req.id}/review`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ status: 'approved' }),
-      })
-      if (!res.ok) { const d = await res.json(); alert(d.error || 'Approve failed'); return }
-      await fetchData()
-    } catch { alert('Network error') }
-  }
-
-  // ── Quick reject ─────────────────────────────────────────────────────────
-  async function handleQuickReject(req: Request) {
-    try {
-      const res = await fetch(`${API}/requests/${req.id}/review`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ status: 'rejected' }),
-      })
-      if (!res.ok) { const d = await res.json(); alert(d.error || 'Reject failed'); return }
-      await fetchData()
-    } catch { alert('Network error') }
   }
 
   // ── Delete submit ────────────────────────────────────────────────────────
@@ -324,30 +291,7 @@ export default function ProgramChairRequestManagement() {
   }
 
   // ── Assign submit ────────────────────────────────────────────────────────
-  async function handleAssignSubmit() {
-    if (!assignReq || !assignDept) return
-    setAssignSubmitting(true)
-    try {
-      const body: Record<string, unknown> = { assigned_department_id: assignDept }
-      if (assignNotes) body.assignment_notes = assignNotes
-      const res = await fetch(`${API}/requests/${assignReq.id}/assign`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) {
-        const d = await res.json()
-        alert(d.error || 'Assignment failed')
-        return
-      }
-      setAssignReq(null)
-      setAssignDept('')
-      setAssignNotes('')
-      await fetchData()
-    } finally {
-      setAssignSubmitting(false)
-    }
-  }
+  // Assign functionality moved to Program Management
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -482,11 +426,7 @@ export default function ProgramChairRequestManagement() {
                             </Button>
                             {/* Only allow review via dialog, no quick approve/reject */}
                             {/* Assign — show when approved and not yet assigned to a department */}
-                            {req.status === 'approved' && !req.assigned_department_id && (
-                              <Button variant="ghost" size="sm" className="h-7 px-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50" onClick={() => setAssignReq(req)} title="Assign to Department">
-                                <UserCheck className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
+                            {/* Assignment moved to Program Management */}
                             {/* Reroute — show when not yet assigned to a department */}
                             {!req.assigned_department_id && req.status !== 'rejected' && (
                               <Button variant="ghost" size="sm" className="h-7 px-2 text-amber-600 hover:text-amber-800 hover:bg-amber-50" onClick={() => { setRerouteReq(req); setRerouteDept('') }} title="Reroute to another department">
@@ -607,14 +547,7 @@ export default function ProgramChairRequestManagement() {
                 <FileText className="h-4 w-4 mr-1.5" /> Review This Request
               </Button>
             )}
-            {detailReq?.status === 'approved' && !detailReq.assigned_department_id && (
-              <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={() => { setDetailReq(null); setAssignReq(detailReq) }}
-              >
-                <UserCheck className="h-4 w-4 mr-1.5" /> Assign to Department
-              </Button>
-            )}
+            {/* Department assignment moved to Program Management */}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -656,21 +589,7 @@ export default function ProgramChairRequestManagement() {
                 </div>
               </div>
 
-              {reviewStatus === 'approved' && departments.length > 0 && (
-                <div className="space-y-1.5">
-                  <Label className="text-sm font-semibold text-slate-700">Assign to Department</Label>
-                  <Select value={reviewDepartmentId} onValueChange={setReviewDepartmentId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select department (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {departments.map(d => (
-                        <SelectItem key={d.id} value={d.id}>{d.department_name}{d.department_code ? ` (${d.department_code})` : ''}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+              {/* Department assignment moved to Program Management; review only approves/rejects */}
 
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold text-slate-700">Review Notes</Label>
@@ -714,69 +633,7 @@ export default function ProgramChairRequestManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Assign Dialog ──────────────────────────────────────────────────── */}
-      <Dialog open={!!assignReq} onOpenChange={() => setAssignReq(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Assign to Department</DialogTitle>
-          </DialogHeader>
-
-          {assignReq && (
-            <div className="space-y-4 mt-1">
-              <p className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3 font-medium">{assignReq.request_title}</p>
-
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold text-slate-700">Department <span className="text-red-500">*</span></Label>
-                <p className="text-xs text-slate-400">Select the department whose project heads will handle this program request.</p>
-                {departments.length > 0 ? (
-                  <Select value={assignDept} onValueChange={setAssignDept}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a department..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {departments.map(d => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.department_name}{d.department_code ? ` (${d.department_code})` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    placeholder="Department UUID"
-                    value={assignDept}
-                    onChange={e => setAssignDept(e.target.value)}
-                  />
-                )}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold text-slate-700">Assignment Notes (optional)</Label>
-                <Textarea
-                  placeholder="Any notes for the department..."
-                  value={assignNotes}
-                  onChange={e => setAssignNotes(e.target.value)}
-                  rows={3}
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAssignReq(null)}>Cancel</Button>
-            <Button
-              onClick={handleAssignSubmit}
-              disabled={assignSubmitting || !assignDept}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              {assignSubmitting
-                ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Assigning...</>
-                : <><UserCheck className="h-4 w-4 mr-1.5" /> Assign to Department</>
-              }
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Department assignment removed from requests UI; assign in Program Management */}
 
       {/* ── Delete Confirm Dialog ─────────────────────────────────────────── */}
       <Dialog open={!!deleteReq} onOpenChange={() => setDeleteReq(null)}>

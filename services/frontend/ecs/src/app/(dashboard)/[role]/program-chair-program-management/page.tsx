@@ -721,6 +721,10 @@ export default function ProgramChairProgramManagement() {
   const [drillProgram, setDrillProgram] = useState<Program | null>(null);
   const [programFormError, setProgramFormError] = useState('');
   const [programPageError, setProgramPageError] = useState('');
+  const [assignDeptOpen, setAssignDeptOpen] = useState(false);
+  const [assignProgram, setAssignProgram] = useState<Program | null>(null);
+  const [selectedDeptID, setSelectedDeptID] = useState('__none__');
+  const [assignDeptError, setAssignDeptError] = useState('');
   const [activeTab, setActiveTab] = useState<'programs' | 'requests'>('programs');
   const params = useParams();
   const role = params?.role;
@@ -846,6 +850,40 @@ export default function ProgramChairProgramManagement() {
       end_date: p.end_date?.split('T')[0] || '',
     });
     setEditOpen(true);
+  };
+
+  const openAssignDept = (p: Program) => {
+    setAssignProgram(p);
+    setSelectedDeptID(p.department_id || '__none__');
+    setAssignDeptError('');
+    setAssignDeptOpen(true);
+  };
+
+  const handleAssignDept = async () => {
+    if (!assignProgram) return;
+    const deptId = selectedDeptID === '__none__' ? null : selectedDeptID;
+    // Use PUT update endpoint with existing program fields so backend can persist changes
+    const res = await fetch(`${API}/programs/${assignProgram.id}`, {
+      method: 'PUT', headers: authHeaders(),
+      body: JSON.stringify({
+        program_name: assignProgram.program_name,
+        program_description: assignProgram.program_description || null,
+        program_category: assignProgram.program_category || null,
+        department_id: deptId,
+        objectives: assignProgram.objectives || null,
+        target_beneficiaries: assignProgram.target_beneficiaries || null,
+        budget_allocation: assignProgram.budget_allocation ?? null,
+        start_date: assignProgram.start_date || null,
+        end_date: assignProgram.end_date || null,
+      }),
+    });
+    if (res.ok) { await loadPrograms(currentUser?.id); setAssignDeptOpen(false); }
+    else {
+      const text = await res.text();
+      let msg = 'Failed to assign department';
+      try { msg = JSON.parse(text).error || msg; } catch { msg = text || msg; }
+      setAssignDeptError(msg);
+    }
   };
 
   const filtered = programs.filter(p => {
@@ -1016,6 +1054,9 @@ export default function ProgramChairProgramManagement() {
                               <DropdownMenuItem onClick={() => handleDelete(p.id)} className="text-red-600">
                                 <Trash2 className="w-4 h-4 mr-2" /> Delete
                               </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openAssignDept(p)}>
+                                <Building2 className="w-4 h-4 mr-2" /> {p.department_id ? 'Change Department' : 'Assign Department'}
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -1105,6 +1146,59 @@ export default function ProgramChairProgramManagement() {
                     </div>
                   </div>
                 )}
+              </DialogContent>
+            </Dialog>
+            {/* Assign Department Dialog */}
+            <Dialog open={assignDeptOpen} onOpenChange={v => { setAssignDeptOpen(v); if (!v) setAssignDeptError(''); }}>
+              <DialogContent className="bg-white max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" /> Assign Department</DialogTitle>
+                  <DialogDescription>{assignProgram?.program_name}</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  {assignDeptError && (
+                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      <XCircle className="w-4 h-4 mt-0.5 shrink-0" /><span>{assignDeptError}</span>
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700">Select Department</label>
+                    <div className="border border-slate-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto divide-y divide-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDeptID('__none__')}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${selectedDeptID === '__none__' ? 'bg-slate-100 font-medium' : 'hover:bg-slate-50'}`}
+                      >
+                        <div className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center shrink-0">
+                          <span className="text-slate-400 text-xs">—</span>
+                        </div>
+                        <span className="text-slate-500">None (remove assignment)</span>
+                        {selectedDeptID === '__none__' && <span className="ml-auto text-slate-400 text-xs">✓</span>}
+                      </button>
+                      {departments.length === 0 ? (
+                        <div className="px-4 py-5 text-center text-sm text-slate-400">No departments available.</div>
+                      ) : departments.map(d => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          onClick={() => setSelectedDeptID(d.id)}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors ${selectedDeptID === d.id ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
+                        >
+                          <div className="w-9 h-9 rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center shrink-0 text-sm">{d.department_code?.[0] || 'D'}</div>
+                          <div className="flex flex-col items-start min-w-0">
+                            <span className="text-sm font-medium text-slate-800 truncate">{d.department_name}</span>
+                            <span className="text-xs text-slate-400 truncate">{d.department_code}</span>
+                          </div>
+                          {selectedDeptID === d.id && <span className="ml-auto text-indigo-500 text-xs font-medium">✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setAssignDeptOpen(false)}>Cancel</Button>
+                    <Button onClick={handleAssignDept}>Save Assignment</Button>
+                  </div>
+                </div>
               </DialogContent>
             </Dialog>
           </>

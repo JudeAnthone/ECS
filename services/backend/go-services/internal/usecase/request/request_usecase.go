@@ -64,7 +64,46 @@ func (uc *requestUseCase) ProgramChairReview(ctx context.Context, chairID, id st
 	if input.Status != "approved" && input.Status != "rejected" {
 		return fmt.Errorf("status must be 'approved' or 'rejected'")
 	}
-	return uc.requestRepo.ProgramChairReview(ctx, id, chairID, input)
+	// If approved, create program first, then attach to request via assigned_program_id
+	if input.Status == "approved" {
+		// fetch request details
+		req, err := uc.requestRepo.GetByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		// if a program was already created for this request, reuse it
+		if req.AssignedProgramID != nil && *req.AssignedProgramID != "" {
+			input.AssignedProgramID = req.AssignedProgramID
+		} else {
+			// create program from request details (no department assigned)
+			program := &domain.Program{
+				ProgramName:         req.RequestTitle,
+				ProgramDescription:  &req.RequestDescription,
+				ProgramCategory:     nil,
+				DepartmentID:        nil,
+				ProgramChairID:      &chairID,
+				Objectives:          req.Justification,
+				TargetBeneficiaries: req.TargetBeneficiaries,
+				BudgetAllocation:    req.EstimatedBudget,
+				SpentBudget:         0,
+				Status:              "active",
+				ApprovalStatus:      "approved",
+			}
+			if err := uc.programRepo.Create(ctx, program); err != nil {
+				return fmt.Errorf("failed to create program from request: %w", err)
+			}
+			// debug log: created program id and chair
+			fmt.Printf("[DEBUG] Program created from request %s -> program id=%s chair=%s\n", req.ID, program.ID, chairID)
+			// attach created program id to review input so request row records it
+			input.AssignedProgramID = &program.ID
+		}
+	}
+
+	// perform the program chair review update (records review and assigned_program_id)
+	if err := uc.requestRepo.ProgramChairReview(ctx, id, chairID, input); err != nil {
+		return err
+	}
+	return nil
 }
 
 // AssignToHead routes a request to a department (project head assignment is optional).
@@ -75,29 +114,6 @@ func (uc *requestUseCase) AssignToHead(ctx context.Context, chairID, id string, 
 	err := uc.requestRepo.AssignToHead(ctx, id, input)
 	if err != nil {
 		return err
-	}
-	// Fetch the request to get details
-	req, err := uc.requestRepo.GetByID(ctx, id)
-	if err != nil {
-		return err
-	}
-	// Only create program if approved and assigned
-	if req.Status == "approved" && req.AssignedDepartmentID != nil {
-		program := &domain.Program{
-			ProgramName:         req.RequestTitle,
-			ProgramDescription:  &req.RequestDescription,
-			DepartmentID:        req.AssignedDepartmentID,
-			Objectives:          req.Justification,
-			TargetBeneficiaries: req.TargetBeneficiaries,
-			BudgetAllocation:    req.EstimatedBudget,
-			ApprovalStatus:      "approved",
-			Status:              "active",
-			// Set other fields as needed
-		}
-		err = uc.programRepo.Create(ctx, program)
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }
