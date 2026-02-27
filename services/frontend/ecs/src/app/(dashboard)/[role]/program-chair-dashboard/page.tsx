@@ -18,6 +18,7 @@ import {
   Calendar,
   Filter
 } from 'lucide-react';
+import ClientNow from '@/shared/components/ui/ClientNow'
 
 export default function ExecutiveDashboard() {
   const [selectedDepartment, setSelectedDepartment] = useState('all');
@@ -290,7 +291,7 @@ export default function ExecutiveDashboard() {
           </div>
           <div className="text-right">
             <p className="text-slate-500">LIVE STATUS</p>
-            <p className="text-slate-900">{new Date().toLocaleString()}</p>
+            <p className="text-slate-900"><ClientNow /></p>
           </div>
         </div>
 

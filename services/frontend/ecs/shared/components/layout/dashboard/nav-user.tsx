@@ -1,5 +1,6 @@
 "use client"
 
+import React, { useState } from 'react'
 import {
   Bell,
   ChevronsUpDown,
@@ -27,6 +28,7 @@ import {
   useSidebar,
 } from "@/shared/components/ui/Sidebar"
 import { AuthService } from "@/shared/lib/auth-service"
+import LogoutModal from '@/shared/components/ui/LogoutModal'
 
 export function NavUser({
   user,
@@ -38,11 +40,12 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  const [showLogout, setShowLogout] = useState(false)
 
-  const handleLogout = () => {
-    if (confirm('Are you sure you want to log out?')) {
-      AuthService.logout();
-    }
+  const handleLogout = () => setShowLogout(true)
+
+  const confirmLogout = () => {
+    AuthService.logout()
   }
 
   return (
@@ -98,6 +101,7 @@ export function NavUser({
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
+      <LogoutModal open={showLogout} onOpenChange={setShowLogout} onConfirm={confirmLogout} />
     </SidebarMenu>
   )
 }

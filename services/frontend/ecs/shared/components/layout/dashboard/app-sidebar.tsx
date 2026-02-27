@@ -8,7 +8,6 @@ import {
 } from "lucide-react"
 
 import { NavMain } from "@/shared/components/layout/dashboard/nav-main"
-import { NavProjects } from "@/shared/components/layout/dashboard/nav-projects"
 import { NavSecondary } from "@/shared/components/layout/dashboard/nav-secondary"
 import { NavUser } from "@/shared/components/layout/dashboard/nav-user"
 import {
@@ -48,20 +47,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     },
   ];
 
-  const projects = [
-    {
-      name: "Environmental Awareness",
-      url: "#",
-    },
-    {
-      name: "Educational Outreach",
-      url: "#",
-    },
-    {
-      name: "Health Care Improvement",
-      url: "#",
-    },
-  ];
+  // Projects nav removed for all users per request
 
   const userData = {
     name: user ? `${user.first_name} ${user.last_name}` : "User",
@@ -97,9 +83,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain userRole={role || user?.role} />
-        {(role || user?.role) !== 'public-user' && (
-          <NavProjects projects={projects} />
-        )}
+        {/* Projects section removed */}
         <NavSecondary items={navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>

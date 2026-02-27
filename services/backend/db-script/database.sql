@@ -913,21 +913,16 @@ GRANT SELECT ON notifications TO app_public_user;
 -- ==========================================
 
 INSERT INTO departments (department_name, department_code, description, is_active) VALUES
-    ('College of Arts, Sciences and Education',    'CAS', 'Liberal arts, sciences, and teacher education programs', true),
-    ('College of Engineering and Architecture',    'CEA',  'Engineering and architecture disciplines', true),
-    ('College of Business and Public Administration', 'CBPA', 'Business, accounting, and public administration programs', true),
-    ('College of Hospitality and Tourism Management', 'CHTM', 'Hospitality, tourism, and culinary programs', true),
+    ('College of Architecture and Fine Arts',      'CAFA', 'Architecture and fine arts programs', true),
+    ('College of Arts and Sciences',               'CAS',  'Liberal arts and sciences programs', true),
+    ('College of Business and Public Administration','CBPA','Business, accounting, and public administration programs', true),
+    ('College of Computer Studies',                'CCS',  'Software development and computing programs', true),
     ('College of Criminal Justice Education',      'CCJE', 'Criminology and law enforcement education', true),
-    ('College of Information Technology',          'CIT',  'Computer science and IT programs', true),
-    ('College of Computer Studies',                'CCS',  'Software development and computing programs', true);
-
--- Admin user (password: Admin@1234 — replace hash with real bcrypt hash)
-INSERT INTO users (
-    username, first_name, last_name, email,
-    password_hash, role, account_status
-) VALUES (
-    'admin', 'System', 'Administrator',
-    'admin@extensionservice.com',
-    '$2a$10$8jy3mYZ0z3QxJxKJ3K3QxJxKJ3K3QxJxKJ3K3QxJxKJ3K3QxJxKJ3',
-    'admin', 'active'
-);
+    ('College of Education',                       'CED',  'Teacher education and education programs', true),
+    ('College of Engineering',                     'CEN',  'Engineering disciplines', true),
+    ('College of Hospitality and Tourism Management','CHITM','Hospitality, tourism, and culinary programs', true),
+    ('College of Industrial Technology',           'CIT',  'Industrial technology and applied technology programs', true),
+    ('Extension Coordination Center',              'ECC',  'Extension coordination center and services', true),
+    ('Graduate School',                            'GRAD', 'Graduate-level programs and research', true),
+    ('System Administration',                      'ADMIN','System administration and central services', true)
+;

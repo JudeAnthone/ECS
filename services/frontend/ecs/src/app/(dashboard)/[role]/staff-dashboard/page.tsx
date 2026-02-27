@@ -20,6 +20,7 @@ import {
   Check,
   Trash2
 } from 'lucide-react';
+import ClientNow from '@/shared/components/ui/ClientNow'
 
 export default function PersonnelDashboard() {
   const [projects, setProjects] = useState([
@@ -200,7 +201,7 @@ export default function PersonnelDashboard() {
             <p className="text-gray-500 mt-1">Manage your tasks, changes, and projects</p>
           </div>
           <div className="text-sm text-gray-500">
-            Last updated: {new Date().toLocaleString()}
+            Last updated: <ClientNow />
           </div>
         </div>
 

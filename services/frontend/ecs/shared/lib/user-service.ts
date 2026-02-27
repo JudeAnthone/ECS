@@ -138,4 +138,25 @@ export const userService = {
       throw new Error(errorMessage);
     }
   },
+  async getUserById(userId: string, token: string): Promise<User | null> {
+    const response = await fetch(`${API_URL}/users/${userId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      return null
+    }
+
+    try {
+      const data = await response.json()
+      // API might return { user: { ... } } or the user directly
+      return data.user ?? data
+    } catch {
+      return null
+    }
+  },
 };

@@ -13,6 +13,7 @@ import {
   CheckSquare,
   Plus
 } from 'lucide-react';
+import ClientNow from '@/shared/components/ui/ClientNow'
 
 export default function PerformanceDashboard() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -183,7 +184,7 @@ export default function PerformanceDashboard() {
             <p className="text-gray-500 mt-1">Track your performance metrics and manage tasks</p>
           </div>
           <div className="text-sm text-gray-500">
-            Last updated: {new Date().toLocaleString()}
+            Last updated: <ClientNow />
           </div>
         </div>
 

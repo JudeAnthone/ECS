@@ -502,6 +502,7 @@ function SidebarMenuButton({
   size = "default",
   tooltip,
   className,
+  id,
   ...props
 }: React.ComponentProps<"button"> & {
   asChild?: boolean
@@ -510,9 +511,12 @@ function SidebarMenuButton({
 } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const Comp = asChild ? Slot : "button"
   const { isMobile, state } = useSidebar()
+  const autoId = React.useId()
+  const resolvedId = id ?? autoId
 
   const button = (
     <Comp
+      id={resolvedId}
       data-slot="sidebar-menu-button"
       data-sidebar="menu-button"
       data-size={size}

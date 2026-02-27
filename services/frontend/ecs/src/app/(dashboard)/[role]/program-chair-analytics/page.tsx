@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/Select';
+import ClientNow from '@/shared/components/ui/ClientNow'
 import { 
   BarChart3,
   Calendar,
@@ -518,7 +519,7 @@ Monthly Breakdown:
               <p>Department: <span className="font-semibold text-slate-900">{selectedDepartment}</span></p>
               <p>Analytics Type: <span className="font-semibold text-slate-900">{selectedAnalytics.charAt(0).toUpperCase() + selectedAnalytics.slice(1)}</span></p>
               <p>Period: <span className="font-semibold text-slate-900">{new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()}</span></p>
-              <p>Generated: <span className="font-semibold text-slate-900">{new Date().toLocaleString()}</span></p>
+              <p>Generated: <span className="font-semibold text-slate-900"><ClientNow /></span></p>
             </div>
             <hr className="my-4 border-slate-300" />
           </div>

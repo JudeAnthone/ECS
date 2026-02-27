@@ -13,6 +13,7 @@ import {
   Bell,
   Activity
 } from 'lucide-react';
+import ClientNow from '@/shared/components/ui/ClientNow'
 
 export default function Dashboard() {
   // Sample data - replace with your actual data source
@@ -163,7 +164,8 @@ export default function Dashboard() {
             <p className="text-gray-500 mt-1">Monitor your organization&apos;s key metrics and activities</p>
           </div>
           <div className="text-sm text-gray-500">
-            Last updated: {new Date().toLocaleString()}
+            Last updated: {/* client-only to avoid hydration mismatch */}
+            <ClientNow />
           </div>
         </div>
 
