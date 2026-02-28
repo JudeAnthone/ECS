@@ -8,15 +8,15 @@ import { footerSections } from "@/shared/configs/index"
 
 const Footer = () => {
   return (
-    <div className="min-h-[30svh] flex flex-col bg-red-500 text-white">
-      <footer className="border-t border-red-600">
+    <div className="min-h-[30svh] flex flex-col bg-gray-100 text-gray-900">
+      <footer className="border-t border-gray-300">
         <div className="max-w-(--breakpoint-xl) mx-auto">
           <div className="py-12 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-x-8 gap-y-10 px-6 xl:px-0">
             <div className="col-span-full xl:col-span-2">
               
               <p className="font-bold text-lg">Earist Extension Service</p>
 
-              <p className="mt-4 text-white/90">
+              <p className="mt-4 text-gray-700">
                 Providing innovative extension services and solutions to empower our community through technology and education.
               </p>
             </div>
@@ -29,7 +29,7 @@ const Footer = () => {
                     <li key={title}>
                       <Link
                         href={`/${href}`}
-                        className="text-white/90 hover:text-white"
+                        className="text-gray-700 hover:text-gray-900"
                       >
                         {title}
                       </Link>
@@ -55,7 +55,7 @@ const Footer = () => {
           <Separator />
           <div className="py-8 flex items-center justify-center sm:flex-row gap-x-2 gap-y-5 px-6 xl:px-0">
             {/* Copyright */}
-            <span className="text-white/80">
+            <span className="text-gray-600">
               &copy; {new Date().getFullYear()}{" "}
               <Link href="/" target="_blank">
                 Earist Extension Service

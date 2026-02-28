@@ -1,4 +1,5 @@
 "use client"
+import * as React from "react";
 
 import {
   SidebarGroup,
@@ -9,7 +10,29 @@ import {
 } from "@/shared/components/ui/Sidebar"
 
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { BarChart2, Users, Home, FileText, BookOpen, MessageSquare, Settings, ChevronDown, ChevronUp } from "lucide-react"
+// Icon mapping for menu items
+const iconMap = {
+  Dashboard: Home,
+  "User Management": Users,
+  "Program Management": BookOpen,
+  "Project List": BookOpen,
+  "Project Recommendation": BookOpen,
+  "Funds and Budget": FileText,
+  "Analytics": BarChart2,
+  "Reports": FileText,
+  "Blog": MessageSquare,
+  "Chatbot": Settings,
+  "Request Management": Users,
+  "Finance Request": FileText,
+  "Project Proposal": BookOpen,
+  "Report Submission": FileText,
+  "Task Management": MessageSquare,
+  "Project Tasks": MessageSquare,
+  "Browse Programs": BookOpen,
+  "Request Form": FileText,
+};
+import { useParams, usePathname } from "next/navigation"
 
 interface NavItem {
   title: string;
@@ -45,6 +68,7 @@ const roleNavigation: RoleNavigation = {
       { title: "Project Recommendation", href: "/program-chair-project-recommendation" },
       { title: "Funds and Budget", href: "/program-chair-funds-and-budget" },
       { title: "Analytics", href: "/program-chair-analytics" },
+      { title: "Reports", href: "/program-chair-report" },
     ],
   },
   "project-head": {
@@ -57,6 +81,7 @@ const roleNavigation: RoleNavigation = {
       { title: "Report Submission", href: "/project-head-report-submission" },
       { title: "Task Management", href: "/project-head-task-management" },
       { title: "Analytics", href: "/project-head-analytics" },
+      { title: "Reports", href: "/project-head-report" },
     ],
   },
   staff: {
@@ -65,6 +90,7 @@ const roleNavigation: RoleNavigation = {
       { title: "Dashboard", href: "/staff-dashboard" },
       { title: "Project Tasks", href: "/staff-project-task" },
       { title: "Analytics", href: "/staff-project-analytics" },
+      { title: "Reports", href: "/staff-report" },
     ],
   },
   "public-user": {
@@ -78,6 +104,7 @@ const roleNavigation: RoleNavigation = {
 };
 
 export function NavMain({ userRole }: { userRole?: string }) {
+    const [openGroups, setOpenGroups] = React.useState<{ [key: string]: boolean }>({});
   const params = useParams();
   const role = params?.role as string || userRole;
 
@@ -87,20 +114,42 @@ export function NavMain({ userRole }: { userRole?: string }) {
 
   const navigation = roleNavigation[role];
 
+  const pathname = useParams()?.role
+    ? `/${useParams()?.role}${usePathname()?.replace(`/${useParams()?.role}`, "")}`
+    : usePathname() || "";
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{navigation.label}</SidebarGroupLabel>
       <SidebarMenu>
-        {navigation.items.map((item) => (
-          <SidebarMenuItem key={item.href}>
-            <SidebarMenuButton asChild size="lg">
-              <Link href={`/${role}${item.href}`}>
-                {item.title}
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ))}
+        {navigation.items.map((item, idx) => {
+          const itemPath = `/${role}${item.href}`;
+          const isActive = usePathname() === itemPath;
+          const Icon = iconMap[item.title] || Home;
+          return (
+            <SidebarMenuItem key={item.href}>
+              <SidebarMenuButton
+                asChild
+                size="lg"
+                isActive={isActive}
+                className={isActive ? "bg-white text-[#BA0021] font-bold border-l-2 border-[#BA0021] ring-2 ring-[#BA0021]" : "text-[#BA0021] bg-white hover:bg-slate-100 hover:text-[#BA0021]"}
+                tabIndex={0}
+                aria-label={item.title}
+                role="menuitem"
+                onKeyDown={e => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    window.location.href = itemPath;
+                  }
+                }}
+              >
+                <Link href={itemPath} className="flex items-center gap-2" aria-current={isActive ? "page" : undefined}>
+                  <Icon className="w-5 h-5" aria-hidden="true" />
+                  {item.title}
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          );
+        })}
       </SidebarMenu>
     </SidebarGroup>
-  )
+  );
 }

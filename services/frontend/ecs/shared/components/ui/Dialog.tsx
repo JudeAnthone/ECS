@@ -7,10 +7,53 @@ import { cn } from "@/shared/lib/utils"
 import { Button } from "@/shared/components/ui/Button"
 import { XIcon } from "lucide-react"
 
-function Dialog({
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+
+
+
+
+function useBodyScrollbarCompensation() {
+  React.useEffect(() => {
+    const body = document.body;
+    let prevVar = body.style.getPropertyValue('--modal-scrollbar-compensation');
+    const compensate = () => {
+      if (body.style.overflow === 'hidden') {
+        const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+        body.style.setProperty('--modal-scrollbar-compensation', `${scrollbarWidth}px`);
+        body.classList.add('modal-open');
+      } else {
+        body.style.setProperty('--modal-scrollbar-compensation', prevVar || '0px');
+        body.classList.remove('modal-open');
+      }
+    };
+    const observer = new MutationObserver(() => {
+      compensate();
+    });
+    observer.observe(body, { attributes: true, attributeFilter: ['style'] });
+    // Initial check
+    compensate();
+    return () => {
+      observer.disconnect();
+      body.style.setProperty('--modal-scrollbar-compensation', prevVar || '0px');
+      body.classList.remove('modal-open');
+    };
+  }, []);
+}
+
+function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  useBodyScrollbarCompensation();
+  const [isOpen, setIsOpen] = React.useState(false);
+  const controlled = typeof props.open === 'boolean';
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      {...props}
+      open={controlled ? props.open : isOpen}
+      onOpenChange={value => {
+        if (props.onOpenChange) props.onOpenChange(value);
+        if (!controlled) setIsOpen(value);
+      }}
+    />
+  );
 }
 
 function DialogTrigger({

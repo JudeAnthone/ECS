@@ -1,4 +1,5 @@
 "use client"
+import { Menu } from "lucide-react";
 
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
@@ -266,14 +267,18 @@ function SidebarTrigger({
       data-slot="sidebar-trigger"
       variant="ghost"
       size="icon"
-      className={cn("size-7", className)}
+      className={cn(
+        "size-7",
+        "hover:bg-white/20 active:bg-white/30 rounded-full transition-colors",
+        className
+      )}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
       }}
       {...props}
     >
-      <PanelLeftIcon />
+      <Menu className="w-7 h-7 text-white mx-auto" style={{ minWidth: 28, minHeight: 28 }} />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

@@ -349,29 +349,29 @@ export default function UserManagement() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
-        return 'bg-green-100 text-green-700 border-green-300';
+        return 'bg-green-200 text-green-900 border-green-400';
       case 'inactive':
-        return 'bg-gray-100 text-gray-700 border-gray-300';
+        return 'bg-gray-200 text-gray-900 border-gray-400';
       case 'suspended':
-        return 'bg-red-100 text-red-700 border-red-300';
+        return 'bg-red-200 text-red-900 border-red-400';
       case 'pending_approval':
-        return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+        return 'bg-yellow-200 text-yellow-900 border-yellow-400';
       case 'rejected':
-        return 'bg-red-100 text-red-700 border-red-300';
+        return 'bg-pink-200 text-pink-900 border-pink-400';
       default:
-        return 'bg-blue-100 text-blue-700 border-blue-300';
+        return 'bg-blue-200 text-blue-900 border-blue-400';
     }
   };
 
   const getRoleBadgeColor = (role: string) => {
     const colors: Record<string, string> = {
-      admin: 'bg-purple-100 text-purple-700 border-purple-300',
-      program_chair: 'bg-blue-100 text-blue-700 border-blue-300',
-      project_head: 'bg-green-100 text-green-700 border-green-300',
-      staff: 'bg-orange-100 text-orange-700 border-orange-300',
-      public_user: 'bg-gray-100 text-gray-700 border-gray-300',
+      admin: 'bg-purple-200 text-purple-900 border-purple-400',
+      program_chair: 'bg-blue-200 text-blue-900 border-blue-400',
+      project_head: 'bg-green-200 text-green-900 border-green-400',
+      staff: 'bg-orange-200 text-orange-900 border-orange-400',
+      public_user: 'bg-gray-200 text-gray-900 border-gray-400',
     };
-    return colors[role] || 'bg-gray-100 text-gray-700 border-gray-300';
+    return colors[role] || 'bg-gray-200 text-gray-900 border-gray-400';
   };
 
   const formatStatus = (status: string) => {
@@ -445,7 +445,7 @@ export default function UserManagement() {
         }
         
         .table-row-hover:hover {
-          background-color: rgba(59, 130, 246, 0.05);
+          background-color: rgba(59, 130, 246, 0.10);
           transition: all 0.2s ease;
         }
       `}</style>
@@ -513,13 +513,13 @@ export default function UserManagement() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50 hover:bg-slate-50">
-                      <TableHead className="text-slate-700 font-semibold">User ID</TableHead>
+                      <TableHead className="text-slate-700 font-semibold w-20">ID</TableHead>
                       <TableHead className="text-slate-700 font-semibold">Full Name</TableHead>
                       <TableHead className="text-slate-700 font-semibold">Email</TableHead>
                       <TableHead className="text-slate-700 font-semibold">Username</TableHead>
                       <TableHead className="text-slate-700 font-semibold">Role</TableHead>
                       <TableHead className="text-slate-700 font-semibold">Department</TableHead>
-                      <TableHead className="text-slate-700 font-semibold">Contact</TableHead>
+                      
                       <TableHead className="text-slate-700 font-semibold">Last Active</TableHead>
                       <TableHead className="text-slate-700 font-semibold">Date Registered</TableHead>
                       <TableHead className="text-slate-700 font-semibold text-right">Actions</TableHead>
@@ -527,9 +527,9 @@ export default function UserManagement() {
                   </TableHeader>
                   <TableBody>
                     {pendingUsers.map((user) => (
-                      <TableRow key={user.id} className="table-row-hover border-slate-200">
-                        <TableCell className="font-semibold text-slate-900 mono text-sm">
-                          {user.id.substring(0, 8)}...
+                      <TableRow key={user.id} className="table-row-hover border-slate-200 cursor-pointer text-sm [&>td]:py-2 [&>td]:px-2">
+                        <TableCell className="font-semibold text-slate-900 mono text-xs w-20 px-2">
+                          {user.id.substring(0, 6)}...
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -551,9 +551,7 @@ export default function UserManagement() {
                         <TableCell className="text-slate-700">
                           {user.department || '-'}
                         </TableCell>
-                        <TableCell className="text-slate-700 text-sm">
-                          {user.contact_number || '-'}
-                        </TableCell>
+                        
                         <TableCell className="text-slate-600 text-sm">
                           {formatLastActive(user.last_active)}
                         </TableCell>
@@ -691,17 +689,17 @@ export default function UserManagement() {
                 </div>
 
                 {/* User Table */}
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="border border-slate-200 rounded-lg overflow-hidden max-h-[60vh] overflow-y-auto">
                   <Table>
-                    <TableHeader>
+                    <TableHeader className="sticky top-0 z-10" style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                       <TableRow className="bg-slate-50 hover:bg-slate-50">
-                        <TableHead className="text-slate-700 font-semibold">User ID</TableHead>
+                        <TableHead className="text-slate-700 font-semibold w-20">ID</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Full Name</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Email</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Username</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Role</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Department</TableHead>
-                        <TableHead className="text-slate-700 font-semibold">Contact</TableHead>
+                        
                         <TableHead className="text-slate-700 font-semibold">Last Logged</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Status</TableHead>
                         <TableHead className="text-slate-700 font-semibold">Date Joined</TableHead>
@@ -717,9 +715,9 @@ export default function UserManagement() {
                         </TableRow>
                       ) : (
                         filteredUsers.map((user) => (
-                          <TableRow key={user.id} className="table-row-hover border-slate-200">
-                            <TableCell className="font-semibold text-slate-900 mono text-sm">
-                              {user.id.substring(0, 8)}...
+                          <TableRow key={user.id} className="table-row-hover border-slate-200 cursor-pointer text-sm [&>td]:py-2 [&>td]:px-2">
+                            <TableCell className="font-semibold text-slate-900 mono text-xs w-20 px-2">
+                              {user.id.substring(0, 6)}...
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
@@ -741,9 +739,7 @@ export default function UserManagement() {
                             <TableCell className="text-slate-700">
                               {user.department || '-'}
                             </TableCell>
-                            <TableCell className="text-slate-700 text-sm">
-                              {user.contact_number || '-'}
-                            </TableCell>
+                            
                             <TableCell className="text-slate-600 text-sm">
                               {formatLastActive(user.last_active)}
                             </TableCell>
@@ -861,7 +857,7 @@ export default function UserManagement() {
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-xs text-slate-500 font-medium mb-1">User ID</p>
-                      <p className="text-xs font-mono text-slate-700">{editingUser.id.substring(0, 8)}...</p>
+                      <p className="text-xs font-mono text-slate-700">{editingUser.id}</p>
                     </div>
                     <Button
                       variant="ghost"

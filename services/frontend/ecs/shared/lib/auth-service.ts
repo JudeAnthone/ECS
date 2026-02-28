@@ -115,9 +115,9 @@ export class AuthService {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user');
     
-    // Redirect to login page
+    // Redirect to landing page
     if (typeof window !== 'undefined') {
-      window.location.href = '/login';
+      window.location.href = '/';
     }
   }
 

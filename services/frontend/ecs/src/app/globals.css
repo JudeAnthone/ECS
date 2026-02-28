@@ -1,6 +1,13 @@
+
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Rubik:ital,wght@0,300..900;1,300..900&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
+
+/* Prevent header shift when modal is open */
+body.modal-open,
+body.modal-open nav.fixed {
+  padding-right: var(--modal-scrollbar-compensation, 0px) !important;
+}
 
 @custom-variant dark (&:is(.dark *));
 

@@ -26,65 +26,33 @@ import Link from "next/link"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [user, setUser] = React.useState<any>(null);
-  const params = useParams();
-  const role = params?.role as string;
-
   React.useEffect(() => {
-    const currentUser = AuthService.getUser();
-    setUser(currentUser);
+    setUser(AuthService.getUser());
   }, []);
-
-  const navSecondary = [
-    {
-      title: "Search",
-      url: `/${role || user?.role || 'admin'}`,
-      icon: Search,
-    },
-    {
-      title: "Settings", 
-      url: `/${role || user?.role || 'admin'}/settings`,
-      icon: Settings,
-    },
-  ];
-
-  // Projects nav removed for all users per request
-
   const userData = {
-    name: user ? `${user.first_name} ${user.last_name}` : "User",
-    email: user?.email || "user@example.com",
+    name: user ? `${user.first_name} ${user.last_name}` : "",
+    email: user?.email || "",
     avatar: user?.avatar_url || "",
   };
-
+  const params = useParams();
+  const role = params?.role as string;
   return (
-    <Sidebar variant="inset" {...props}>
+    <Sidebar
+      variant="inset"
+      {...props}
+      className="bg-gradient-to-b from-white via-slate-50 to-slate-200 shadow-lg border-r border-slate-300"
+    >
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="#">
-                <div className="flex items-center gap-3">
-                  {/* User profile picture or styled initials */}
-                  {user?.avatar_url ? (
-                    <img src={user.avatar_url} alt="Profile" className="rounded-full w-8 h-8 object-cover shadow border border-slate-200" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-200 via-blue-100 to-slate-50 text-blue-900 font-bold flex items-center justify-center text-base shadow border border-slate-200">
-                      {user ? `${(user.first_name?.[0] || '').toUpperCase()}${(user.last_name?.[0] || '').toUpperCase()}` : 'U'}
-                    </div>
-                  )}
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">{user ? `${user.first_name} ${user.last_name}` : 'User'}</span>
-                    <span className="truncate text-xs">{user?.role?.replace('_', ' ').toUpperCase() || 'Role'}{user?.section ? ` • ${user.section}` : ''}</span>
-                  </div>
-                </div>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="flex justify-center py-8">
+          <a href="/" tabIndex={0} aria-label="Go to homepage">
+            <img src="/earist-banner.png" alt="EARIST Logo and Title" className="w-full max-w-2xl cursor-pointer" style={{ display: 'block', width: '100%', height: 'auto' }} />
+          </a>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <NavMain userRole={role || user?.role} />
         {/* Projects section removed */}
-        <NavSecondary items={navSecondary} className="mt-auto" />
+          {/* NavSecondary removed as it is no longer used */}
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={userData} />

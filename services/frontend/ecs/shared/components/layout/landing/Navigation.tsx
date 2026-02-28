@@ -1,4 +1,23 @@
+"use client";
 import { Button } from "@/shared/components/ui/Button";
+import React, { useState } from "react";
+import dynamic from "next/dynamic";
+// Dynamically import LoginModal to avoid SSR issues
+const LoginModal = dynamic(() => import("@/shared/components/ui/LoginModal"), { ssr: false });
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/shared/components/ui/Sheet";
+import Logo from "@/shared/components/ui/Logo";
+import Image from "next/image";
+
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+
+import { CircleChevronRight, Menu } from "lucide-react";
+
+import Link from "next/link";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -7,111 +26,105 @@ import {
   NavigationMenuTrigger,
   NavigationMenuViewport,
 } from "@/shared/components/ui/NavigationMenu";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetTrigger,
-} from "@/shared/components/ui/Sheet";
-import Logo from "@/shared/components/ui/Logo";
-
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
-
-import { CircleChevronRight, Menu } from "lucide-react";
-
-import Link from "next/link";
 
 import { AboutUs, Programs, } from "@/shared/configs/index";
 
 const Navbar = () => {
+  const [loginOpen, setLoginOpen] = useState(false);
+  const navRef = React.useRef<HTMLElement>(null);
+  React.useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const syncPadding = () => {
+      (nav as HTMLElement).style.paddingRight = document.body.style.paddingRight || '';
+    };
+    const observer = new MutationObserver(syncPadding);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    syncPadding();
+    return () => {
+      observer.disconnect();
+      (nav as HTMLElement).style.paddingRight = '';
+    };
+  }, []);
   return (
-    <nav className="fixed top-0 inset-x-0 w-full h-16 bg-red-500 text-white border-b z-50">
-      <div className="h-full flex items-center justify-between max-w-(--breakpoint-xl) mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-8">
-          <Logo title="Earist" className="cursor-default" />
+    <nav
+      ref={navRef}
+      className="fixed top-0 inset-x-0 w-full h-16 text-white z-50 shadow-lg border-b border-[#e5e7eb] bg-[#BA0021]/95 backdrop-blur-md transition-all duration-300"
+      style={{ backgroundColor: 'rgba(186,0,33,0.95)' }}
+    >
+      <div className="h-full relative flex items-center max-w-(--breakpoint-xl) mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Left: Logo and Title */}
+        <div className="absolute left-0 top-0 h-full flex items-center gap-2 min-w-[180px] pl-2">
+          <Image
+            src="/earist-logo.png"
+            alt="EARIST Logo"
+            width={36}
+            height={36}
+            className="rounded-full bg-white p-1 shadow-md border border-white"
+            priority
+          />
+          <span className="text-2xl font-extrabold tracking-tight select-none drop-shadow-sm">EARIST</span>
         </div>
 
-        
-        <div className="hidden md:block">
+        {/* Center: Navigation Links */}
+        <div className="flex-1 flex justify-center">
           <NavigationMenu>
-            <NavigationMenuList>
+            <NavigationMenuList className="flex gap-8">
               <NavigationMenuItem>
-                <Button variant="ghost" asChild>
-                  <Link href="/" className="text-lg">Home</Link>
-                </Button>
-              </NavigationMenuItem>
-
-              <NavigationMenuItem>
-                <NavigationMenuTrigger className="cursor-pointer">About us</NavigationMenuTrigger>
-                <NavigationMenuContent>
-                  <div className="w-[400px] p-4 md:w-[500px] lg:w-[600px]">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {AboutUs.map((about) => (
-                        <Link
-                          key={about.title}
-                          href={`/${about.href}`}
-                          className="block text-lg select-none space-y-2 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-                        >
-                          <about.icon className="mb-2 size-6" />
-                          <div className="text-sm font-semibold leading-none">
-                            {about.title}
-                          </div>
-                          <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                            {about.description}
-                          </p>
-                        </Link>
-                      ))}
-                    </div>
+                <NavigationMenuTrigger className="text-lg font-semibold text-white bg-transparent hover:underline hover:underline-offset-8 focus:underline focus:underline-offset-8 rounded transition-all duration-200">About Us</NavigationMenuTrigger>
+                <NavigationMenuContent className="bg-white text-[#BA0021] rounded shadow-lg mt-2 p-4 min-w-[250px]">
+                  <div className="grid gap-2 min-w-[340px]">
+                    {AboutUs.map((about) => (
+                      <Link
+                        key={about.title}
+                        href={`/${about.href}`}
+                        className="block px-2 py-1 rounded transition-colors font-semibold text-[#BA0021] hover:bg-[#BA0021] hover:text-white focus:bg-[#BA0021] focus:text-white group"
+                      >
+                        <span className="font-semibold group-hover:text-white group-focus:text-white">{about.title}</span>
+                        <div className="text-xs opacity-80 text-[#BA0021] group-hover:text-white group-focus:text-white">
+                          {about.description}
+                        </div>
+                      </Link>
+                    ))}
                   </div>
                 </NavigationMenuContent>
               </NavigationMenuItem>
-
               <NavigationMenuItem>
-                <NavigationMenuTrigger className="cursor-pointer">Programs</NavigationMenuTrigger>
-                <NavigationMenuContent>
-                  <div className="w-[400px] p-4 md:w-[500px] lg:w-[600px]">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {Programs.map((program) => (
-                        <Link
-                          key={program.title}
-                          href={`/${program.href}`}
-                          className="block select-none space-y-2 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
-                        >
-                          <program.icon className="mb-2 size-6" />
-                          <div className="text-sm font-semibold leading-none">
-                            {program.title}
-                          </div>
-                          <p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-                            {program.description}
-                          </p>
-                        </Link>
-                      ))}
-                    </div>
+                <NavigationMenuTrigger className="text-lg font-semibold text-white bg-transparent hover:underline hover:underline-offset-8 focus:underline focus:underline-offset-8 rounded transition-all duration-200">Programs</NavigationMenuTrigger>
+                <NavigationMenuContent className="bg-white text-[#BA0021] rounded shadow-lg mt-2 p-4 min-w-[250px]">
+                  <div className="grid gap-2 min-w-[340px]">
+                    {Programs.map((program) => (
+                      <Link
+                        key={program.title}
+                        href={`/${program.href}`}
+                        className="block px-2 py-1 rounded transition-colors font-semibold text-[#BA0021] hover:bg-[#BA0021] hover:text-white focus:bg-[#BA0021] focus:text-white group"
+                      >
+                        <span className="font-semibold group-hover:text-white group-focus:text-white">{program.title}</span>
+                        <div className="text-xs opacity-80 text-[#BA0021] group-hover:text-white group-focus:text-white">
+                          {program.description}
+                        </div>
+                      </Link>
+                    ))}
                   </div>
                 </NavigationMenuContent>
-              </NavigationMenuItem>
-
-             <NavigationMenuItem>
-                <Button variant="ghost" asChild>
-                  <Link href="/Blog" className="text-lg">Blog</Link>
-                </Button>
               </NavigationMenuItem>
             </NavigationMenuList>
             <NavigationMenuViewport />
           </NavigationMenu>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button className="cursor-pointer" asChild>
-            <Link href="/login">
-            Sign in <CircleChevronRight />
-            </Link>
+        {/* Right: Login/Sign Up */}
+        <div className="absolute right-0 top-0 h-full flex items-center gap-2 min-w-[180px] pr-2 justify-end">
+          <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
+          <Button
+            className="bg-white text-[#BA0021] font-semibold hover:bg-gray-100"
+            onClick={() => setLoginOpen(true)}
+          >
+            Login
           </Button>
-
-          
-          <div className="md:hidden">
-            <NavigationSheet />
-          </div>
+          <Button className="bg-[#BA0021] border border-white font-semibold hover:bg-white hover:text-[#BA0021]" asChild>
+            <Link href="/sign-up">Sign Up</Link>
+          </Button>
         </div>
       </div>
     </nav>

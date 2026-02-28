@@ -256,7 +256,7 @@ export default function ChatbotPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-4xl font-bold text-slate-900 mb-2 tracking-tight">
-              AI Assistant
+              Chatbot Assistant
             </h1>
             <p className="text-slate-600 text-lg">Get instant help with your queries</p>
           </div>
@@ -278,7 +278,7 @@ export default function ChatbotPage() {
                       <Bot className="h-6 w-6 text-white" />
                     </div>
                     <div>
-                      <CardTitle className="text-slate-900 text-xl">Extension Services Assistant</CardTitle>
+                      <CardTitle className="text-slate-900 text-xl">Chatbot Assistant</CardTitle>
                       <CardDescription className="text-slate-600 text-sm">
                         Online • Ready to help
                       </CardDescription>
