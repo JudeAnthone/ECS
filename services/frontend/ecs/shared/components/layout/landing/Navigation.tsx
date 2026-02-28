@@ -2,7 +2,6 @@
 import { Button } from "@/shared/components/ui/Button";
 import React, { useState } from "react";
 import dynamic from "next/dynamic";
-// Dynamically import LoginModal to avoid SSR issues
 const LoginModal = dynamic(() => import("@/shared/components/ui/LoginModal"), { ssr: false });
 import {
   Sheet,
@@ -66,7 +65,6 @@ const Navbar = () => {
           <span className="text-2xl font-extrabold tracking-tight select-none drop-shadow-sm">EARIST</span>
         </div>
 
-        {/* Center: Navigation Links */}
         <div className="flex-1 flex justify-center">
           <NavigationMenu>
             <NavigationMenuList className="flex gap-8">
@@ -113,7 +111,6 @@ const Navbar = () => {
           </NavigationMenu>
         </div>
 
-        {/* Right: Login/Sign Up */}
         <div className="absolute right-0 top-0 h-full flex items-center gap-2 min-w-[180px] pr-2 justify-end">
           <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
           <Button
