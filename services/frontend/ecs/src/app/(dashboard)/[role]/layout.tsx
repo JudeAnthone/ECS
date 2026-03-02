@@ -21,7 +21,7 @@ import {
 } from "@/shared/components/ui/Sidebar"
 import { useParams, usePathname } from "next/navigation"
 import { AuthService } from "@/shared/lib/auth-service"
-import { Bell, X } from "lucide-react"
+import { Bell, X, Settings, LogOut } from "lucide-react"
 
 import { AppSidebar } from "@/shared/components/layout/dashboard/app-sidebar"
 
@@ -135,26 +135,27 @@ function UserProfileHeader() {
           </div>
           <div className="py-1">
             <button
-              className="w-full flex items-center px-4 py-2 text-[#BA0021] font-medium hover:bg-[#BA0021]/10 text-left"
+              className="w-full flex items-center px-4 py-2 font-medium text-left text-[#BA0021] hover:bg-[#BA0021]/10"
               onClick={() => {
                 setProfileOpen(false);
                 router.push(`/${user.role}/settings`);
               }}
             >
-              <svg className="mr-2" width="18" height="18" fill="none" stroke="#BA0021" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 5 15.4a1.65 1.65 0 0 0-1.51-1V13a2 2 0 0 1 0-4v-.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 16 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c.14.31.22.65.22 1v2a2 2 0 0 1 0 4v.09c0 .35-.08.69-.22 1z"/></svg>
+              <Settings className="mr-2 text-[#BA0021]" />
               Settings
             </button>
             <hr className="my-1 border-slate-100" />
-            <button
-              className="w-full flex items-center px-4 py-2 text-red-600 font-medium hover:bg-red-50 text-left"
-              onClick={handleLogout}
-            >
-              <svg className="mr-2" width="18" height="18" fill="none" stroke="#BA0021" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-              Log out
-            </button>
+              <button
+                className="w-full flex items-center px-4 py-2 text-red-600 font-medium hover:bg-red-50 text-left"
+                onClick={handleLogout}
+              >
+                <LogOut className="mr-2" />
+                Log out
+              </button>
           </div>
         </div>
       )}
+
       <LogoutModal open={showLogout} onOpenChange={setShowLogout} onConfirm={confirmLogout} />
     </div>
   )

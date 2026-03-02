@@ -105,9 +105,9 @@ export function LandingUserMenu({ user }: { user: { name: string; email: string;
             <div className="py-1">
               <button
                 onClick={() => { setOpen(false); router.push(`/${user.role}/settings`); }}
-                className="w-full flex items-center px-4 py-2 text-[#BA0021] font-medium hover:bg-[#BA0021]/10 text-left"
+                className="w-full flex items-center px-4 py-2 font-medium text-left text-[#BA0021] hover:bg-[#BA0021]/10"
               >
-                <Settings className="mr-2" />
+                <Settings className="mr-2 text-[#BA0021]" />
                 Settings
               </button>
               <hr className="my-1 border-slate-100" />

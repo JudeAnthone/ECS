@@ -207,11 +207,11 @@ export default function SettingsPage() {
                         onClick={() => setActiveTab(tab.id)}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
                           activeTab === tab.id
-                            ? 'bg-indigo-600 text-white shadow-md'
-                            : 'text-slate-700 hover:bg-slate-100'
+                            ? 'bg-[#BA0021] text-white shadow-md'
+                            : 'text-slate-700 hover:bg-[#BA0021]/10'
                         }`}
                       >
-                        <Icon className="h-5 w-5" />
+                        <Icon className={activeTab === tab.id ? "h-5 w-5 text-white" : "h-5 w-5 text-[#BA0021]"} />
                         <span className="font-medium">{tab.label}</span>
                       </button>
                     );
@@ -228,7 +228,7 @@ export default function SettingsPage() {
               <Card className="bg-white border-slate-200 shadow-lg">
                 <CardHeader>
                   <CardTitle className="text-slate-900 text-2xl flex items-center gap-2">
-                    <User className="h-6 w-6 text-indigo-600" />
+                    <User className="h-6 w-6 text-[#BA0021]" />
                     Personal Information
                   </CardTitle>
                   <CardDescription>Your profile details on this system</CardDescription>
@@ -256,31 +256,31 @@ export default function SettingsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                        <User className="h-4 w-4 text-indigo-500" /> First Name
+                        <User className="h-4 w-4 text-[#BA0021]" /> First Name
                       </Label>
                       <Input value={firstName} onChange={e => setFirstName(e.target.value)} className="bg-white border-slate-300" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                        <User className="h-4 w-4 text-indigo-500" /> Last Name
+                        <User className="h-4 w-4 text-[#BA0021]" /> Last Name
                       </Label>
                       <Input value={lastName} onChange={e => setLastName(e.target.value)} className="bg-white border-slate-300" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                        <Mail className="h-4 w-4 text-indigo-500" /> Email Address
+                        <Mail className="h-4 w-4 text-[#BA0021]" /> Email Address
                       </Label>
                       <Input type="email" value={email} onChange={e => setEmail(e.target.value)} className="bg-white border-slate-300" />
                     </div>
                     <div className="space-y-1.5">
                       <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                        <Phone className="h-4 w-4 text-indigo-500" /> Contact Number
+                        <Phone className="h-4 w-4 text-[#BA0021]" /> Contact Number
                       </Label>
                       <Input type="tel" value={contactNumber} onChange={e => setContactNumber(e.target.value)} placeholder="e.g. +63 9xx xxx xxxx" className="bg-white border-slate-300" />
                     </div>
                   </div>
 
-                  <Button onClick={handleSaveContact} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                  <Button onClick={handleSaveContact} className="bg-[#BA0021] hover:bg-[#BA0021]/90 text-white">
                     Save Contact Info
                   </Button>
                 </CardContent>
@@ -292,7 +292,7 @@ export default function SettingsPage() {
               <Card className="bg-white border-slate-200 shadow-lg">
                 <CardHeader>
                   <CardTitle className="text-slate-900 text-2xl flex items-center gap-2">
-                    <Lock className="h-6 w-6 text-indigo-600" />
+                    <Lock className="h-6 w-6 text-[#BA0021]" />
                     Account & Security
                   </CardTitle>
                   <CardDescription>Password and account security information</CardDescription>
@@ -323,7 +323,7 @@ export default function SettingsPage() {
               <Card className="bg-white border-slate-200 shadow-lg">
                 <CardHeader>
                   <CardTitle className="text-slate-900 text-2xl flex items-center gap-2">
-                    <Bell className="h-6 w-6 text-indigo-600" />
+                    <Bell className="h-6 w-6 text-[#BA0021]" />
                     Notification Preferences
                   </CardTitle>
                   <CardDescription>Choose what notifications you want to receive</CardDescription>
@@ -344,7 +344,7 @@ export default function SettingsPage() {
                       <Switch checked={item.value} onCheckedChange={item.set} />
                     </div>
                   ))}
-                  <Button onClick={handleSaveNotifications} className="bg-indigo-600 hover:bg-indigo-700 text-white mt-2">
+                  <Button onClick={handleSaveNotifications} className="bg-[#BA0021] hover:bg-[#BA0021]/90 text-white mt-2">
                     Save Notification Settings
                   </Button>
                 </CardContent>
@@ -356,7 +356,7 @@ export default function SettingsPage() {
               <Card className="bg-white border-slate-200 shadow-lg">
                 <CardHeader>
                   <CardTitle className="text-slate-900 text-2xl flex items-center gap-2">
-                    <Palette className="h-6 w-6 text-indigo-600" />
+                    <Palette className="h-6 w-6 text-[#BA0021]" />
                     Display & Preferences
                   </CardTitle>
                   <CardDescription>Customize your experience</CardDescription>
@@ -365,7 +365,7 @@ export default function SettingsPage() {
 
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                      <Globe className="h-4 w-4 text-indigo-500" /> Language
+                      <Globe className="h-4 w-4 text-[#BA0021]" /> Language
                     </Label>
                     <Select value={language} onValueChange={setLanguage}>
                       <SelectTrigger className="bg-white border-slate-300"><SelectValue /></SelectTrigger>
@@ -377,7 +377,7 @@ export default function SettingsPage() {
 
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                      <Palette className="h-4 w-4 text-indigo-500" /> Theme
+                      <Palette className="h-4 w-4 text-[#BA0021]" /> Theme
                       <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">Coming soon</span>
                     </Label>
                     <Select value={theme} disabled>
@@ -395,7 +395,7 @@ export default function SettingsPage() {
 
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-indigo-500" /> Date Format
+                      <Calendar className="h-4 w-4 text-[#BA0021]" /> Date Format
                     </Label>
                     <Select value={dateFormat} onValueChange={setDateFormat}>
                       <SelectTrigger className="bg-white border-slate-300"><SelectValue /></SelectTrigger>
@@ -407,7 +407,7 @@ export default function SettingsPage() {
                     </Select>
                   </div>
 
-                  <Button onClick={handleSavePreferences} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                  <Button onClick={handleSavePreferences} className="bg-[#BA0021] hover:bg-[#BA0021]/90 text-white">
                     Save Preferences
                   </Button>
                 </CardContent>
