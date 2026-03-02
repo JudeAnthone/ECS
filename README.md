@@ -49,7 +49,7 @@ ECS/
 └── ...                            # Other project files/folders
 ```
 
-- `services/backend/go-services` — Go backend services (use "go run .cmd/main.go" here)
+- `services/backend/go-services` — Go backend services (use "go run ./cmd/main.go" here)
 - `services/frontend/ecs` — Next.js frontend React + TypeScript (use "npm run dev" here)
 
 ---
