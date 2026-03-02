@@ -1,6 +1,6 @@
 "use client";
 import { Button } from "@/shared/components/ui/Button";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 const LoginModal = dynamic(() => import("@/shared/components/ui/LoginModal"), { ssr: false });
 import {
@@ -28,10 +28,15 @@ import {
 
 import { AboutUs, Programs, } from "@/shared/configs/index";
 
+import { AuthService } from "@/shared/lib/auth-service";
+import { LandingUserMenu } from "@/shared/components/layout/landing/LandingUserMenu";
+
 const Navbar = () => {
   const [loginOpen, setLoginOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const navRef = React.useRef<HTMLElement>(null);
-  React.useEffect(() => {
+  useEffect(() => {
+    setUser(AuthService.getUser());
     const nav = navRef.current;
     if (!nav) return;
     const syncPadding = () => {
@@ -112,16 +117,27 @@ const Navbar = () => {
         </div>
 
         <div className="absolute right-0 top-0 h-full flex items-center gap-2 min-w-[180px] pr-2 justify-end">
-          <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
-          <Button
-            className="bg-white text-[#BA0021] font-semibold hover:bg-gray-100"
-            onClick={() => setLoginOpen(true)}
-          >
-            Login
-          </Button>
-          <Button className="bg-[#BA0021] border border-white font-semibold hover:bg-white hover:text-[#BA0021]" asChild>
-            <Link href="/sign-up">Sign Up</Link>
-          </Button>
+          {user ? (
+            <LandingUserMenu user={{
+              name: `${user.first_name} ${user.last_name}`,
+              email: user.email,
+              avatar: user.avatar_url || "",
+              role: user.role
+            }} />
+          ) : (
+            <>
+              <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
+              <Button
+                className="bg-white text-[#BA0021] font-semibold hover:bg-gray-100"
+                onClick={() => setLoginOpen(true)}
+              >
+                Login
+              </Button>
+              <Button className="bg-[#BA0021] border border-white font-semibold hover:bg-white hover:text-[#BA0021]" asChild>
+                <Link href="/sign-up">Sign Up</Link>
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </nav>

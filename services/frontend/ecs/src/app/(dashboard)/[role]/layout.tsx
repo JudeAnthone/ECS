@@ -33,10 +33,13 @@ function toPageTitle(slug: string) {
   return slug.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
 
+import LogoutModal from '@/shared/components/ui/LogoutModal'
+
 function UserProfileHeader() {
   const [user, setUser] = useState<any>(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [showLogout, setShowLogout] = useState(false)
   const router = useRouter();
   useEffect(() => {
     setUser(AuthService.getUser())
@@ -59,6 +62,13 @@ function UserProfileHeader() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [notifOpen, profileOpen])
   if (!user) return null
+  const handleLogout = () => {
+    setShowLogout(true);
+    setProfileOpen(false);
+  }
+  const confirmLogout = () => {
+    AuthService.logout();
+  }
   return (
     <div className="flex items-center gap-4 relative">
       {/* Bell icon (clickable) */}
@@ -105,42 +115,52 @@ function UserProfileHeader() {
         )}
       </button>
       {profileOpen && (
-        <div id="profile-dropdown" className="absolute top-10 right-0 z-50 w-56 bg-white rounded-lg shadow-lg border border-slate-200 animate-fade-in">
-          <div className="relative px-3 pt-2 pb-2 border-b border-slate-200">
-            <button onClick={() => setProfileOpen(false)} className="absolute top-1 right-1 p-1 rounded hover:bg-slate-100" aria-label="Close profile dropdown">
+        <div id="profile-dropdown" className="absolute top-12 right-0 z-50 min-w-[260px] max-w-[90vw] rounded-xl shadow-2xl border border-slate-200 bg-white animate-fade-in" style={{ boxShadow: '0 8px 32px 0 rgba(0,0,0,0.18)' }}>
+          <div className="flex items-center gap-3 px-4 py-3 text-left text-sm bg-[#BA0021]/5 rounded-t-xl relative">
+            {user.avatar_url ? (
+              <img src={user.avatar_url} alt="Profile" className="h-9 w-9 rounded-full border border-[#BA0021] object-cover" />
+            ) : (
+              <div className="h-9 w-9 rounded-full bg-[#BA0021] text-white font-bold flex items-center justify-center border border-[#BA0021]">
+                {user.first_name?.[0]?.toUpperCase()}{user.last_name?.[0]?.toUpperCase()}
+              </div>
+            )}
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-semibold text-[#BA0021]">{user.first_name} {user.last_name}</span>
+              <span className="truncate text-xs text-slate-500">{user.email}</span>
+              <span className="truncate text-xs text-[#BA0021] font-bold mt-1">{user.role?.replace('_', ' ').toUpperCase()}</span>
+            </div>
+            <button onClick={() => setProfileOpen(false)} className="absolute top-2 right-2 p-1 rounded hover:bg-slate-200" aria-label="Close profile dropdown">
               <X className="w-4 h-4 text-slate-500" />
             </button>
-            <div>
-              <div className="font-semibold text-sm text-slate-800">{user.first_name} {user.last_name}</div>
-              <div className="text-xs text-slate-500 break-all">{user.email}</div>
-              <div className="text-xs text-[#BA0021] font-bold mt-1">{user.role?.replace('_', ' ').toUpperCase()}</div>
-            </div>
           </div>
-          <button
-            className="w-full text-left px-4 py-2 text-sm text-black hover:bg-slate-100"
-            onClick={() => {
-              setProfileOpen(false);
-              router.push(`/${user.role}/settings`);
-            }}
-          >
-            Settings
-          </button>
-          <hr className="my-1 border-slate-200" />
-          <button
-            className="w-full text-left px-4 py-2 text-sm text-black hover:bg-slate-100"
-            onClick={() => {
-              AuthService.logout();
-              setProfileOpen(false);
-              router.push("/");
-            }}
-          >
-            Logout
-          </button>
+          <div className="py-1">
+            <button
+              className="w-full flex items-center px-4 py-2 text-[#BA0021] font-medium hover:bg-[#BA0021]/10 text-left"
+              onClick={() => {
+                setProfileOpen(false);
+                router.push(`/${user.role}/settings`);
+              }}
+            >
+              <svg className="mr-2" width="18" height="18" fill="none" stroke="#BA0021" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 5 15.4a1.65 1.65 0 0 0-1.51-1V13a2 2 0 0 1 0-4v-.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 16 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c.14.31.22.65.22 1v2a2 2 0 0 1 0 4v.09c0 .35-.08.69-.22 1z"/></svg>
+              Settings
+            </button>
+            <hr className="my-1 border-slate-100" />
+            <button
+              className="w-full flex items-center px-4 py-2 text-red-600 font-medium hover:bg-red-50 text-left"
+              onClick={handleLogout}
+            >
+              <svg className="mr-2" width="18" height="18" fill="none" stroke="#BA0021" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Log out
+            </button>
+          </div>
         </div>
       )}
+      <LogoutModal open={showLogout} onOpenChange={setShowLogout} onConfirm={confirmLogout} />
     </div>
   )
 }
+
+import Link from "next/link"
 
 export default function Layout({ children }: LayoutProps) {
   const params = useParams()
@@ -158,7 +178,7 @@ export default function Layout({ children }: LayoutProps) {
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 text-white" style={{ backgroundColor: '#BA0021', color: '#fff' }}>
           <div className="flex items-center justify-between w-full px-4">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <SidebarTrigger className="-ml-1" />
               <Separator
                 orientation="vertical"
@@ -167,6 +187,13 @@ export default function Layout({ children }: LayoutProps) {
               <span className="text-lg font-semibold tracking-wide text-white select-none" style={{ letterSpacing: '0.04em' }}>
                 EARIST EXTENSION SERVICE
               </span>
+              <span className="mx-4 h-6 border-l border-white/50"></span>
+              {/* Navigation Links */}
+              <nav className="flex items-center gap-2">
+                <Link href="/" className="text-white hover:underline font-medium">Home</Link>
+                <span className="mx-1 text-white/70">&bull;</span>
+                <Link href={`/${role}/${role}-dashboard`} className="text-white hover:underline font-medium">Dashboard</Link>
+              </nav>
             </div>
             <UserProfileHeader />
           </div>
