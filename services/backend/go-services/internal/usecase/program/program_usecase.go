@@ -213,6 +213,31 @@ func (uc *programUseCase) DeleteProgram(ctx context.Context, id string) error {
 
 // AssignProgramChair assigns or removes a program chair from a program
 func (uc *programUseCase) AssignProgramChair(ctx context.Context, programID string, chairID *string) error {
+	if chairID != nil {
+		program, err := uc.programRepo.GetByID(ctx, programID)
+		if err != nil {
+			return fmt.Errorf("failed to get program: %w", err)
+		}
+
+		// Allow no-op assignment to the same chair without consuming cap checks.
+		if program.ProgramChairID == nil || *program.ProgramChairID != *chairID {
+			chairsPrograms, err := uc.programRepo.GetByProgramChair(ctx, *chairID)
+			if err != nil {
+				return fmt.Errorf("failed to check assigned program chair: %w", err)
+			}
+
+			if len(chairsPrograms) == 0 {
+				distinctChairs, err := uc.programRepo.CountDistinctAssignedChairs(ctx)
+				if err != nil {
+					return fmt.Errorf("failed to check program chair limit: %w", err)
+				}
+				if distinctChairs >= 3 {
+					return fmt.Errorf("program chair limit reached: only 3 program chairs can be assigned")
+				}
+			}
+		}
+	}
+
 	if err := uc.programRepo.AssignProgramChair(ctx, programID, chairID); err != nil {
 		return fmt.Errorf("failed to assign program chair: %w", err)
 	}

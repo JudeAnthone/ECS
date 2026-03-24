@@ -28,16 +28,17 @@ type AuthResponse struct {
 
 // UserDTO represents user data in responses
 type UserDTO struct {
-	ID            string  `json:"id"`
-	Username      string  `json:"username"`
-	FirstName     string  `json:"first_name"`
-	LastName      string  `json:"last_name"`
-	Email         string  `json:"email"`
-	Role          string  `json:"role"`
-	Department    *string `json:"department,omitempty"`
-	ContactNumber *string `json:"contact_number,omitempty"`
-	AccountStatus string  `json:"account_status"`
-	AvatarURL     *string `json:"avatar_url,omitempty"`
-	LastActive    *string `json:"last_active,omitempty"`
-	CreatedAt     string  `json:"created_at"`
+	ID                     string  `json:"id"`
+	Username               string  `json:"username"`
+	FirstName              string  `json:"first_name"`
+	LastName               string  `json:"last_name"`
+	Email                  string  `json:"email"`
+	Role                   string  `json:"role"`
+	Department             *string `json:"department,omitempty"`
+	AssignedProgramChairID *string `json:"assigned_program_chair_id,omitempty"`
+	ContactNumber          *string `json:"contact_number,omitempty"`
+	AccountStatus          string  `json:"account_status"`
+	AvatarURL              *string `json:"avatar_url,omitempty"`
+	LastActive             *string `json:"last_active,omitempty"`
+	CreatedAt              string  `json:"created_at"`
 }

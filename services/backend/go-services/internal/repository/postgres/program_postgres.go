@@ -329,6 +329,22 @@ func (r *programRepository) GetByProgramChair(ctx context.Context, programChairI
 	return programs, nil
 }
 
+// CountDistinctAssignedChairs returns the number of distinct program chairs assigned to programs.
+func (r *programRepository) CountDistinctAssignedChairs(ctx context.Context) (int, error) {
+	query := `
+		SELECT COUNT(DISTINCT program_chair_id)
+		FROM programs
+		WHERE program_chair_id IS NOT NULL
+	`
+
+	var count int
+	if err := r.db.QueryRow(ctx, query).Scan(&count); err != nil {
+		return 0, fmt.Errorf("failed to count assigned program chairs: %w", err)
+	}
+
+	return count, nil
+}
+
 // Update updates an existing program
 func (r *programRepository) Update(ctx context.Context, program *domain.Program) error {
 	query := `

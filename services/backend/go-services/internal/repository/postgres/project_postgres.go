@@ -84,6 +84,29 @@ func (r *ProjectRepository) GetByProgramID(ctx context.Context, programID string
 	return projects, nil
 }
 
+// GetByID retrieves a single project by ID.
+func (r *ProjectRepository) GetByID(ctx context.Context, id string) (*domain.Project, error) {
+	query := `
+		SELECT id, project_name, project_description, program_id, department_id, project_head_id,
+		       objectives, budget_allocated, budget_used, start_date, end_date, progress_percentage,
+		       status, approval_status, is_published, created_at, updated_at
+		FROM projects
+		WHERE id = $1
+	`
+
+	p := &domain.Project{}
+	if err := r.db.QueryRow(ctx, query, id).Scan(
+		&p.ID, &p.ProjectName, &p.ProjectDescription, &p.ProgramID,
+		&p.DepartmentID, &p.ProjectHeadID, &p.Objectives,
+		&p.BudgetAllocated, &p.BudgetUsed, &p.StartDate, &p.EndDate, &p.ProgressPercentage,
+		&p.Status, &p.ApprovalStatus, &p.IsPublished, &p.CreatedAt, &p.UpdatedAt,
+	); err != nil {
+		return nil, fmt.Errorf("failed to get project: %w", err)
+	}
+
+	return p, nil
+}
+
 // Update modifies an existing project's fields
 func (r *ProjectRepository) Update(ctx context.Context, id string, req *domain.UpdateProjectRequest) error {
 	var startDate, endDate *string

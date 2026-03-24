@@ -36,5 +36,5 @@ type UseCase interface {
 	GetRequestsByDepartmentChair(ctx context.Context, chairID string) ([]*domain.ProjectRequest, error)
 
 	// Program Chair: reroute a request to another department
-	RerouteRequest(ctx context.Context, requestID, departmentID string) error
+	RerouteRequest(ctx context.Context, chairID, requestID, departmentID string) error
 }

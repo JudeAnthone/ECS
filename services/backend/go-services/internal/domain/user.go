@@ -6,20 +6,21 @@ import (
 
 // User represents a user in the system
 type User struct {
-	ID            string
-	Username      string
-	FirstName     string
-	LastName      string
-	Email         string
-	PasswordHash  string
-	AvatarURL     *string
-	Role          string
-	Department    *string
-	ContactNumber *string
-	AccountStatus string
-	LastActive    *time.Time
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID                     string
+	Username               string
+	FirstName              string
+	LastName               string
+	Email                  string
+	PasswordHash           string
+	AvatarURL              *string
+	Role                   string
+	Department             *string
+	AssignedProgramChairID *string
+	ContactNumber          *string
+	AccountStatus          string
+	LastActive             *time.Time
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 // GetFullName returns the user's full name

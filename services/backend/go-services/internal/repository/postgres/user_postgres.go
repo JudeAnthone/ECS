@@ -49,7 +49,7 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
 		SELECT id, username, first_name, last_name, email, password_hash, avatar_url,
-		       role, department, contact_number, account_status, last_active,
+		       role, department, assigned_program_chair_id, contact_number, account_status, last_active,
 		       created_at, updated_at
 		FROM users
 		WHERE email = $1
@@ -66,6 +66,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 		&user.AvatarURL,
 		&user.Role,
 		&user.Department,
+		&user.AssignedProgramChairID,
 		&user.ContactNumber,
 		&user.AccountStatus,
 		&user.LastActive,
@@ -86,7 +87,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
 		SELECT id, username, first_name, last_name, email, password_hash, avatar_url,
-		       role, department, contact_number, account_status, last_active,
+		       role, department, assigned_program_chair_id, contact_number, account_status, last_active,
 		       created_at, updated_at
 		FROM users
 		WHERE id = $1
@@ -103,6 +104,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*domain.User, 
 		&user.AvatarURL,
 		&user.Role,
 		&user.Department,
+		&user.AssignedProgramChairID,
 		&user.ContactNumber,
 		&user.AccountStatus,
 		&user.LastActive,
@@ -124,8 +126,8 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	query := `
 		UPDATE users
 		SET username = $1, first_name = $2, last_name = $3, email = $4, role = $5, department = $6, 
-		    contact_number = $7, account_status = $8, avatar_url = $9
-		WHERE id = $10
+		    assigned_program_chair_id = $7, contact_number = $8, account_status = $9, avatar_url = $10
+		WHERE id = $11
 	`
 
 	_, err := r.db.Exec(
@@ -137,6 +139,7 @@ func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 		user.Email,
 		user.Role,
 		user.Department,
+		user.AssignedProgramChairID,
 		user.ContactNumber,
 		user.AccountStatus,
 		user.AvatarURL,
@@ -174,7 +177,7 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*domain.User, error) {
 	query := `
 		SELECT id, username, first_name, last_name, email, password_hash, avatar_url,
-		       role, department, contact_number, account_status, last_active,
+		       role, department, assigned_program_chair_id, contact_number, account_status, last_active,
 		       created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC
@@ -199,6 +202,7 @@ func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*domain.User, error
 			&user.AvatarURL,
 			&user.Role,
 			&user.Department,
+			&user.AssignedProgramChairID,
 			&user.ContactNumber,
 			&user.AccountStatus,
 			&user.LastActive,
@@ -237,7 +241,7 @@ func (r *UserRepository) UpdateAccountStatus(ctx context.Context, userID string,
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) {
 	query := `
 		SELECT id, username, first_name, last_name, email, password_hash, avatar_url,
-		       role, department, contact_number, account_status, last_active,
+		       role, department, assigned_program_chair_id, contact_number, account_status, last_active,
 		       created_at, updated_at
 		FROM users
 		WHERE username = $1
@@ -254,6 +258,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*d
 		&user.AvatarURL,
 		&user.Role,
 		&user.Department,
+		&user.AssignedProgramChairID,
 		&user.ContactNumber,
 		&user.AccountStatus,
 		&user.LastActive,
@@ -284,7 +289,7 @@ func (r *UserRepository) UpdateLastActive(ctx context.Context, userID string) er
 func (r *UserRepository) GetUsersByRole(ctx context.Context, role string) ([]*domain.User, error) {
 	query := `
 		SELECT id, username, first_name, last_name, email, password_hash, avatar_url,
-		       role, department, contact_number, account_status, last_active,
+		       role, department, assigned_program_chair_id, contact_number, account_status, last_active,
 		       created_at, updated_at
 		FROM users
 		WHERE role = $1 AND account_status = 'active'
@@ -309,6 +314,7 @@ func (r *UserRepository) GetUsersByRole(ctx context.Context, role string) ([]*do
 			&user.AvatarURL,
 			&user.Role,
 			&user.Department,
+			&user.AssignedProgramChairID,
 			&user.ContactNumber,
 			&user.AccountStatus,
 			&user.LastActive,

@@ -72,6 +72,7 @@ interface UserOption {
   last_name: string;
   email: string;
   department?: string;
+  assigned_program_chair_id?: string;
   avatar_url?: string | null;
 }
 
@@ -347,6 +348,11 @@ function ProjectsView({ program, departments, onBack }: {
   const [assignHeadError, setAssignHeadError] = useState('');
   const emptyForm = { project_name: '', project_description: '', objectives: '', budget_allocated: '', start_date: '', end_date: '' };
   const [form, setForm] = useState(emptyForm);
+  const currentUser = AuthService.getUser();
+  const eligibleHeads = React.useMemo(
+    () => heads.filter((h) => h.assigned_program_chair_id === currentUser?.id),
+    [heads, currentUser?.id]
+  );
 
   useEffect(() => {
     loadProjects();
@@ -672,11 +678,11 @@ function ProjectsView({ program, departments, onBack }: {
                   <span className="text-slate-500">None (remove assignment)</span>
                   {selectedHeadID === '__none__' && <span className="ml-auto text-slate-400 text-xs">✓</span>}
                 </button>
-                {heads.length === 0 ? (
+                {eligibleHeads.length === 0 ? (
                   <div className="px-4 py-5 text-center text-sm text-slate-400">
-                    No active project heads available.
+                    No project heads assigned to your program chair team.
                   </div>
-                ) : heads.map(u => (
+                ) : eligibleHeads.map(u => (
                   <button
                     key={u.id}
                     type="button"

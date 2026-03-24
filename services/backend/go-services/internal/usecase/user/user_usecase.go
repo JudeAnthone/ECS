@@ -33,18 +33,19 @@ func (uc *userUseCase) GetAllUsers(ctx context.Context) ([]*dto.UserDTO, error) 
 		}
 
 		userDTOs = append(userDTOs, &dto.UserDTO{
-			ID:            user.ID,
-			Username:      user.Username,
-			FirstName:     user.FirstName,
-			LastName:      user.LastName,
-			Email:         user.Email,
-			Role:          user.Role,
-			Department:    user.Department,
-			ContactNumber: user.ContactNumber,
-			AccountStatus: user.AccountStatus,
-			AvatarURL:     user.AvatarURL,
-			LastActive:    lastActive,
-			CreatedAt:     user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ID:                     user.ID,
+			Username:               user.Username,
+			FirstName:              user.FirstName,
+			LastName:               user.LastName,
+			Email:                  user.Email,
+			Role:                   user.Role,
+			Department:             user.Department,
+			AssignedProgramChairID: user.AssignedProgramChairID,
+			ContactNumber:          user.ContactNumber,
+			AccountStatus:          user.AccountStatus,
+			AvatarURL:              user.AvatarURL,
+			LastActive:             lastActive,
+			CreatedAt:              user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
 
@@ -61,6 +62,20 @@ func (uc *userUseCase) ApproveUser(ctx context.Context, userID string, approvedB
 	// Check if user is pending approval
 	if user.AccountStatus != "pending_approval" {
 		return fmt.Errorf("user is not pending approval")
+	}
+
+	if (user.Role == "project_head" || user.Role == "staff") && user.AssignedProgramChairID == nil {
+		return fmt.Errorf("project_head and staff users must be assigned to a program chair before approval")
+	}
+
+	if user.Role == "program_chair" {
+		chairs, err := uc.userRepo.GetUsersByRole(ctx, "program_chair")
+		if err != nil {
+			return fmt.Errorf("failed to validate program chair limit: %w", err)
+		}
+		if len(chairs) >= 3 {
+			return fmt.Errorf("program chair limit reached: only 3 program chairs can be active")
+		}
 	}
 
 	// Update status to active
@@ -158,7 +173,20 @@ func (uc *userUseCase) UpdateUser(ctx context.Context, userID string, updates *d
 
 	if updates.Role != nil {
 		newRole := *updates.Role
+		if newRole == "program_chair" && user.Role != "program_chair" {
+			chairs, err := uc.userRepo.GetUsersByRole(ctx, "program_chair")
+			if err != nil {
+				return fmt.Errorf("failed to validate program chair limit: %w", err)
+			}
+			if len(chairs) >= 3 {
+				return fmt.Errorf("program chair limit reached: only 3 program chairs can be active")
+			}
+		}
 		user.Role = newRole
+
+		if newRole == "admin" || newRole == "program_chair" || newRole == "public_user" {
+			user.AssignedProgramChairID = nil
+		}
 
 		// Handle department constraints based on role
 		if newRole == "admin" || newRole == "public_user" {
@@ -179,8 +207,39 @@ func (uc *userUseCase) UpdateUser(ctx context.Context, userID string, updates *d
 			user.ContactNumber = updates.ContactNumber
 		}
 	}
+
+	if updates.AssignedProgramChairID != nil {
+		if *updates.AssignedProgramChairID == "" {
+			user.AssignedProgramChairID = nil
+		} else {
+			if user.Role != "project_head" && user.Role != "staff" {
+				return fmt.Errorf("only project_head and staff users can be assigned to a program chair")
+			}
+			chair, err := uc.userRepo.GetByID(ctx, *updates.AssignedProgramChairID)
+			if err != nil {
+				return fmt.Errorf("failed to validate assigned program chair: %w", err)
+			}
+			if chair.Role != "program_chair" {
+				return fmt.Errorf("assigned_program_chair_id must reference a user with role program_chair")
+			}
+			user.AssignedProgramChairID = updates.AssignedProgramChairID
+		}
+	}
 	if updates.AccountStatus != nil {
+		if *updates.AccountStatus == "active" && user.AccountStatus != "active" && user.Role == "program_chair" {
+			chairs, err := uc.userRepo.GetUsersByRole(ctx, "program_chair")
+			if err != nil {
+				return fmt.Errorf("failed to validate program chair limit: %w", err)
+			}
+			if len(chairs) >= 3 {
+				return fmt.Errorf("program chair limit reached: only 3 program chairs can be active")
+			}
+		}
 		user.AccountStatus = *updates.AccountStatus
+	}
+
+	if user.AccountStatus == "active" && (user.Role == "project_head" || user.Role == "staff") && user.AssignedProgramChairID == nil {
+		return fmt.Errorf("active project_head and staff users must be assigned to a program chair")
 	}
 
 	// Update the user
@@ -201,13 +260,14 @@ func (uc *userUseCase) GetUsersByRole(ctx context.Context, role string) ([]*dto.
 	var result []*dto.UserDTO
 	for _, u := range users {
 		result = append(result, &dto.UserDTO{
-			ID:         u.ID,
-			Username:   u.Username,
-			FirstName:  u.FirstName,
-			LastName:   u.LastName,
-			Email:      u.Email,
-			Role:       u.Role,
-			Department: u.Department,
+			ID:                     u.ID,
+			Username:               u.Username,
+			FirstName:              u.FirstName,
+			LastName:               u.LastName,
+			Email:                  u.Email,
+			Role:                   u.Role,
+			Department:             u.Department,
+			AssignedProgramChairID: u.AssignedProgramChairID,
 		})
 	}
 	if result == nil {

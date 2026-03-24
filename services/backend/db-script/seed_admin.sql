@@ -16,6 +16,7 @@ INSERT INTO users (
     email,
     password_hash,
     role,
+    department,
     account_status
 ) VALUES (
     'admin',
@@ -24,6 +25,7 @@ INSERT INTO users (
     'admin@extensionservice.com',
     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'admin',
+    'System Administration',
     'active'
 );
 
@@ -34,6 +36,7 @@ INSERT INTO users (
     email,
     password_hash,
     role,
+    department,
     account_status
 ) VALUES (
     'programchair',
@@ -42,6 +45,7 @@ INSERT INTO users (
     'programchair@extensionservice.com',
     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'program_chair',
+    'Program Management',
     'active'
 );
 
@@ -81,7 +85,7 @@ INSERT INTO users (
     'projecthead@extensionservice.com',
     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'project_head',
-    'CCS',
+    'College of Computer Studies',
     'active'
 );
 
@@ -101,9 +105,19 @@ INSERT INTO users (
     'departmentstaff@extensionservice.com',
     '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
     'staff',
-    'CCS',
+    'College of Computer Studies',
     'active'
 );
+
+-- Assign seeded team members to the seeded program chair
+UPDATE users
+SET assigned_program_chair_id = (
+    SELECT id
+    FROM users
+    WHERE username = 'programchair'
+    LIMIT 1
+)
+WHERE username IN ('projecthead', 'departmentstaff');
 
 
 -- Verify admin user
@@ -112,4 +126,6 @@ FROM users
 WHERE username = 'admin';
 
 -- Verify other users
-SELECT id, username, email, role, account_status, created_at FROM users WHERE username IN ('programchair', 'publicuser', 'projecthead', 'departmentstaff');
+SELECT id, username, email, role, department, account_status, assigned_program_chair_id, created_at
+FROM users
+WHERE username IN ('programchair', 'publicuser', 'projecthead', 'departmentstaff');

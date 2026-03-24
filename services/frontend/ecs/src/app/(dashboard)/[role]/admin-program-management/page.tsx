@@ -71,6 +71,7 @@ interface UserOption {
   last_name: string;
   email: string;
   department?: string;
+  assigned_program_chair_id?: string;
   avatar_url?: string | null;
 }
 
@@ -82,11 +83,13 @@ function UserAvatar({ user, size = 'md' }: { user: UserOption; size?: 'sm' | 'md
     : <div className={`${szClass} rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center shrink-0`}>{initials}</div>;
 }
 
-function UserPickerList({ users, value, onChange, emptyLabel }: {
+function UserPickerList({ users, value, onChange, emptyLabel, isDisabled, disabledReason }: {
   users: UserOption[];
   value: string;
   onChange: (id: string) => void;
   emptyLabel: string;
+  isDisabled?: (user: UserOption) => boolean;
+  disabledReason?: string;
 }) {
   return (
     <div className="border border-slate-200 rounded-lg overflow-hidden">
@@ -109,23 +112,27 @@ function UserPickerList({ users, value, onChange, emptyLabel }: {
         </div>
       ) : (
         <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
-          {users.map(u => (
+          {users.map(u => {
+            const disabled = isDisabled?.(u) ?? false;
+            return (
             <button
               key={u.id}
               type="button"
-              onClick={() => onChange(u.id)}
+              onClick={() => !disabled && onChange(u.id)}
+              disabled={disabled}
               className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors ${
-                value === u.id ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                value === u.id ? 'bg-indigo-50' : disabled ? 'bg-slate-50 opacity-60 cursor-not-allowed' : 'hover:bg-slate-50'
               }`}
             >
               <UserAvatar user={u} size="sm" />
               <div className="flex flex-col items-start min-w-0">
                 <span className="text-sm font-medium text-slate-800 truncate">{u.first_name} {u.last_name}</span>
                 <span className="text-xs text-slate-400 truncate">{u.email}</span>
+                {disabled && disabledReason && <span className="text-[11px] text-amber-600 truncate">{disabledReason}</span>}
               </div>
               {value === u.id && <span className="ml-auto text-indigo-500 text-xs font-medium">✓</span>}
             </button>
-          ))}
+          )})}
         </div>
       )}
     </div>
@@ -419,6 +426,13 @@ function ProjectsView({ program, departments, onBack }: {
       .then(d => setHeads(d.users || []))
       .catch(() => setHeads([]));
   }, []);
+
+  const eligibleHeads = React.useMemo(() => {
+    if (!program.program_chair_id) {
+      return [];
+    }
+    return heads.filter((h) => h.assigned_program_chair_id === program.program_chair_id);
+  }, [heads, program.program_chair_id]);
 
   const loadProjects = async () => {
     try {
@@ -748,10 +762,12 @@ function ProjectsView({ program, departments, onBack }: {
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700">Select Project Head</label>
               <UserPickerList
-                users={heads}
+                users={eligibleHeads}
                 value={selectedHeadID}
                 onChange={setSelectedHeadID}
-                emptyLabel="No active project heads. Register a user with the project_head role first."
+                emptyLabel={program.program_chair_id
+                  ? 'No project heads assigned to this program chair team.'
+                  : 'Assign a program chair to this program first.'}
               />
             </div>
             <div className="flex justify-end gap-2">
@@ -787,6 +803,17 @@ export default function AdminProgramManagement() {
   const [chairs, setChairs] = useState<UserOption[]>([]);
   const [selectedChairID, setSelectedChairID] = useState('__none__');
   const [assignChairError, setAssignChairError] = useState('');
+
+  const assignedChairIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    programs.forEach((p) => {
+      if (p.program_chair_id) {
+        ids.add(p.program_chair_id);
+      }
+    });
+    return ids;
+  }, [programs]);
+  const assignedChairCount = assignedChairIds.size;
 
   const emptyForm = {
     program_name: '', program_description: '', program_category: '',
@@ -898,6 +925,10 @@ export default function AdminProgramManagement() {
 
   const handleAssignChair = async () => {
     if (!assignChairProgram) return;
+    if (selectedChairID !== '__none__' && assignedChairCount >= 3 && !assignedChairIds.has(selectedChairID)) {
+      setAssignChairError('Program chair limit reached: only 3 distinct program chairs can be assigned.');
+      return;
+    }
     const res = await fetch(`${API}/programs/${assignChairProgram.id}/assign-chair`, {
       method: 'PATCH', headers: authHeaders(),
       body: JSON.stringify({ program_chair_id: selectedChairID === '__none__' ? null : selectedChairID }),
@@ -1138,6 +1169,9 @@ export default function AdminProgramManagement() {
                   <DialogDescription>{assignChairProgram?.program_name}</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 pt-2">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                    Program chair usage: <span className="font-semibold">{assignedChairCount}/3</span>
+                  </div>
                   {assignChairError && (
                     <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                       <XCircle className="w-4 h-4 mt-0.5 shrink-0" /><span>{assignChairError}</span>
@@ -1164,6 +1198,8 @@ export default function AdminProgramManagement() {
                       value={selectedChairID}
                       onChange={setSelectedChairID}
                       emptyLabel="No active program chairs. Register a user with the program_chair role first."
+                      isDisabled={(chair) => assignedChairCount >= 3 && !assignedChairIds.has(chair.id)}
+                      disabledReason="Global limit reached (3 chairs). Use one of the currently assigned chairs."
                     />
                   </div>
                   <div className="flex justify-end gap-2">

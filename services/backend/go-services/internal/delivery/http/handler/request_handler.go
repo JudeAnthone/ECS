@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/domain"
 	requestuc "github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/request"
@@ -101,11 +102,30 @@ func (h *RequestHandler) GetRequests(w http.ResponseWriter, r *http.Request) {
 
 // GetRequestByID handles GET /api/v1/requests/{id}
 func (h *RequestHandler) GetRequestByID(w http.ResponseWriter, r *http.Request) {
+	userID, _ := r.Context().Value("user_id").(string)
+	role, _ := r.Context().Value("role").(string)
 	id := mux.Vars(r)["id"]
 	req, err := h.requestUsecase.GetRequestByID(r.Context(), id)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, err.Error())
 		return
+	}
+
+	if role != domain.RoleAdmin {
+		if role == domain.RoleProgramChair {
+			if req.ReviewedBy != nil && *req.ReviewedBy != "" && *req.ReviewedBy != userID {
+				respondWithError(w, http.StatusForbidden, "you cannot access requests owned by another program chair")
+				return
+			}
+		} else if role == domain.RoleProjectHead {
+			if req.AssignedToProjectHead == nil || *req.AssignedToProjectHead != userID {
+				respondWithError(w, http.StatusForbidden, "you can only access requests assigned to you")
+				return
+			}
+		} else if req.RequestedBy != userID {
+			respondWithError(w, http.StatusForbidden, "you can only access your own requests")
+			return
+		}
 	}
 	respondWithJSON(w, http.StatusOK, req)
 }
@@ -113,7 +133,26 @@ func (h *RequestHandler) GetRequestByID(w http.ResponseWriter, r *http.Request) 
 // DeleteRequest handles DELETE /api/v1/requests/{id}
 // Accessible by: program_chair, admin
 func (h *RequestHandler) DeleteRequest(w http.ResponseWriter, r *http.Request) {
+	userID, _ := r.Context().Value("user_id").(string)
+	role, _ := r.Context().Value("role").(string)
 	id := mux.Vars(r)["id"]
+	req, err := h.requestUsecase.GetRequestByID(r.Context(), id)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	if role != domain.RoleAdmin {
+		if role == domain.RoleProgramChair {
+			if req.ReviewedBy == nil || *req.ReviewedBy != userID {
+				respondWithError(w, http.StatusForbidden, "you can only delete requests owned by your program chair account")
+				return
+			}
+		} else if req.RequestedBy != userID {
+			respondWithError(w, http.StatusForbidden, "you can only delete your own request")
+			return
+		}
+	}
 	if err := h.requestUsecase.DeleteRequest(r.Context(), id); err != nil {
 		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
@@ -124,6 +163,7 @@ func (h *RequestHandler) DeleteRequest(w http.ResponseWriter, r *http.Request) {
 // RerouteRequest handles PATCH /api/v1/requests/{id}/reroute
 // Allows a program chair to redirect a request to a different department.
 func (h *RequestHandler) RerouteRequest(w http.ResponseWriter, r *http.Request) {
+	chairID, _ := r.Context().Value("user_id").(string)
 	id := mux.Vars(r)["id"]
 
 	var input domain.RerouteRequestInput
@@ -136,7 +176,11 @@ func (h *RequestHandler) RerouteRequest(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.requestUsecase.RerouteRequest(r.Context(), id, input.TargetDepartmentID); err != nil {
+	if err := h.requestUsecase.RerouteRequest(r.Context(), chairID, id, input.TargetDepartmentID); err != nil {
+		if strings.HasPrefix(err.Error(), "forbidden:") {
+			respondWithError(w, http.StatusForbidden, strings.TrimPrefix(err.Error(), "forbidden: "))
+			return
+		}
 		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -147,6 +191,10 @@ func (h *RequestHandler) RerouteRequest(w http.ResponseWriter, r *http.Request) 
 // Accessible by: program_chair
 func (h *RequestHandler) ProgramChairReview(w http.ResponseWriter, r *http.Request) {
 	chairID, _ := r.Context().Value("user_id").(string)
+	if chairID == "" {
+		respondWithError(w, http.StatusUnauthorized, "user not authenticated")
+		return
+	}
 	id := mux.Vars(r)["id"]
 
 	var input domain.ProgramChairReviewInput
@@ -156,6 +204,10 @@ func (h *RequestHandler) ProgramChairReview(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.requestUsecase.ProgramChairReview(r.Context(), chairID, id, &input); err != nil {
+		if strings.HasPrefix(err.Error(), "forbidden:") {
+			respondWithError(w, http.StatusForbidden, strings.TrimPrefix(err.Error(), "forbidden: "))
+			return
+		}
 		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -166,6 +218,10 @@ func (h *RequestHandler) ProgramChairReview(w http.ResponseWriter, r *http.Reque
 // Accessible by: program_chair
 func (h *RequestHandler) AssignToHead(w http.ResponseWriter, r *http.Request) {
 	chairID, _ := r.Context().Value("user_id").(string)
+	if chairID == "" {
+		respondWithError(w, http.StatusUnauthorized, "user not authenticated")
+		return
+	}
 	id := mux.Vars(r)["id"]
 
 	var input domain.AssignToHeadInput
@@ -175,6 +231,10 @@ func (h *RequestHandler) AssignToHead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.requestUsecase.AssignToHead(r.Context(), chairID, id, &input); err != nil {
+		if strings.HasPrefix(err.Error(), "forbidden:") {
+			respondWithError(w, http.StatusForbidden, strings.TrimPrefix(err.Error(), "forbidden: "))
+			return
+		}
 		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -185,6 +245,10 @@ func (h *RequestHandler) AssignToHead(w http.ResponseWriter, r *http.Request) {
 // Accessible by: project_head
 func (h *RequestHandler) ProjectHeadRespond(w http.ResponseWriter, r *http.Request) {
 	headID, _ := r.Context().Value("user_id").(string)
+	if headID == "" {
+		respondWithError(w, http.StatusUnauthorized, "user not authenticated")
+		return
+	}
 	id := mux.Vars(r)["id"]
 
 	var input domain.ProjectHeadRespondInput
@@ -194,6 +258,10 @@ func (h *RequestHandler) ProjectHeadRespond(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.requestUsecase.ProjectHeadRespond(r.Context(), headID, id, &input); err != nil {
+		if strings.HasPrefix(err.Error(), "forbidden:") {
+			respondWithError(w, http.StatusForbidden, strings.TrimPrefix(err.Error(), "forbidden: "))
+			return
+		}
 		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -204,6 +272,10 @@ func (h *RequestHandler) ProjectHeadRespond(w http.ResponseWriter, r *http.Reque
 // Accessible by: project_head
 func (h *RequestHandler) SubmitProposal(w http.ResponseWriter, r *http.Request) {
 	headID, _ := r.Context().Value("user_id").(string)
+	if headID == "" {
+		respondWithError(w, http.StatusUnauthorized, "user not authenticated")
+		return
+	}
 	id := mux.Vars(r)["id"]
 
 	var input domain.SubmitProposalInput
@@ -213,6 +285,10 @@ func (h *RequestHandler) SubmitProposal(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.requestUsecase.SubmitProposal(r.Context(), headID, id, &input); err != nil {
+		if strings.HasPrefix(err.Error(), "forbidden:") {
+			respondWithError(w, http.StatusForbidden, strings.TrimPrefix(err.Error(), "forbidden: "))
+			return
+		}
 		respondWithError(w, http.StatusBadRequest, err.Error())
 		return
 	}

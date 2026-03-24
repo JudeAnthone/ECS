@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/domain"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/program"
@@ -240,6 +241,10 @@ func (h *ProgramHandler) AssignProgramChair(w http.ResponseWriter, r *http.Reque
 	}
 
 	if err := h.programUsecase.AssignProgramChair(r.Context(), id, body.ProgramChairID); err != nil {
+		if strings.Contains(err.Error(), "limit reached") {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

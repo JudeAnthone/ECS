@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/domain"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/project"
@@ -113,6 +114,10 @@ func (h *ProjectHandler) AssignProjectHead(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := h.projectUsecase.AssignProjectHead(r.Context(), id, body.ProjectHeadID); err != nil {
+		if strings.Contains(err.Error(), "outside the assigned project team") || strings.Contains(err.Error(), "assigned user must have role project_head") || strings.Contains(err.Error(), "different program chair") {
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

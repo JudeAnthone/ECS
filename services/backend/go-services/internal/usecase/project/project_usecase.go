@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/domain"
@@ -11,11 +12,19 @@ import (
 
 type projectUseCase struct {
 	projectRepo repository.ProjectRepository
+	userRepo    repository.UserRepository
+	deptRepo    repository.DepartmentRepository
+	programRepo repository.ProgramRepository
 }
 
 // NewProjectUseCase creates a new project use case
-func NewProjectUseCase(projectRepo repository.ProjectRepository) UseCase {
-	return &projectUseCase{projectRepo: projectRepo}
+func NewProjectUseCase(
+	projectRepo repository.ProjectRepository,
+	userRepo repository.UserRepository,
+	deptRepo repository.DepartmentRepository,
+	programRepo repository.ProgramRepository,
+) UseCase {
+	return &projectUseCase{projectRepo: projectRepo, userRepo: userRepo, deptRepo: deptRepo, programRepo: programRepo}
 }
 
 // CreateProject creates a new project under a program
@@ -88,6 +97,43 @@ func (uc *projectUseCase) DeleteProject(ctx context.Context, id string) error {
 
 // AssignProjectHead assigns or removes a project head from a project
 func (uc *projectUseCase) AssignProjectHead(ctx context.Context, projectID string, headID *string) error {
+	if headID != nil {
+		project, err := uc.projectRepo.GetByID(ctx, projectID)
+		if err != nil {
+			return fmt.Errorf("failed to get project: %w", err)
+		}
+
+		headUser, err := uc.userRepo.GetByID(ctx, *headID)
+		if err != nil {
+			return fmt.Errorf("failed to get project head user: %w", err)
+		}
+		if headUser.Role != domain.RoleProjectHead {
+			return fmt.Errorf("assigned user must have role project_head")
+		}
+
+		if project.DepartmentID != nil {
+			dept, err := uc.deptRepo.GetByID(ctx, *project.DepartmentID)
+			if err != nil {
+				return fmt.Errorf("failed to resolve project department: %w", err)
+			}
+			if headUser.Department == nil || (!strings.EqualFold(*headUser.Department, dept.DepartmentCode) && !strings.EqualFold(*headUser.Department, dept.DepartmentName)) {
+				return fmt.Errorf("project head is outside the assigned project team")
+			}
+		}
+
+		if project.ProgramID != nil {
+			program, err := uc.programRepo.GetByID(ctx, *project.ProgramID)
+			if err != nil {
+				return fmt.Errorf("failed to resolve project program: %w", err)
+			}
+			if program.ProgramChairID != nil {
+				if headUser.AssignedProgramChairID == nil || *headUser.AssignedProgramChairID != *program.ProgramChairID {
+					return fmt.Errorf("project head is assigned to a different program chair")
+				}
+			}
+		}
+	}
+
 	if err := uc.projectRepo.AssignProjectHead(ctx, projectID, headID); err != nil {
 		return fmt.Errorf("failed to assign project head: %w", err)
 	}

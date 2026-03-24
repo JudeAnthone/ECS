@@ -173,6 +173,7 @@ CREATE TABLE users (
     password_hash   VARCHAR(255) NOT NULL,
     role            user_role NOT NULL DEFAULT 'public_user',
     department      VARCHAR(100),
+    assigned_program_chair_id UUID REFERENCES users(id) ON DELETE SET NULL,
     contact_number  VARCHAR(15),
     account_status  account_status NOT NULL DEFAULT 'pending_approval',
     avatar_url      VARCHAR(255),
@@ -191,6 +192,7 @@ CREATE TABLE users (
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_username ON users(username);
 CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_assigned_program_chair ON users(assigned_program_chair_id);
 CREATE INDEX idx_users_account_status ON users(account_status);
 CREATE INDEX idx_users_last_active ON users(last_active);
 
@@ -763,7 +765,63 @@ CREATE TRIGGER trg_check_project_head_role
 BEFORE INSERT OR UPDATE OF project_head_id ON projects
 FOR EACH ROW EXECUTE FUNCTION check_project_head_role();
 
--- 7. Auto-create notification on project_request status change
+-- 7. assigned_program_chair_id must reference a program_chair and only be used by project_head/staff
+CREATE OR REPLACE FUNCTION check_user_assigned_program_chair()
+RETURNS TRIGGER AS $$
+DECLARE
+    assigned_role user_role;
+BEGIN
+    IF NEW.assigned_program_chair_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    IF NEW.role NOT IN ('project_head', 'staff') THEN
+        RAISE EXCEPTION 'Only project_head and staff can have assigned_program_chair_id';
+    END IF;
+
+    SELECT role INTO assigned_role FROM users WHERE id = NEW.assigned_program_chair_id;
+
+    IF assigned_role IS NULL OR assigned_role != 'program_chair' THEN
+        RAISE EXCEPTION 'assigned_program_chair_id must reference a user with role program_chair';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_check_user_assigned_program_chair
+BEFORE INSERT OR UPDATE OF assigned_program_chair_id, role ON users
+FOR EACH ROW EXECUTE FUNCTION check_user_assigned_program_chair();
+
+-- 8. Enforce global cap of 3 active program chairs
+CREATE OR REPLACE FUNCTION check_active_program_chair_limit()
+RETURNS TRIGGER AS $$
+DECLARE
+    active_chair_count INT;
+BEGIN
+    IF NEW.role != 'program_chair' OR NEW.account_status != 'active' THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT COUNT(*) INTO active_chair_count
+    FROM users
+    WHERE role = 'program_chair'
+      AND account_status = 'active'
+      AND id <> NEW.id;
+
+    IF active_chair_count >= 3 THEN
+        RAISE EXCEPTION 'program chair limit reached: only 3 active program chairs are allowed';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_check_active_program_chair_limit
+BEFORE INSERT OR UPDATE OF role, account_status ON users
+FOR EACH ROW EXECUTE FUNCTION check_active_program_chair_limit();
+
+-- 9. Auto-create notification on project_request status change
 CREATE OR REPLACE FUNCTION notify_request_status_change()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -924,5 +982,6 @@ INSERT INTO departments (department_name, department_code, description, is_activ
     ('College of Industrial Technology',           'CIT',  'Industrial technology and applied technology programs', true),
     ('Extension Coordination Center',              'ECC',  'Extension coordination center and services', true),
     ('Graduate School',                            'GRAD', 'Graduate-level programs and research', true),
+    ('Program Management',                         'PM',   'Program management office for program chairs', true),
     ('System Administration',                      'ADMIN','System administration and central services', true)
 ;

@@ -71,6 +71,7 @@ export default function UserManagement() {
   const [error, setError] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editDialogError, setEditDialogError] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [departments, setDepartments] = useState<Array<{id: string, department_name: string, department_code: string}>>([]);
@@ -81,6 +82,7 @@ export default function UserManagement() {
     username: '',
     role: '',
     department: '',
+    assigned_program_chair_id: '',
     contact_number: '',
     account_status: '',
   });
@@ -95,6 +97,28 @@ export default function UserManagement() {
 
   // Check if currently editing own account
   const isEditingSelf = editingUser?.id === currentUserId;
+  const programChairs = users.filter((u) => u.role === 'program_chair' && u.account_status === 'active');
+  const assignedProgramChair = programChairs.find((chair) => chair.id === editForm.assigned_program_chair_id);
+  const hasUserChanges = React.useMemo(() => {
+    if (!editingUser) return false;
+
+    const normalizedDepartment = editForm.department === 'None' ? '' : editForm.department;
+    const originalDepartment = editingUser.department || '';
+    const normalizedAssignedChair = editForm.assigned_program_chair_id || '';
+    const originalAssignedChair = editingUser.assigned_program_chair_id || '';
+
+    return (
+      editForm.first_name !== editingUser.first_name ||
+      editForm.last_name !== editingUser.last_name ||
+      editForm.email !== editingUser.email ||
+      editForm.username !== editingUser.username ||
+      editForm.role !== editingUser.role ||
+      normalizedDepartment !== originalDepartment ||
+      normalizedAssignedChair !== originalAssignedChair ||
+      (editForm.contact_number || '') !== (editingUser.contact_number || '') ||
+      editForm.account_status !== editingUser.account_status
+    );
+  }, [editForm, editingUser]);
 
   const loadUsers = async () => {
     try {
@@ -255,9 +279,11 @@ export default function UserManagement() {
       username: user.username,
       role: user.role,
       department: user.department || '',
+      assigned_program_chair_id: user.assigned_program_chair_id || '',
       contact_number: user.contact_number || '',
       account_status: user.account_status,
     });
+    setEditDialogError(null);
     setIsEditDialogOpen(true);
     
     // Reload departments to ensure they're available in the dropdown
@@ -270,16 +296,29 @@ export default function UserManagement() {
     try {
       setProcessingId(editingUser.id);
       setError(null);
+      setEditDialogError(null);
 
       const token = localStorage.getItem('auth_token');
       if (!token) {
-        setError('Not authenticated. Please login first.');
+        setEditDialogError('Not authenticated. Please login first.');
         return;
       }
 
       // Validate department for roles that require it
       if ((editForm.role === 'project_head' || editForm.role === 'staff') && !editForm.department.trim()) {
-        setError('Department is required for Project Head and Staff roles');
+        setEditDialogError('Department is required for Project Head and Staff roles');
+        setProcessingId(null);
+        return;
+      }
+
+      if ((editForm.role === 'project_head' || editForm.role === 'staff') && editForm.account_status === 'active' && !editForm.assigned_program_chair_id) {
+        setEditDialogError('Active Project Head and Staff users must be assigned to a Program Chair');
+        setProcessingId(null);
+        return;
+      }
+
+      if (!hasUserChanges) {
+        setEditDialogError('No changes detected. Update at least one field before saving.');
         setProcessingId(null);
         return;
       }
@@ -300,6 +339,16 @@ export default function UserManagement() {
       if (!updates.department && editForm.department !== (editingUser.department || '')) {
         updates.department = editForm.department || null;
       }
+
+      const originalAssignedChair = editingUser.assigned_program_chair_id || '';
+      if (editForm.role !== 'project_head' && editForm.role !== 'staff') {
+        if (originalAssignedChair) {
+          updates.assigned_program_chair_id = null;
+        }
+      } else if (editForm.assigned_program_chair_id !== originalAssignedChair) {
+        updates.assigned_program_chair_id = editForm.assigned_program_chair_id || null;
+      }
+
       if (editForm.contact_number !== (editingUser.contact_number || '')) updates.contact_number = editForm.contact_number || null;
       if (editForm.account_status !== editingUser.account_status) updates.account_status = editForm.account_status;
 
@@ -311,7 +360,7 @@ export default function UserManagement() {
       setIsEditDialogOpen(false);
       setToast({ message: 'User updated successfully!', type: 'success' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update user');
+      setEditDialogError(err instanceof Error ? err.message : 'Failed to update user');
       console.error('Error updating user:', err);
       setToast({ message: `Failed to update user: ${err instanceof Error ? err.message : 'Unknown error'}`, type: 'error' });
     } finally {
@@ -483,7 +532,7 @@ export default function UserManagement() {
         </div>
 
         {/* Error Alert */}
-        {error && (
+        {error && !isEditDialogOpen && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
@@ -829,13 +878,26 @@ export default function UserManagement() {
         </Card>
 
         {/* Edit User Dialog */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <Dialog
+          open={isEditDialogOpen}
+          onOpenChange={(open) => {
+            setIsEditDialogOpen(open);
+            if (!open) {
+              setEditDialogError(null);
+            }
+          }}
+        >
           <DialogContent className="bg-white max-w-4xl w-full">
             <DialogHeader>
               <DialogTitle className="text-2xl text-slate-900">Edit User</DialogTitle>
               <DialogDescription className="text-slate-600">
                 Update user information. Fields marked with * are required.
               </DialogDescription>
+              {editDialogError && (
+                <Alert variant="destructive" className="mt-3">
+                  <AlertDescription>{editDialogError}</AlertDescription>
+                </Alert>
+              )}
               {isEditingSelf && (
                 <Alert className="mt-3 border-orange-200 bg-orange-50">
                   <AlertDescription className="text-orange-800 text-sm">
@@ -929,7 +991,11 @@ export default function UserManagement() {
                   </label>
                   <Select 
                     value={editForm.role} 
-                    onValueChange={(value) => setEditForm({...editForm, role: value})}
+                    onValueChange={(value) => setEditForm({
+                      ...editForm,
+                      role: value,
+                      assigned_program_chair_id: (value === 'project_head' || value === 'staff') ? editForm.assigned_program_chair_id : '',
+                    })}
                     disabled={isEditingSelf}
                   >
                     <SelectTrigger className="border-slate-300">
@@ -1001,6 +1067,48 @@ export default function UserManagement() {
                 )}
               </div>
 
+              {(editForm.role === 'project_head' || editForm.role === 'staff') && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">
+                    Assigned Program Chair {(editForm.account_status === 'active') && '*'}
+                  </label>
+                  <Select
+                    value={editForm.assigned_program_chair_id || '__none__'}
+                    onValueChange={(value) => setEditForm({ ...editForm, assigned_program_chair_id: value === '__none__' ? '' : value })}
+                  >
+                    <SelectTrigger className="border-slate-300">
+                      <SelectValue placeholder="Select assigned program chair" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="__none__">None</SelectItem>
+                      {programChairs.map((chair) => (
+                        <SelectItem key={chair.id} value={chair.id}>
+                          {chair.first_name} {chair.last_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500">
+                    Project Head and Staff must belong to one Program Chair team.
+                  </p>
+                  {assignedProgramChair && (
+                    <div className="mt-2 w-full max-w-sm rounded-md border border-blue-200 bg-blue-50 p-3">
+                      <div className="flex items-center gap-2">
+                        <UserAvatar user={assignedProgramChair} size="sm" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 truncate">
+                            {assignedProgramChair.first_name} {assignedProgramChair.last_name}
+                          </p>
+                          <p className="text-xs text-slate-600 truncate">
+                            {assignedProgramChair.email} • {assignedProgramChair.department || 'No department'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-700">
                   Account Status *
@@ -1049,14 +1157,17 @@ export default function UserManagement() {
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => setIsEditDialogOpen(false)}
+                onClick={() => {
+                  setIsEditDialogOpen(false);
+                  setEditDialogError(null);
+                }}
                 className="border-slate-300"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleUpdateUser}
-                disabled={processingId === editingUser?.id}
+                disabled={processingId === editingUser?.id || !hasUserChanges}
                 className="bg-blue-600 hover:bg-blue-700 text-white"
               >
                 {processingId === editingUser?.id ? 'Updating...' : 'Update User'}

@@ -34,6 +34,7 @@ type ProgramRepository interface {
 	GetByID(ctx context.Context, id string) (*domain.Program, error)
 	GetByDepartment(ctx context.Context, departmentID string) ([]*domain.Program, error)
 	GetByProgramChair(ctx context.Context, programChairID string) ([]*domain.Program, error)
+	CountDistinctAssignedChairs(ctx context.Context) (int, error)
 	Update(ctx context.Context, program *domain.Program) error
 	UpdateStatus(ctx context.Context, id string, status string) error
 	UpdateApproval(ctx context.Context, id string, approvalStatus string, approvedBy *string) error
@@ -45,6 +46,7 @@ type ProgramRepository interface {
 type ProjectRepository interface {
 	Create(ctx context.Context, project *domain.Project, createdBy string) error
 	GetByProgramID(ctx context.Context, programID string) ([]*domain.Project, error)
+	GetByID(ctx context.Context, id string) (*domain.Project, error)
 	Update(ctx context.Context, id string, req *domain.UpdateProjectRequest) error
 	AssignProjectHead(ctx context.Context, projectID string, headID *string) error
 	Delete(ctx context.Context, id string) error

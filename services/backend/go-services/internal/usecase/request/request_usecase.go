@@ -3,6 +3,7 @@ package request
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/domain"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/repository"
@@ -11,11 +12,23 @@ import (
 type requestUseCase struct {
 	requestRepo repository.RequestRepository
 	programRepo repository.ProgramRepository
+	userRepo    repository.UserRepository
+	deptRepo    repository.DepartmentRepository
 }
 
 // NewRequestUseCase creates a new request use case.
-func NewRequestUseCase(requestRepo repository.RequestRepository, programRepo repository.ProgramRepository) UseCase {
-	return &requestUseCase{requestRepo: requestRepo, programRepo: programRepo}
+func NewRequestUseCase(
+	requestRepo repository.RequestRepository,
+	programRepo repository.ProgramRepository,
+	userRepo repository.UserRepository,
+	deptRepo repository.DepartmentRepository,
+) UseCase {
+	return &requestUseCase{
+		requestRepo: requestRepo,
+		programRepo: programRepo,
+		userRepo:    userRepo,
+		deptRepo:    deptRepo,
+	}
 }
 
 // SubmitRequest creates a brand-new extension service request.
@@ -64,13 +77,32 @@ func (uc *requestUseCase) ProgramChairReview(ctx context.Context, chairID, id st
 	if input.Status != "approved" && input.Status != "rejected" {
 		return fmt.Errorf("status must be 'approved' or 'rejected'")
 	}
+
+	if chairID == "" {
+		return fmt.Errorf("forbidden: missing program chair identity")
+	}
+
+	req, err := uc.requestRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if req.ReviewedBy != nil && *req.ReviewedBy != "" && *req.ReviewedBy != chairID {
+		return fmt.Errorf("forbidden: request is owned by another program chair")
+	}
+
+	if req.AssignedProgramID != nil && *req.AssignedProgramID != "" {
+		program, err := uc.programRepo.GetByID(ctx, *req.AssignedProgramID)
+		if err != nil {
+			return fmt.Errorf("failed to validate assigned program: %w", err)
+		}
+		if program.ProgramChairID == nil || *program.ProgramChairID != chairID {
+			return fmt.Errorf("forbidden: request is assigned to a different program chair")
+		}
+	}
+
 	// If approved, create program first, then attach to request via assigned_program_id
 	if input.Status == "approved" {
-		// fetch request details
-		req, err := uc.requestRepo.GetByID(ctx, id)
-		if err != nil {
-			return err
-		}
 		// if a program was already created for this request, reuse it
 		if req.AssignedProgramID != nil && *req.AssignedProgramID != "" {
 			input.AssignedProgramID = req.AssignedProgramID
@@ -111,8 +143,51 @@ func (uc *requestUseCase) AssignToHead(ctx context.Context, chairID, id string, 
 	if input.AssignedDepartmentID == "" {
 		return fmt.Errorf("assigned_department_id is required")
 	}
-	err := uc.requestRepo.AssignToHead(ctx, id, input)
+
+	req, err := uc.requestRepo.GetByID(ctx, id)
 	if err != nil {
+		return err
+	}
+
+	if req.ReviewedBy != nil && *req.ReviewedBy != "" && *req.ReviewedBy != chairID {
+		return fmt.Errorf("forbidden: request is owned by another program chair")
+	}
+
+	if req.AssignedProgramID != nil && *req.AssignedProgramID != "" {
+		program, err := uc.programRepo.GetByID(ctx, *req.AssignedProgramID)
+		if err != nil {
+			return fmt.Errorf("failed to validate assigned program: %w", err)
+		}
+		if program.ProgramChairID == nil || *program.ProgramChairID != chairID {
+			return fmt.Errorf("forbidden: request is assigned to a different program chair")
+		}
+	}
+
+	department, err := uc.deptRepo.GetByID(ctx, input.AssignedDepartmentID)
+	if err != nil {
+		return fmt.Errorf("failed to validate assigned department: %w", err)
+	}
+	if department.ProgramChairID == nil || *department.ProgramChairID != chairID {
+		return fmt.Errorf("forbidden: cannot assign to a department outside your team")
+	}
+
+	if input.AssignedToProjectHead != nil && *input.AssignedToProjectHead != "" {
+		headUser, err := uc.userRepo.GetByID(ctx, *input.AssignedToProjectHead)
+		if err != nil {
+			return fmt.Errorf("failed to validate assigned project head: %w", err)
+		}
+		if headUser.Role != domain.RoleProjectHead {
+			return fmt.Errorf("assigned_to_project_head must have role project_head")
+		}
+		if headUser.AssignedProgramChairID == nil || *headUser.AssignedProgramChairID != chairID {
+			return fmt.Errorf("forbidden: project head is assigned to a different program chair")
+		}
+		if headUser.Department == nil || (!strings.EqualFold(*headUser.Department, department.DepartmentCode) && !strings.EqualFold(*headUser.Department, department.DepartmentName)) {
+			return fmt.Errorf("forbidden: project head is outside your assigned department team")
+		}
+	}
+
+	if err := uc.requestRepo.AssignToHead(ctx, id, input); err != nil {
 		return err
 	}
 	return nil
@@ -129,10 +204,38 @@ func (uc *requestUseCase) GetRequestsByDepartmentChair(ctx context.Context, chai
 }
 
 // RerouteRequest redirects a request to a different department.
-func (uc *requestUseCase) RerouteRequest(ctx context.Context, requestID, departmentID string) error {
+func (uc *requestUseCase) RerouteRequest(ctx context.Context, chairID, requestID, departmentID string) error {
 	if departmentID == "" {
 		return fmt.Errorf("target_department_id is required")
 	}
+
+	req, err := uc.requestRepo.GetByID(ctx, requestID)
+	if err != nil {
+		return err
+	}
+
+	if req.ReviewedBy != nil && *req.ReviewedBy != "" && *req.ReviewedBy != chairID {
+		return fmt.Errorf("forbidden: request is owned by another program chair")
+	}
+
+	if req.AssignedProgramID != nil && *req.AssignedProgramID != "" {
+		program, err := uc.programRepo.GetByID(ctx, *req.AssignedProgramID)
+		if err != nil {
+			return fmt.Errorf("failed to validate assigned program: %w", err)
+		}
+		if program.ProgramChairID == nil || *program.ProgramChairID != chairID {
+			return fmt.Errorf("forbidden: request is assigned to a different program chair")
+		}
+	}
+
+	targetDepartment, err := uc.deptRepo.GetByID(ctx, departmentID)
+	if err != nil {
+		return fmt.Errorf("failed to validate target department: %w", err)
+	}
+	if targetDepartment.ProgramChairID == nil || *targetDepartment.ProgramChairID != chairID {
+		return fmt.Errorf("forbidden: cannot reroute to a department outside your team")
+	}
+
 	return uc.requestRepo.RerouteRequest(ctx, requestID, departmentID)
 }
 
@@ -157,6 +260,20 @@ func (uc *requestUseCase) ProjectHeadRespond(ctx context.Context, headID, id str
 	if input.Response != "accepted" && input.Response != "declined" {
 		return fmt.Errorf("response must be 'accepted' or 'declined'")
 	}
+	req, err := uc.requestRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if req.AssignedToProjectHead == nil || *req.AssignedToProjectHead != headID {
+		return fmt.Errorf("forbidden: request is not assigned to this project head")
+	}
+	headUser, err := uc.userRepo.GetByID(ctx, headID)
+	if err != nil {
+		return fmt.Errorf("failed to validate project head: %w", err)
+	}
+	if headUser.AssignedProgramChairID == nil || req.ReviewedBy == nil || *headUser.AssignedProgramChairID != *req.ReviewedBy {
+		return fmt.Errorf("forbidden: project head is outside the assigned program chair team")
+	}
 	return uc.requestRepo.ProjectHeadRespond(ctx, id, input)
 }
 
@@ -164,6 +281,20 @@ func (uc *requestUseCase) ProjectHeadRespond(ctx context.Context, headID, id str
 func (uc *requestUseCase) SubmitProposal(ctx context.Context, headID, id string, input *domain.SubmitProposalInput) error {
 	if input.ProposalDocumentURL == "" {
 		return fmt.Errorf("proposal_document_url is required")
+	}
+	req, err := uc.requestRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if req.AssignedToProjectHead == nil || *req.AssignedToProjectHead != headID {
+		return fmt.Errorf("forbidden: request is not assigned to this project head")
+	}
+	headUser, err := uc.userRepo.GetByID(ctx, headID)
+	if err != nil {
+		return fmt.Errorf("failed to validate project head: %w", err)
+	}
+	if headUser.AssignedProgramChairID == nil || req.ReviewedBy == nil || *headUser.AssignedProgramChairID != *req.ReviewedBy {
+		return fmt.Errorf("forbidden: project head is outside the assigned program chair team")
 	}
 	return uc.requestRepo.SubmitProposal(ctx, id, input)
 }

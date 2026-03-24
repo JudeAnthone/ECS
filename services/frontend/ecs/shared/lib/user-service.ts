@@ -8,6 +8,7 @@ export interface User {
   username: string;
   role: string;
   department?: string;
+  assigned_program_chair_id?: string;
   contact_number?: string;
   account_status: string;
   avatar_url?: string;
