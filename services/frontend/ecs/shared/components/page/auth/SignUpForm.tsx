@@ -22,7 +22,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
-export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
+export function SignupForm({ onOpenLogin, ...props }: React.ComponentProps<typeof Card> & { onOpenLogin?: () => void }) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,8 +34,6 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
     username: "",
     password: "",
     confirmPassword: "",
-    department: "",
-    contact_number: "",
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -69,8 +67,6 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
         email: formData.email,
         username: formData.username,
         password: formData.password,
-        department: formData.department || undefined,
-        contact_number: formData.contact_number || undefined,
       });
 
       // Check account status
@@ -113,14 +109,32 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   };
 
   return (
-    <Card {...props} className="border-primary/10">
-      <CardHeader>
-        <CardTitle>Request an account</CardTitle>
-        <CardDescription>
+    <Card {...props} className="border-0 shadow-2xl rounded-2xl bg-white max-w-md mx-auto">
+      <div className="flex flex-col items-center gap-2 text-center mt-8 mb-2">
+        <Link
+          href="/"
+          className="flex flex-col items-center gap-2 font-medium"
+        >
+          <div className="flex size-16 items-center justify-center rounded-full bg-[#CC2E28] shadow-md">
+            <img
+              src="/earist-logo.png"
+              alt="Earist"
+              width="72"
+              height="72"
+              className="rounded-full bg-white p-2"
+            />
+          </div>
+          <span className="sr-only">Earist</span>
+        </Link>
+        <h1 className="text-2xl font-extrabold text-[#CC2E28]">Sign up to<br/> <span className="text-black">Earist Extension Service</span></h1>
+      </div>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-lg font-semibold text-[#CC2E28]">Request an account</CardTitle>
+        <CardDescription className="text-gray-600">
           Enter your information below to request your account
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-0">
         <form onSubmit={handleSubmit}>
           <FieldGroup>
             {error && (
@@ -221,50 +235,20 @@ export function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
                 required 
               />
             </Field>
-            <Field>
-              <FieldLabel htmlFor="department">Department</FieldLabel>
-              <Input
-                id="department"
-                name="department"
-                type="text"
-                placeholder="e.g., College of Engineering (Optional)"
-                value={formData.department}
-                onChange={handleInputChange}
-                disabled={isLoading}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="contact_number">Contact Number</FieldLabel>
-              <Input
-                id="contact_number"
-                name="contact_number"
-                type="text"
-                placeholder="e.g., +63 123 456 7890 (Optional)"
-                value={formData.contact_number}
-                onChange={handleInputChange}
-                disabled={isLoading}
-              />
-            </Field>
             <FieldGroup>
               <Field>
                 <Button type="submit" className="cursor-pointer w-full" disabled={isLoading}>
                   {isLoading ? "Creating Account..." : "Request Account"}
-                </Button>
-                <Button variant="outline" type="button" className="border-primary cursor-pointer w-full" disabled={isLoading}>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5 mr-2">
-                    <path
-                      d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                  Sign up with Google
                 </Button>
                 <FieldDescription className="px-6 text-center">
                   By clicking continue, you agree to our <Link href="/terms-of-service">Terms of Service</Link>{" "}
                   and <Link href="/privaty-policy">Privacy Policy</Link>.
                 </FieldDescription>
                 <FieldDescription className="px-6 text-center">
-                  Already have an account? <Link href="/login">Sign in</Link>
+                  Already have an account?{' '}
+                  <button type="button" className="text-primary underline font-semibold" onClick={onOpenLogin}>
+                    Sign in
+                  </button>
                 </FieldDescription>
               </Field>
             </FieldGroup>
