@@ -382,6 +382,22 @@ CREATE INDEX idx_projects_request_id ON projects(request_id);
 CREATE INDEX idx_projects_published ON projects(is_published);
 
 -- ==========================================
+-- Project Staff Assignments Table
+-- ==========================================
+CREATE TABLE project_staff_assignments (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    staff_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    assigned_by     UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    assigned_at     TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(project_id, staff_id)
+);
+
+CREATE INDEX idx_project_staff_assignments_project_id ON project_staff_assignments(project_id);
+CREATE INDEX idx_project_staff_assignments_staff_id ON project_staff_assignments(staff_id);
+
+-- ==========================================
 -- Tasks Table
 -- ==========================================
 CREATE TABLE tasks (

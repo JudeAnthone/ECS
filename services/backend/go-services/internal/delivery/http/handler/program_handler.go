@@ -49,7 +49,19 @@ func (h *ProgramHandler) CreateProgram(w http.ResponseWriter, r *http.Request) {
 
 // GetAllPrograms handles GET /api/v1/programs
 func (h *ProgramHandler) GetAllPrograms(w http.ResponseWriter, r *http.Request) {
-	programs, err := h.programUsecase.GetAllPrograms(r.Context())
+	role, _ := r.Context().Value("role").(string)
+	userID, _ := r.Context().Value("user_id").(string)
+
+	var (
+		programs []*domain.Program
+		err      error
+	)
+
+	if (role == domain.RoleProjectHead || role == domain.RoleStaff) && userID != "" {
+		programs, err = h.programUsecase.GetVisiblePrograms(r.Context(), userID, role)
+	} else {
+		programs, err = h.programUsecase.GetAllPrograms(r.Context())
+	}
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -64,6 +76,8 @@ func (h *ProgramHandler) GetAllPrograms(w http.ResponseWriter, r *http.Request) 
 func (h *ProgramHandler) GetProgramByID(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
+	role, _ := r.Context().Value("role").(string)
+	userID, _ := r.Context().Value("user_id").(string)
 
 	program, err := h.programUsecase.GetProgramByID(r.Context(), id)
 	if err != nil {
@@ -71,11 +85,36 @@ func (h *ProgramHandler) GetProgramByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if (role == domain.RoleProjectHead || role == domain.RoleStaff) && userID != "" {
+		visible, err := h.programUsecase.GetVisiblePrograms(r.Context(), userID, role)
+		if err != nil {
+			respondWithError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		allowed := false
+		for _, p := range visible {
+			if p != nil && p.ID == id {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			respondWithError(w, http.StatusForbidden, "Access denied")
+			return
+		}
+	}
+
 	respondWithJSON(w, http.StatusOK, program)
 }
 
 // GetProgramsByDepartment handles GET /api/v1/programs/department/{departmentId}
 func (h *ProgramHandler) GetProgramsByDepartment(w http.ResponseWriter, r *http.Request) {
+	role, _ := r.Context().Value("role").(string)
+	if role == domain.RoleProjectHead || role == domain.RoleStaff {
+		respondWithError(w, http.StatusForbidden, "Access denied")
+		return
+	}
+
 	vars := mux.Vars(r)
 	departmentID := vars["departmentId"]
 
@@ -92,6 +131,12 @@ func (h *ProgramHandler) GetProgramsByDepartment(w http.ResponseWriter, r *http.
 
 // GetProgramsByProgramChair handles GET /api/v1/programs/program-chair/{programChairId}
 func (h *ProgramHandler) GetProgramsByProgramChair(w http.ResponseWriter, r *http.Request) {
+	role, _ := r.Context().Value("role").(string)
+	if role == domain.RoleProjectHead || role == domain.RoleStaff {
+		respondWithError(w, http.StatusForbidden, "Access denied")
+		return
+	}
+
 	vars := mux.Vars(r)
 	programChairID := vars["programChairId"]
 

@@ -76,11 +76,25 @@ func SetupRoutes() *mux.Router {
 	api.Handle("/programs/{id}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(programHandler.DeleteProgram))).Methods("DELETE")
 
 	// Project routes
-	api.Handle("/projects", middleware.AdminOnlyMiddleware(http.HandlerFunc(projectHandler.CreateProject))).Methods("POST")
+	api.Handle("/projects", middleware.RequireRolesMiddleware(domain.RoleProjectHead, domain.RoleProgramChair, domain.RoleStaff)(http.HandlerFunc(projectHandler.CreateProject))).Methods("POST")
 	api.HandleFunc("/projects", projectHandler.GetProjects).Methods("GET")
-	api.Handle("/projects/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(projectHandler.UpdateProject))).Methods("PUT")
-	api.Handle("/projects/{id}/assign-head", middleware.AdminOnlyMiddleware(http.HandlerFunc(projectHandler.AssignProjectHead))).Methods("PATCH")
-	api.Handle("/projects/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(projectHandler.DeleteProject))).Methods("DELETE")
+	api.Handle("/projects/{id}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(projectHandler.UpdateProject))).Methods("PUT")
+	api.Handle("/projects/{id}/head-review", middleware.RequireRolesMiddleware(domain.RoleProjectHead)(http.HandlerFunc(projectHandler.ProjectHeadPreReview))).Methods("PATCH")
+	api.Handle("/projects/{id}/approval", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(projectHandler.UpdateProjectApproval))).Methods("PATCH")
+	api.Handle("/projects/approval/bulk", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(projectHandler.BulkUpdateProjectApproval))).Methods("PATCH")
+	api.Handle("/projects/{id}/assign-head", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(projectHandler.AssignProjectHead))).Methods("PATCH")
+	api.Handle("/projects/{id}/staff-assignments", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(projectHandler.GetProjectStaffAssignments))).Methods("GET")
+	api.Handle("/projects/{id}/staff-assignments", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(projectHandler.ReplaceProjectStaffAssignments))).Methods("PUT")
+	api.Handle("/projects/{id}/tasks", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(projectHandler.GetProjectTasks))).Methods("GET")
+	api.Handle("/projects/{id}/tasks", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(projectHandler.CreateProjectTask))).Methods("POST")
+	api.Handle("/projects/tasks/{id}/status", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(projectHandler.UpdateProjectTaskStatus))).Methods("PATCH")
+	api.Handle("/projects/tasks/{id}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(projectHandler.DeleteProjectTask))).Methods("DELETE")
+	api.Handle("/projects/{id}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(projectHandler.DeleteProject))).Methods("DELETE")
+
+	// Staff task routes
+	api.Handle("/staff/projects-with-task-summary", middleware.RequireRolesMiddleware(domain.RoleStaff)(http.HandlerFunc(projectHandler.GetStaffProjectTaskSummaries))).Methods("GET")
+	api.Handle("/staff/tasks", middleware.RequireRolesMiddleware(domain.RoleStaff)(http.HandlerFunc(projectHandler.GetStaffTasks))).Methods("GET")
+	api.Handle("/staff/tasks/{id}/status", middleware.RequireRolesMiddleware(domain.RoleStaff)(http.HandlerFunc(projectHandler.UpdateStaffTaskStatus))).Methods("PATCH")
 
 	// Request (Extension Service) routes
 	// POST   /requests          — any authenticated user submits a request
@@ -96,11 +110,10 @@ func SetupRoutes() *mux.Router {
 	api.HandleFunc("/requests", requestHandler.GetRequests).Methods("GET")
 	api.HandleFunc("/requests/{id}", requestHandler.GetRequestByID).Methods("GET")
 	api.Handle("/requests/{id}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead, domain.RoleStaff, domain.RolePublicUser)(http.HandlerFunc(requestHandler.DeleteRequest))).Methods("DELETE")
-	api.Handle("/requests/{id}/review", middleware.RequireRolesMiddleware(domain.RoleProgramChair)(http.HandlerFunc(requestHandler.ProgramChairReview))).Methods("PATCH")
+	api.Handle("/requests/{id}/review", middleware.RequireRolesMiddleware(domain.RoleProgramChair, domain.RoleAdmin)(http.HandlerFunc(requestHandler.ProgramChairReview))).Methods("PATCH")
 	api.Handle("/requests/{id}/assign", middleware.RequireRolesMiddleware(domain.RoleProgramChair)(http.HandlerFunc(requestHandler.AssignToHead))).Methods("PATCH")
 	api.Handle("/requests/{id}/respond", middleware.RequireRolesMiddleware(domain.RoleProjectHead)(http.HandlerFunc(requestHandler.ProjectHeadRespond))).Methods("PATCH")
 	api.Handle("/requests/{id}/proposal", middleware.RequireRolesMiddleware(domain.RoleProjectHead)(http.HandlerFunc(requestHandler.SubmitProposal))).Methods("PATCH")
-	api.Handle("/requests/{id}/reroute", middleware.RequireRolesMiddleware(domain.RoleProgramChair)(http.HandlerFunc(requestHandler.RerouteRequest))).Methods("PATCH")
 	api.Handle("/requests/{id}/review-proposal", middleware.AdminOnlyMiddleware(http.HandlerFunc(requestHandler.ReviewProposal))).Methods("PATCH")
 	api.Handle("/requests/{id}/approve", middleware.AdminOnlyMiddleware(http.HandlerFunc(requestHandler.FinalApprove))).Methods("PATCH")
 

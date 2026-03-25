@@ -10,8 +10,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/shared/components/ui/Select';
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
+  Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/shared/components/ui/Dialog';
+import { Textarea } from '@/shared/components/ui/TextArea';
+import { PROGRAM_CATEGORIES } from '@/shared/configs/program-categories';
+import { filterVisibleDepartments } from '@/shared/configs/department-visibility';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/shared/components/ui/DropdownMenu';
@@ -202,10 +205,20 @@ function ProgramForm({ formData, setFormData, departments, onSubmit, onCancel, s
               <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
                 <Tag className="w-3.5 h-3.5 text-slate-400" /> Category
               </label>
-              <Input value={formData.program_category}
-                onChange={e => setFormData({ ...formData, program_category: e.target.value })}
-                placeholder="e.g. Health, Education"
-                className="border-slate-300" />
+              <Select
+                value={formData.program_category || ''}
+                onValueChange={v => setFormData({ ...formData, program_category: v })}
+              >
+                <SelectTrigger className="border-slate-300"><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectContent className="bg-white">
+                  {formData.program_category && !PROGRAM_CATEGORIES.includes(formData.program_category as (typeof PROGRAM_CATEGORIES)[number]) && (
+                    <SelectItem value={formData.program_category}>{formData.program_category} (current)</SelectItem>
+                  )}
+                  {PROGRAM_CATEGORIES.map(category => (
+                    <SelectItem key={category} value={category}>{category}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
@@ -250,25 +263,13 @@ function ProgramForm({ formData, setFormData, departments, onSubmit, onCancel, s
         </div>
       </div>
 
-      {/* Budget & Schedule */}
+      {/* Schedule */}
       <div className="rounded-lg border border-slate-200 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-          <Wallet className="w-4 h-4 text-slate-500" />
-          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Budget & Schedule</span>
+          <CalendarRange className="w-4 h-4 text-slate-500" />
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Schedule</span>
         </div>
         <div className="p-4 space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-              <span className="text-slate-400 text-sm font-bold">₱</span> Budget Allocation
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">₱</span>
-              <Input type="number" value={formData.budget_allocation}
-                onChange={e => setFormData({ ...formData, budget_allocation: e.target.value })}
-                placeholder="0.00"
-                className="pl-7 border-slate-300" />
-            </div>
-          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
@@ -416,6 +417,10 @@ function ProjectsView({ program, departments, onBack }: {
   const [heads, setHeads] = useState<UserOption[]>([]);
   const [selectedHeadID, setSelectedHeadID] = useState('__none__');
   const [assignHeadError, setAssignHeadError] = useState('');
+  const [projectTab, setProjectTab] = useState<'all' | 'pending'>('all');
+  const [deleteProjectDialog, setDeleteProjectDialog] = useState<Project | null>(null);
+  const [projectApprovalDialog, setProjectApprovalDialog] = useState<{ project: Project; approvalStatus: 'approved' | 'rejected' } | null>(null);
+  const [reviewNotes, setReviewNotes] = useState('');
   const emptyForm = { project_name: '', project_description: '', objectives: '', budget_allocated: '', start_date: '', end_date: '' };
   const [form, setForm] = useState(emptyForm);
 
@@ -477,8 +482,8 @@ function ProjectsView({ program, departments, onBack }: {
         budget_allocated: form.budget_allocated ? parseFloat(form.budget_allocated) : null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
-        status: 'in_progress',
-        approval_status: 'approved',
+        status: 'pending_approval',
+        approval_status: 'pending',
       }),
     });
     if (res.ok) { await loadProjects(); setCreateOpen(false); setForm(emptyForm); setFormError(''); }
@@ -505,11 +510,44 @@ function ProjectsView({ program, departments, onBack }: {
     else { const e = await res.json(); setFormError(e.error || 'Failed to update project'); }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this project?')) return;
-    const res = await fetch(`${API}/projects/${id}`, { method: 'DELETE', headers: authHeaders() });
+  const handleDelete = (project: Project) => {
+    setDeleteProjectDialog(project);
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!deleteProjectDialog) return;
+    const res = await fetch(`${API}/projects/${deleteProjectDialog.id}`, { method: 'DELETE', headers: authHeaders() });
     if (res.ok) await loadProjects();
     else { const e = await res.json(); setPageError(e.error || 'Failed to delete project'); }
+    setDeleteProjectDialog(null);
+  };
+
+  const handleProjectApproval = (project: Project, approvalStatus: 'approved' | 'rejected') => {
+    setProjectApprovalDialog({ project, approvalStatus });
+    setReviewNotes('');
+  };
+
+  const submitProjectApproval = async () => {
+    if (!projectApprovalDialog) return;
+    const { project, approvalStatus } = projectApprovalDialog;
+    const action = approvalStatus === 'approved' ? 'approve' : 'reject';
+
+    const res = await fetch(`${API}/projects/${project.id}/approval`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ approval_status: approvalStatus, review_notes: reviewNotes.trim() || null }),
+    });
+
+    if (res.ok) {
+      await loadProjects();
+      return;
+    }
+
+    const text = await res.text();
+    let msg = `Failed to ${action} project`;
+    try { msg = JSON.parse(text).error || msg; } catch { msg = text || msg; }
+    setPageError(msg);
+    setProjectApprovalDialog(null);
   };
 
   const openAssignHead = (p: Project) => {
@@ -547,18 +585,22 @@ function ProjectsView({ program, departments, onBack }: {
     setEditOpen(true);
   };
 
-  const filtered = projects.filter(p =>
+  const pendingProjects = projects.filter((p) => p.approval_status === 'pending');
+  const scopedProjects = projectTab === 'pending' ? pendingProjects : projects;
+  const filtered = scopedProjects.filter((p) =>
     p.project_name.toLowerCase().includes(search.toLowerCase())
   );
+  const programDepartment = departments.find((d) => d.id === program.department_id);
 
   const total = projects.length;
   const active = projects.filter(p => p.status === 'in_progress').length;
-  const programBudget = program.budget_allocation || 0;
   const approvedBudget = projects
     .filter(p => p.approval_status === 'approved')
     .reduce((s, p) => s + (p.budget_allocated || 0), 0);
-  const remainingBudget = programBudget - approvedBudget;
-  const usedPct = programBudget > 0 ? Math.min(100, Math.round((approvedBudget / programBudget) * 100)) : 0;
+  const programBudget = approvedBudget;
+  const usedBudget = projects.reduce((s, p) => s + (p.budget_used || 0), 0);
+  const remainingBudget = programBudget - usedBudget;
+  const usedPct = programBudget > 0 ? Math.min(100, Math.round((usedBudget / programBudget) * 100)) : 0;
 
   return (
     <div className="space-y-6">
@@ -588,6 +630,14 @@ function ProjectsView({ program, departments, onBack }: {
           <div>
             <h2 className="text-xl font-bold text-slate-900">{program.program_name}</h2>
             <p className="text-slate-500 text-sm mt-1">{program.program_description || 'No description'}</p>
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-slate-700">
+              <div>
+                <span className="text-slate-500">Category:</span> {program.program_category || '-'}
+              </div>
+              <div>
+                <span className="text-slate-500">Department:</span> {programDepartment ? `${programDepartment.department_name} (${programDepartment.department_code})` : '-'}
+              </div>
+            </div>
             <div className="flex gap-2 mt-2">
               <StatusBadge status={program.status} />
             </div>
@@ -605,63 +655,81 @@ function ProjectsView({ program, departments, onBack }: {
         </div>
 
         {/* Budget tracker */}
-        {programBudget > 0 && (
-          <div className="mt-5 pt-4 border-t border-slate-100">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-slate-700">Budget Allocation</span>
-              <span className="text-xs text-slate-500">{usedPct}% allocated</span>
+        <div className="mt-5 pt-4 border-t border-slate-100">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-medium text-slate-700">Overall Project Budget</span>
+            <span className="text-xs text-slate-500">{usedPct}% utilized</span>
+          </div>
+          <div className="w-full bg-slate-100 rounded-full h-2.5 mb-3">
+            <div
+              className={`h-2.5 rounded-full transition-all ${
+                usedPct >= 100 ? 'bg-red-500' : usedPct >= 75 ? 'bg-orange-400' : 'bg-green-500'
+              }`}
+              style={{ width: `${usedPct}%` }}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-50 rounded-lg p-3">
+              <div className="text-xs text-slate-500 mb-0.5">Approved Total</div>
+              <div className="text-sm font-bold text-slate-800">₱{programBudget.toLocaleString()}</div>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-2.5 mb-3">
-              <div
-                className={`h-2.5 rounded-full transition-all ${
-                  usedPct >= 100 ? 'bg-red-500' : usedPct >= 75 ? 'bg-orange-400' : 'bg-green-500'
-                }`}
-                style={{ width: `${usedPct}%` }}
-              />
+            <div className="bg-orange-50 rounded-lg p-3">
+              <div className="text-xs text-slate-500 mb-0.5">Used</div>
+              <div className="text-sm font-bold text-orange-700">₱{usedBudget.toLocaleString()}</div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-slate-50 rounded-lg p-3">
-                <div className="text-xs text-slate-500 mb-0.5">Program Budget</div>
-                <div className="text-sm font-bold text-slate-800">₱{programBudget.toLocaleString()}</div>
-              </div>
-              <div className="bg-orange-50 rounded-lg p-3">
-                <div className="text-xs text-slate-500 mb-0.5">Approved Projects</div>
-                <div className="text-sm font-bold text-orange-700">₱{approvedBudget.toLocaleString()}</div>
-              </div>
-              <div className={`rounded-lg p-3 ${remainingBudget < 0 ? 'bg-red-50' : 'bg-green-50'}`}>
-                <div className="text-xs text-slate-500 mb-0.5">Remaining</div>
-                <div className={`text-sm font-bold ${remainingBudget < 0 ? 'text-red-600' : 'text-green-700'}`}>
-                  ₱{remainingBudget.toLocaleString()}
-                </div>
+            <div className={`rounded-lg p-3 ${remainingBudget < 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+              <div className="text-xs text-slate-500 mb-0.5">Remaining</div>
+              <div className={`text-sm font-bold ${remainingBudget < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                ₱{remainingBudget.toLocaleString()}
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Projects table */}
       <div className="bg-white border border-slate-200 rounded-xl">
         <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-          <div className="relative w-72">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-            <Input placeholder="Search projects..." value={search}
-              onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <div className="flex items-center gap-4">
+            <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => { setProjectTab('all'); }}
+                className={`px-3 py-1.5 text-sm ${projectTab === 'all' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                All Projects ({projects.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => { setProjectTab('pending'); }}
+                className={`px-3 py-1.5 text-sm border-l border-slate-200 ${projectTab === 'pending' ? 'bg-orange-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+              >
+                Pending Projects ({pendingProjects.length})
+              </button>
+            </div>
+            <div className="relative w-72">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <Input placeholder={projectTab === 'pending' ? 'Search pending projects...' : 'Search projects...'} value={search}
+                onChange={e => setSearch(e.target.value)} className="pl-9" />
+            </div>
           </div>
-          <Dialog open={createOpen} onOpenChange={v => { setCreateOpen(v); if (!v) setFormError(''); }}>
-            <DialogTrigger asChild>
-              <Button className="flex items-center gap-2" onClick={() => { setForm(emptyForm); setFormError(''); }}>
-                <Plus className="w-4 h-4" /> Add Project
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-white max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Create Project</DialogTitle>
-                <DialogDescription>Add a project under <strong>{program.program_name}</strong></DialogDescription>
-              </DialogHeader>
-              <ProjectForm formData={form} setFormData={setForm}
-                onSubmit={handleCreate} onCancel={() => { setCreateOpen(false); setFormError(''); }} submitLabel="Create Project" error={formError} />
-            </DialogContent>
-          </Dialog>
+          <div className="flex items-center gap-2">
+            <Dialog open={createOpen} onOpenChange={v => { setCreateOpen(v); if (!v) setFormError(''); }}>
+              <DialogTrigger asChild>
+                <Button className="flex items-center gap-2" onClick={() => { setForm(emptyForm); setFormError(''); }}>
+                  <Plus className="w-4 h-4" /> Add Project
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="bg-white max-w-4xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Create Project</DialogTitle>
+                  <DialogDescription>Add a project under <strong>{program.program_name}</strong></DialogDescription>
+                </DialogHeader>
+                <ProjectForm formData={form} setFormData={setForm}
+                  onSubmit={handleCreate} onCancel={() => { setCreateOpen(false); setFormError(''); }} submitLabel="Create Project" error={formError} />
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {loading ? (
@@ -683,7 +751,7 @@ function ProjectsView({ program, departments, onBack }: {
               {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-12 text-slate-400">
-                    No projects found under this program
+                    {projectTab === 'pending' ? 'No pending projects found under this program' : 'No projects found under this program'}
                   </TableCell>
                 </TableRow>
               ) : filtered.map(p => (
@@ -700,13 +768,23 @@ function ProjectsView({ program, departments, onBack }: {
                         <Button variant="ghost" size="sm"><MoreVertical className="w-4 h-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="bg-white">
+                        {p.approval_status !== 'approved' && (
+                          <DropdownMenuItem onClick={() => handleProjectApproval(p, 'approved')} className="text-green-700">
+                            <CheckCircle className="w-4 h-4 mr-2" /> Approve Project
+                          </DropdownMenuItem>
+                        )}
+                        {p.approval_status !== 'rejected' && (
+                          <DropdownMenuItem onClick={() => handleProjectApproval(p, 'rejected')} className="text-orange-700">
+                            <XCircle className="w-4 h-4 mr-2" /> Reject Project
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => openEdit(p)}>
                           <Edit className="w-4 h-4 mr-2" /> Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openAssignHead(p)}>
                           <UserCog className="w-4 h-4 mr-2" /> Assign Project Head
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDelete(p.id)} className="text-red-600">
+                        <DropdownMenuItem onClick={() => handleDelete(p)} className="text-red-600">
                           <Trash2 className="w-4 h-4 mr-2" /> Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -718,6 +796,58 @@ function ProjectsView({ program, departments, onBack }: {
           </Table>
         )}
       </div>
+
+      <Dialog open={!!deleteProjectDialog} onOpenChange={(open) => { if (!open) setDeleteProjectDialog(null); }}>
+        <DialogContent className="bg-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Project</DialogTitle>
+            <DialogDescription>
+              Delete <strong>{deleteProjectDialog?.project_name}</strong>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={confirmDeleteProject}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!projectApprovalDialog} onOpenChange={(open) => { if (!open) setProjectApprovalDialog(null); }}>
+        <DialogContent className="bg-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {projectApprovalDialog?.approvalStatus === 'approved' ? 'Approve Project' : 'Reject Project'}
+            </DialogTitle>
+            <DialogDescription>
+              {projectApprovalDialog
+                ? `Are you sure you want to ${projectApprovalDialog.approvalStatus === 'approved' ? 'approve' : 'reject'} ${projectApprovalDialog.project.project_name}?`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">Review Notes (optional)</label>
+            <Textarea
+              value={reviewNotes}
+              onChange={(e) => setReviewNotes(e.target.value)}
+              placeholder="Add notes for this decision"
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              variant={projectApprovalDialog?.approvalStatus === 'rejected' ? 'destructive' : 'default'}
+              onClick={submitProjectApproval}
+            >
+              {projectApprovalDialog?.approvalStatus === 'approved' ? 'Approve' : 'Reject'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={v => { setEditOpen(v); if (!v) setFormError(''); }}>
@@ -803,6 +933,8 @@ export default function AdminProgramManagement() {
   const [chairs, setChairs] = useState<UserOption[]>([]);
   const [selectedChairID, setSelectedChairID] = useState('__none__');
   const [assignChairError, setAssignChairError] = useState('');
+  const [programStatusDialog, setProgramStatusDialog] = useState<{ id: string; status: string; label: string } | null>(null);
+  const [deleteProgramDialogID, setDeleteProgramDialogID] = useState<string | null>(null);
 
   const assignedChairIds = React.useMemo(() => {
     const ids = new Set<string>();
@@ -818,7 +950,7 @@ export default function AdminProgramManagement() {
   const emptyForm = {
     program_name: '', program_description: '', program_category: '',
     department_id: '', objectives: '', target_beneficiaries: '',
-    budget_allocation: '', start_date: '', end_date: '',
+    start_date: '', end_date: '',
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -844,12 +976,7 @@ export default function AdminProgramManagement() {
     try {
       const res = await fetch(`${API}/departments`, { headers: authHeaders() });
       const data = await res.json();
-      let filtered = data.departments || [];
-      if (role !== 'admin') {
-        filtered = filtered.filter(
-          (d: Department) => d.department_code !== 'ADMIN' && d.department_name.toLowerCase() !== 'administration'
-        );
-      }
+      let filtered = filterVisibleDepartments((data.departments || []) as Department[]);
       setDepartments(filtered);
     } catch (e) { console.error(e); }
   };
@@ -866,7 +993,6 @@ export default function AdminProgramManagement() {
         department_id: form.department_id || null,
         objectives: form.objectives || null,
         target_beneficiaries: form.target_beneficiaries || null,
-        budget_allocation: form.budget_allocation ? parseFloat(form.budget_allocation) : null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         // Admin creates = auto approved and active
@@ -889,7 +1015,6 @@ export default function AdminProgramManagement() {
         department_id: form.department_id || null,
         objectives: form.objectives || null,
         target_beneficiaries: form.target_beneficiaries || null,
-        budget_allocation: form.budget_allocation ? parseFloat(form.budget_allocation) : null,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
       }),
@@ -898,22 +1023,32 @@ export default function AdminProgramManagement() {
     else { const e = await res.json(); setProgramFormError(e.error || 'Failed to update program'); }
   };
 
-  const handleStatusChange = async (id: string, status: string) => {
+  const handleStatusChange = (id: string, status: string) => {
     const label = status === 'completed' ? 'complete' : 'cancel';
-    if (!confirm(`Mark this program as ${label}?`)) return;
-    const res = await fetch(`${API}/programs/${id}/status`, {
-      method: 'PATCH', headers: authHeaders(),
-      body: JSON.stringify({ status }),
-    });
-    if (res.ok) await loadPrograms();
-    else { const e = await res.json(); setProgramPageError(e.error || `Failed to ${label} program`); }
+    setProgramStatusDialog({ id, status, label });
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this program? All its projects will also be affected.')) return;
-    const res = await fetch(`${API}/programs/${id}`, { method: 'DELETE', headers: authHeaders() });
+  const confirmStatusChange = async () => {
+    if (!programStatusDialog) return;
+    const res = await fetch(`${API}/programs/${programStatusDialog.id}/status`, {
+      method: 'PATCH', headers: authHeaders(),
+      body: JSON.stringify({ status: programStatusDialog.status }),
+    });
+    if (res.ok) await loadPrograms();
+    else { const e = await res.json(); setProgramPageError(e.error || `Failed to ${programStatusDialog.label} program`); }
+    setProgramStatusDialog(null);
+  };
+
+  const handleDelete = (id: string) => {
+    setDeleteProgramDialogID(id);
+  };
+
+  const confirmDeleteProgram = async () => {
+    if (!deleteProgramDialogID) return;
+    const res = await fetch(`${API}/programs/${deleteProgramDialogID}`, { method: 'DELETE', headers: authHeaders() });
     if (res.ok) await loadPrograms();
     else { const e = await res.json(); setProgramPageError(e.error || 'Failed to delete program'); }
+    setDeleteProgramDialogID(null);
   };
 
   const openAssignChair = (p: Program) => {
@@ -951,7 +1086,6 @@ export default function AdminProgramManagement() {
       department_id: p.department_id || '',
       objectives: p.objectives || '',
       target_beneficiaries: p.target_beneficiaries || '',
-      budget_allocation: p.budget_allocation?.toString() || '',
       start_date: p.start_date?.split('T')[0] || '',
       end_date: p.end_date?.split('T')[0] || '',
     });
@@ -974,6 +1108,18 @@ export default function AdminProgramManagement() {
   const [activeTab, setActiveTab] = useState<'programs' | 'requests'>('programs');
   // const params = useParams();
   // const role = params?.role;
+
+  if (drillProgram) {
+    return (
+      <div className="container mx-auto p-6">
+        <ProjectsView
+          program={drillProgram}
+          departments={departments}
+          onBack={() => setDrillProgram(null)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
@@ -1074,7 +1220,7 @@ export default function AdminProgramManagement() {
                       <TableHead>Program Name</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Department</TableHead>
-                      <TableHead>Budget</TableHead>
+                      <TableHead>Overall Budget</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -1100,7 +1246,7 @@ export default function AdminProgramManagement() {
                         </TableCell>
                         <TableCell>{p.program_category || '-'}</TableCell>
                         <TableCell>{departments.find(d => d.id === p.department_id)?.department_code || '-'}</TableCell>
-                        <TableCell>{p.budget_allocation ? `₱${p.budget_allocation.toLocaleString()}` : '-'}</TableCell>
+                        <TableCell>{p.spent_budget ? `₱${p.spent_budget.toLocaleString()}` : '₱0'}</TableCell>
                         <TableCell><StatusBadge status={p.status} /></TableCell>
                         <TableCell>{new Date(p.created_at).toLocaleDateString()}</TableCell>
                         <TableCell className="text-right">
@@ -1158,6 +1304,45 @@ export default function AdminProgramManagement() {
                 </DialogHeader>
                 <ProgramForm formData={form} setFormData={setForm} departments={departments}
                   onSubmit={handleUpdate} onCancel={() => { setEditOpen(false); setProgramFormError(''); }} submitLabel="Update Program" error={programFormError} />
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={!!programStatusDialog} onOpenChange={(open) => { if (!open) setProgramStatusDialog(null); }}>
+              <DialogContent className="bg-white max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Update Program Status</DialogTitle>
+                  <DialogDescription>
+                    Mark this program as <strong>{programStatusDialog?.label}</strong>?
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button variant="outline">Cancel</Button>
+                  </DialogClose>
+                  <Button
+                    variant={programStatusDialog?.status === 'cancelled' ? 'destructive' : 'default'}
+                    onClick={confirmStatusChange}
+                  >
+                    Confirm
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={!!deleteProgramDialogID} onOpenChange={(open) => { if (!open) setDeleteProgramDialogID(null); }}>
+              <DialogContent className="bg-white max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Delete Program</DialogTitle>
+                  <DialogDescription>
+                    Delete this program? All its projects will also be affected.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button variant="outline">Cancel</Button>
+                  </DialogClose>
+                  <Button variant="destructive" onClick={confirmDeleteProgram}>Delete</Button>
+                </DialogFooter>
               </DialogContent>
             </Dialog>
 
@@ -1248,14 +1433,14 @@ export default function AdminProgramManagement() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-sm font-medium text-slate-700">Budget Allocation</label>
+                        <label className="text-sm font-medium text-slate-700">Overall Budget</label>
                         <p className="mt-1 text-slate-600 text-sm">
-                          {selected.budget_allocation ? `₱${selected.budget_allocation.toLocaleString()}` : 'Not set'}
+                          ₱{(selected.spent_budget || 0).toLocaleString()}
                         </p>
                       </div>
                       <div>
-                        <label className="text-sm font-medium text-slate-700">Spent Budget</label>
-                        <p className="mt-1 text-slate-600 text-sm">₱{(selected.spent_budget || 0).toLocaleString()}</p>
+                        <label className="text-sm font-medium text-slate-700">Budget Source</label>
+                        <p className="mt-1 text-slate-600 text-sm">Summed from approved projects under this program</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -1301,7 +1486,7 @@ export default function AdminProgramManagement() {
             </Dialog>
           </div>
         ) : (
-          <ProgramChairRequestManagement />
+          <ProgramChairRequestManagement onRequestApproved={loadPrograms} />
         )}
       </div>
     </div>

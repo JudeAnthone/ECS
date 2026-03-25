@@ -52,7 +52,7 @@ func (uc *programUseCase) CreateProgram(ctx context.Context, req *domain.CreateP
 		ProgramChairID:      req.ProgramChairID,
 		Objectives:          req.Objectives,
 		TargetBeneficiaries: req.TargetBeneficiaries,
-		BudgetAllocation:    req.BudgetAllocation,
+		BudgetAllocation:    nil,
 		SpentBudget:         0,
 		StartDate:           startDate,
 		EndDate:             endDate,
@@ -73,6 +73,15 @@ func (uc *programUseCase) GetAllPrograms(ctx context.Context) ([]*domain.Program
 	programs, err := uc.programRepo.GetAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get programs: %w", err)
+	}
+	return programs, nil
+}
+
+// GetVisiblePrograms retrieves programs visible to the caller based on role scope.
+func (uc *programUseCase) GetVisiblePrograms(ctx context.Context, userID string, role string) ([]*domain.Program, error) {
+	programs, err := uc.programRepo.GetVisibleForUser(ctx, userID, role)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get scoped programs: %w", err)
 	}
 	return programs, nil
 }
@@ -133,9 +142,6 @@ func (uc *programUseCase) UpdateProgram(ctx context.Context, id string, req *dom
 	}
 	if req.TargetBeneficiaries != nil {
 		program.TargetBeneficiaries = req.TargetBeneficiaries
-	}
-	if req.BudgetAllocation != nil {
-		program.BudgetAllocation = req.BudgetAllocation
 	}
 	if req.Status != nil {
 		program.Status = *req.Status

@@ -17,8 +17,8 @@ type UseCase interface {
 	GetAllRequests(ctx context.Context) ([]*domain.ProjectRequest, error)
 	FinalApprove(ctx context.Context, adminID string, id string, input *domain.FinalApprovalInput) error
 
-	// Program Chair: review, give feedback, assign to project head
-	ProgramChairReview(ctx context.Context, chairID string, id string, input *domain.ProgramChairReviewInput) error
+	// Program Chair/Admin: review and optionally approve to create program
+	ProgramChairReview(ctx context.Context, actorID string, actorRole string, id string, input *domain.ProgramChairReviewInput) error
 	AssignToHead(ctx context.Context, chairID string, id string, input *domain.AssignToHeadInput) error
 	GetRequestsByProgram(ctx context.Context, programID string) ([]*domain.ProjectRequest, error)
 

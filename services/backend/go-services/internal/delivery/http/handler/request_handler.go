@@ -190,8 +190,9 @@ func (h *RequestHandler) RerouteRequest(w http.ResponseWriter, r *http.Request) 
 // ProgramChairReview handles PATCH /api/v1/requests/{id}/review
 // Accessible by: program_chair
 func (h *RequestHandler) ProgramChairReview(w http.ResponseWriter, r *http.Request) {
-	chairID, _ := r.Context().Value("user_id").(string)
-	if chairID == "" {
+	actorID, _ := r.Context().Value("user_id").(string)
+	actorRole, _ := r.Context().Value("role").(string)
+	if actorID == "" {
 		respondWithError(w, http.StatusUnauthorized, "user not authenticated")
 		return
 	}
@@ -203,7 +204,7 @@ func (h *RequestHandler) ProgramChairReview(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.requestUsecase.ProgramChairReview(r.Context(), chairID, id, &input); err != nil {
+	if err := h.requestUsecase.ProgramChairReview(r.Context(), actorID, actorRole, id, &input); err != nil {
 		if strings.HasPrefix(err.Error(), "forbidden:") {
 			respondWithError(w, http.StatusForbidden, strings.TrimPrefix(err.Error(), "forbidden: "))
 			return

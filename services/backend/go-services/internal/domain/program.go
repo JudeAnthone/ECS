@@ -33,7 +33,6 @@ type CreateProgramRequest struct {
 	ProgramChairID      *string  `json:"program_chair_id"`
 	Objectives          *string  `json:"objectives" validate:"omitempty,max=2000"`
 	TargetBeneficiaries *string  `json:"target_beneficiaries" validate:"omitempty,max=500"`
-	BudgetAllocation    *float64 `json:"budget_allocation" validate:"omitempty,gte=0"`
 	StartDate           *string  `json:"start_date"` // Format: YYYY-MM-DD
 	EndDate             *string  `json:"end_date"`   // Format: YYYY-MM-DD
 }
@@ -47,7 +46,6 @@ type UpdateProgramRequest struct {
 	ProgramChairID      *string  `json:"program_chair_id"`
 	Objectives          *string  `json:"objectives" validate:"omitempty,max=2000"`
 	TargetBeneficiaries *string  `json:"target_beneficiaries" validate:"omitempty,max=500"`
-	BudgetAllocation    *float64 `json:"budget_allocation" validate:"omitempty,gte=0"`
 	StartDate           *string  `json:"start_date"`
 	EndDate             *string  `json:"end_date"`
 	Status              *string  `json:"status" validate:"omitempty,oneof=draft active completed cancelled"`

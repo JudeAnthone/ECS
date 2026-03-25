@@ -60,7 +60,6 @@ type SubmitRequestInput struct {
 	RequestDescription    string   `json:"request_description" validate:"required,min=10,max=2000"`
 	RequestedDepartment   *string  `json:"requested_department"`
 	RequestedDepartmentID *string  `json:"requested_department_id"`
-	EstimatedBudget       *float64 `json:"estimated_budget"`
 	TargetBeneficiaries   *string  `json:"target_beneficiaries"`
 	Justification         *string  `json:"justification"`
 }
@@ -74,6 +73,8 @@ type ProgramChairReviewInput struct {
 	ReviewNotes          *string `json:"review_notes"`
 	AssignedProgramID    *string `json:"assigned_program_id"`
 	ProgramChairFeedback *string `json:"program_chair_feedback"`
+	ProgramCategory      *string `json:"program_category"`
+	DepartmentID         *string `json:"department_id"`
 }
 
 type AssignToHeadInput struct {

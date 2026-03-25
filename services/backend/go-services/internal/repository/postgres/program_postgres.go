@@ -133,6 +133,141 @@ func (r *programRepository) GetAll(ctx context.Context) ([]*domain.Program, erro
 	return programs, nil
 }
 
+// GetVisibleForUser retrieves programs visible to a specific user role.
+// For staff: programs under their assigned program chair or assigned department.
+// For project heads: programs under their assigned program chair plus programs explicitly
+// linked through assigned requests or project assignments, including assigned department.
+func (r *programRepository) GetVisibleForUser(ctx context.Context, userID string, role string) ([]*domain.Program, error) {
+	var (
+		rows pgx.Rows
+		err  error
+	)
+
+	if role == domain.RoleStaff {
+		query := `
+			SELECT DISTINCT
+				p.id,
+				p.program_name,
+				p.program_description,
+				p.program_category,
+				p.department_id,
+				p.program_chair_id,
+				p.objectives,
+				p.target_beneficiaries,
+				p.budget_allocation,
+				p.spent_budget,
+				p.start_date,
+				p.end_date,
+				p.status,
+				p.approval_status,
+				p.approved_by,
+				p.approved_at,
+				p.created_at,
+				p.updated_at
+			FROM programs p
+			LEFT JOIN departments d ON d.id = p.department_id
+			JOIN users u ON u.id = $1
+			WHERE (
+				(u.assigned_program_chair_id IS NOT NULL AND p.program_chair_id = u.assigned_program_chair_id)
+				OR (
+					u.department IS NOT NULL
+					AND (
+						LOWER(TRIM(u.department)) = LOWER(TRIM(COALESCE(d.department_code, '')))
+						OR LOWER(TRIM(u.department)) = LOWER(TRIM(COALESCE(d.department_name, '')))
+					)
+				)
+			  )
+			ORDER BY p.created_at DESC
+		`
+		rows, err = r.db.Query(ctx, query, userID)
+	} else {
+		query := `
+			SELECT DISTINCT
+				p.id,
+				p.program_name,
+				p.program_description,
+				p.program_category,
+				p.department_id,
+				p.program_chair_id,
+				p.objectives,
+				p.target_beneficiaries,
+				p.budget_allocation,
+				p.spent_budget,
+				p.start_date,
+				p.end_date,
+				p.status,
+				p.approval_status,
+				p.approved_by,
+				p.approved_at,
+				p.created_at,
+				p.updated_at
+			FROM programs p
+			LEFT JOIN departments d ON d.id = p.department_id
+			JOIN users u ON u.id = $1
+			WHERE (
+				(u.assigned_program_chair_id IS NOT NULL AND p.program_chair_id = u.assigned_program_chair_id)
+				OR (
+					u.department IS NOT NULL
+					AND (
+						LOWER(TRIM(u.department)) = LOWER(TRIM(COALESCE(d.department_code, '')))
+						OR LOWER(TRIM(u.department)) = LOWER(TRIM(COALESCE(d.department_name, '')))
+					)
+				)
+				OR EXISTS (
+					SELECT 1 FROM projects pr
+					WHERE pr.program_id = p.id AND pr.project_head_id = u.id
+				)
+				OR EXISTS (
+					SELECT 1 FROM project_requests rq
+					WHERE rq.assigned_program_id = p.id AND rq.assigned_to_project_head = u.id
+				)
+			)
+			ORDER BY p.created_at DESC
+		`
+		rows, err = r.db.Query(ctx, query, userID)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query scoped programs: %w", err)
+	}
+	defer rows.Close()
+
+	var programs []*domain.Program
+	for rows.Next() {
+		var prog domain.Program
+		err := rows.Scan(
+			&prog.ID,
+			&prog.ProgramName,
+			&prog.ProgramDescription,
+			&prog.ProgramCategory,
+			&prog.DepartmentID,
+			&prog.ProgramChairID,
+			&prog.Objectives,
+			&prog.TargetBeneficiaries,
+			&prog.BudgetAllocation,
+			&prog.SpentBudget,
+			&prog.StartDate,
+			&prog.EndDate,
+			&prog.Status,
+			&prog.ApprovalStatus,
+			&prog.ApprovedBy,
+			&prog.ApprovedAt,
+			&prog.CreatedAt,
+			&prog.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan scoped program: %w", err)
+		}
+		programs = append(programs, &prog)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("row iteration error: %w", err)
+	}
+
+	return programs, nil
+}
+
 // GetByID retrieves a program by its ID
 func (r *programRepository) GetByID(ctx context.Context, id string) (*domain.Program, error) {
 	query := `

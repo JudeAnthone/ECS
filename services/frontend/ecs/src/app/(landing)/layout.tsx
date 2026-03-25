@@ -42,12 +42,17 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
 						<SignUpModal open={signUpOpen} onOpenChange={setSignUpOpen} onOpenLogin={handleOpenLogin} />
 						<div className="flex items-center gap-3">
 							{user ? (
+								(() => {
+									const roleSlug = String(user.role || '').replace(/_/g, '-')
+									return (
 								<Link
-									href={`/${user.role}/${user.role}-dashboard`}
+										href={`/${roleSlug}/${roleSlug}-dashboard`}
 									className="text-white font-semibold hover:underline transition-all"
 								>
 									Go back to Dashboard
 								</Link>
+									)
+								})()
 							) : (
 								<>
 									{/* Login */}

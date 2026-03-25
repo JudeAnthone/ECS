@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import {
-  FileText, Target, Users, Wallet, XCircle,
+  FileText, Target, Users, XCircle,
   Send, CheckCircle2, Lightbulb, RefreshCw, ClipboardList,
   ChevronDown, ChevronUp, Eye
 } from 'lucide-react';
@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/Select';
+import { filterVisibleDepartments } from '@/shared/configs/department-visibility';
 
 const API = 'http://localhost:8081/api/v1';
 function getToken() { return localStorage.getItem('auth_token'); }
@@ -34,7 +35,6 @@ interface RequestRecord {
   id: string;
   request_title: string;
   request_description?: string | null;
-  estimated_budget?: number | null;
   target_beneficiaries?: string | null;
   justification?: string | null;
   requested_department?: string | null;
@@ -136,7 +136,6 @@ function RequestDetailDialog({
             <dl className="space-y-2 bg-slate-50 rounded-lg p-3">
               <DetailRow label="Submitted" value={fmt(req.created_at)} />
               <DetailRow label="Department" value={req.requested_department} />
-              <DetailRow label="Est. Budget" value={req.estimated_budget != null ? `₱${Number(req.estimated_budget).toLocaleString()}` : null} />
               <DetailRow label="Target Beneficiaries" value={req.target_beneficiaries} />
             </dl>
           </section>
@@ -230,7 +229,6 @@ export default function PublicUserRequestFormPage() {
     target_beneficiaries: '',
     requested_department: '',
     requested_department_id: '',
-    estimated_budget: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -265,10 +263,7 @@ export default function PublicUserRequestFormPage() {
       const r = await fetch(`${API}/departments`, { headers: authHeaders() });
       if (r.ok) {
         const data = await r.json();
-        // Exclude 'Administration' (ADMIN) from department selection
-        const filtered = (data.departments ?? []).filter(
-          (d: Department) => d.department_code !== 'ADMIN' && d.department_name.toLowerCase() !== 'administration'
-        );
+        const filtered = filterVisibleDepartments(data.departments ?? []);
         setDepartments(filtered);
       }
     } catch { /* silently fail */ }
@@ -292,7 +287,6 @@ export default function PublicUserRequestFormPage() {
       if (formData.target_beneficiaries.trim()) body.target_beneficiaries = formData.target_beneficiaries.trim();
       if (formData.requested_department.trim()) body.requested_department = formData.requested_department.trim();
       if (formData.requested_department_id) body.requested_department_id = formData.requested_department_id;
-      if (formData.estimated_budget.trim()) body.estimated_budget = parseFloat(formData.estimated_budget);
 
       const r = await fetch(`${API}/requests`, {
         method: 'POST',
@@ -305,7 +299,7 @@ export default function PublicUserRequestFormPage() {
         return;
       }
       setSubmitSuccess(data);
-      setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '', requested_department: '', requested_department_id: '', estimated_budget: '' });
+      setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '', requested_department: '', requested_department_id: '' });
       fetchMyRequests();
     } catch {
       setSubmitError('Network error. Please try again.');
@@ -315,13 +309,10 @@ export default function PublicUserRequestFormPage() {
   };
 
   const handleClear = () => {
-    setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '', requested_department: '', requested_department_id: '', estimated_budget: '' });
+    setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '', requested_department: '', requested_department_id: '' });
     setSubmitError('');
     setSubmitSuccess(null);
   };
-
-  const fmt = (n?: number | null) =>
-    n == null ? '—' : new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(n);
 
   const isFormValid = formData.request_title.trim() && formData.request_description.trim();
 
@@ -465,37 +456,6 @@ export default function PublicUserRequestFormPage() {
               </div>
             </div>
 
-            {/* ── Budget ── */}
-            <div className="rounded-lg border border-slate-200 overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-                <Wallet className="w-4 h-4 text-slate-500" />
-                <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Budget Estimate</span>
-              </div>
-              <div className="p-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700 flex items-center gap-1.5">
-                    <span className="text-slate-400 text-sm font-bold">₱</span> Budget Allocation
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">₱</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={formData.estimated_budget}
-                      onChange={e => setFormData({ ...formData, estimated_budget: e.target.value })}
-                      placeholder="0.00"
-                      className="pl-7 border-slate-300"
-                    />
-                  </div>
-                  {formData.estimated_budget && !isNaN(parseFloat(formData.estimated_budget)) && (
-                    <p className="text-xs text-slate-500">
-                      ≈ {new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(parseFloat(formData.estimated_budget))}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
             {/* Error */}
             {submitError && (
               <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -570,7 +530,6 @@ export default function PublicUserRequestFormPage() {
                         <th className="text-left py-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Title</th>
                         <th className="text-left py-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
                         <th className="text-left py-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Stage</th>
-                        <th className="text-left py-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Budget</th>
                         <th className="text-left py-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Submitted</th>
                         <th className="py-2 px-3" />
                       </tr>
@@ -586,7 +545,6 @@ export default function PublicUserRequestFormPage() {
                           </td>
                           <td className="py-3 px-3"><StatusBadge status={req.status} /></td>
                           <td className="py-3 px-3"><WorkflowBadge stage={req.workflow_stage} /></td>
-                          <td className="py-3 px-3 text-slate-700 font-medium">{fmt(req.estimated_budget)}</td>
                           <td className="py-3 px-3 text-slate-500">
                             {new Date(req.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}
                           </td>

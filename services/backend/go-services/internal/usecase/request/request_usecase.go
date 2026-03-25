@@ -46,7 +46,6 @@ func (uc *requestUseCase) SubmitRequest(ctx context.Context, userID string, inpu
 		RequestedBy:           userID,
 		RequestedDepartment:   input.RequestedDepartment,
 		RequestedDepartmentID: input.RequestedDepartmentID,
-		EstimatedBudget:       input.EstimatedBudget,
 		TargetBeneficiaries:   input.TargetBeneficiaries,
 		Justification:         input.Justification,
 	}
@@ -72,14 +71,18 @@ func (uc *requestUseCase) GetAllRequests(ctx context.Context) ([]*domain.Project
 	return uc.requestRepo.GetAll(ctx)
 }
 
-// ProgramChairReview submits the program chair's review.
-func (uc *requestUseCase) ProgramChairReview(ctx context.Context, chairID, id string, input *domain.ProgramChairReviewInput) error {
+// ProgramChairReview submits a review by a program chair or admin.
+func (uc *requestUseCase) ProgramChairReview(ctx context.Context, actorID, actorRole, id string, input *domain.ProgramChairReviewInput) error {
 	if input.Status != "approved" && input.Status != "rejected" {
 		return fmt.Errorf("status must be 'approved' or 'rejected'")
 	}
 
-	if chairID == "" {
-		return fmt.Errorf("forbidden: missing program chair identity")
+	if actorID == "" {
+		return fmt.Errorf("forbidden: missing reviewer identity")
+	}
+
+	if actorRole != domain.RoleProgramChair && actorRole != domain.RoleAdmin {
+		return fmt.Errorf("forbidden: only admin or program chair can review requests")
 	}
 
 	req, err := uc.requestRepo.GetByID(ctx, id)
@@ -87,17 +90,19 @@ func (uc *requestUseCase) ProgramChairReview(ctx context.Context, chairID, id st
 		return err
 	}
 
-	if req.ReviewedBy != nil && *req.ReviewedBy != "" && *req.ReviewedBy != chairID {
-		return fmt.Errorf("forbidden: request is owned by another program chair")
-	}
-
-	if req.AssignedProgramID != nil && *req.AssignedProgramID != "" {
-		program, err := uc.programRepo.GetByID(ctx, *req.AssignedProgramID)
-		if err != nil {
-			return fmt.Errorf("failed to validate assigned program: %w", err)
+	if actorRole == domain.RoleProgramChair {
+		if req.ReviewedBy != nil && *req.ReviewedBy != "" && *req.ReviewedBy != actorID {
+			return fmt.Errorf("forbidden: request is owned by another program chair")
 		}
-		if program.ProgramChairID == nil || *program.ProgramChairID != chairID {
-			return fmt.Errorf("forbidden: request is assigned to a different program chair")
+
+		if req.AssignedProgramID != nil && *req.AssignedProgramID != "" {
+			program, err := uc.programRepo.GetByID(ctx, *req.AssignedProgramID)
+			if err != nil {
+				return fmt.Errorf("failed to validate assigned program: %w", err)
+			}
+			if program.ProgramChairID == nil || *program.ProgramChairID != actorID {
+				return fmt.Errorf("forbidden: request is assigned to a different program chair")
+			}
 		}
 	}
 
@@ -107,32 +112,42 @@ func (uc *requestUseCase) ProgramChairReview(ctx context.Context, chairID, id st
 		if req.AssignedProgramID != nil && *req.AssignedProgramID != "" {
 			input.AssignedProgramID = req.AssignedProgramID
 		} else {
-			// create program from request details (no department assigned)
+			if input.ProgramCategory == nil || strings.TrimSpace(*input.ProgramCategory) == "" {
+				return fmt.Errorf("program_category is required when approving request")
+			}
+			if input.DepartmentID == nil || strings.TrimSpace(*input.DepartmentID) == "" {
+				return fmt.Errorf("department_id is required when approving request")
+			}
+
+			// create program from request details using selected category and department
 			program := &domain.Program{
 				ProgramName:         req.RequestTitle,
 				ProgramDescription:  &req.RequestDescription,
-				ProgramCategory:     nil,
-				DepartmentID:        nil,
-				ProgramChairID:      &chairID,
+				ProgramCategory:     input.ProgramCategory,
+				DepartmentID:        input.DepartmentID,
+				ProgramChairID:      nil,
 				Objectives:          req.Justification,
 				TargetBeneficiaries: req.TargetBeneficiaries,
-				BudgetAllocation:    req.EstimatedBudget,
+				BudgetAllocation:    nil,
 				SpentBudget:         0,
 				Status:              "active",
 				ApprovalStatus:      "approved",
+			}
+			if actorRole == domain.RoleProgramChair {
+				program.ProgramChairID = &actorID
 			}
 			if err := uc.programRepo.Create(ctx, program); err != nil {
 				return fmt.Errorf("failed to create program from request: %w", err)
 			}
 			// debug log: created program id and chair
-			fmt.Printf("[DEBUG] Program created from request %s -> program id=%s chair=%s\n", req.ID, program.ID, chairID)
+			fmt.Printf("[DEBUG] Program created from request %s -> program id=%s reviewer=%s\n", req.ID, program.ID, actorID)
 			// attach created program id to review input so request row records it
 			input.AssignedProgramID = &program.ID
 		}
 	}
 
 	// perform the program chair review update (records review and assigned_program_id)
-	if err := uc.requestRepo.ProgramChairReview(ctx, id, chairID, input); err != nil {
+	if err := uc.requestRepo.ProgramChairReview(ctx, id, actorID, input); err != nil {
 		return err
 	}
 	return nil

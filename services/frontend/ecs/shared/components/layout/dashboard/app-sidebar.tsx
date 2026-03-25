@@ -24,6 +24,10 @@ import { useParams } from "next/navigation"
 
 import Link from "next/link"
 
+function normalizeRoleSlug(role?: string | null) {
+  return (role || '').replace(/_/g, '-')
+}
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [user, setUser] = React.useState<any>(null);
   React.useEffect(() => {
@@ -35,7 +39,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     avatar: user?.avatar_url || "",
   };
   const params = useParams();
-  const role = params?.role as string;
+  const role = normalizeRoleSlug(params?.role as string);
   return (
     <Sidebar
       variant="inset"
@@ -50,7 +54,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain userRole={role || user?.role} />
+        <NavMain userRole={role || normalizeRoleSlug(user?.role)} />
         {/* Projects section removed */}
           {/* NavSecondary removed as it is no longer used */}
       </SidebarContent>

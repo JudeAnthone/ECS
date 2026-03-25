@@ -21,13 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/shared/components/ui/Select'
+import { PROGRAM_CATEGORIES } from '@/shared/configs/program-categories'
+import { filterVisibleDepartments } from '@/shared/configs/department-visibility'
 import {
   ClipboardList,
   Eye,
   CheckCircle,
   XCircle,
   UserCheck,
-  CornerUpRight,
   Search,
   RotateCcw,
   AlertCircle,
@@ -86,6 +87,13 @@ interface Department {
   department_code?: string
 }
 
+interface UserProfile {
+  id: string
+  first_name?: string
+  last_name?: string
+  email?: string
+}
+
 // ── Status helpers ──────────────────────────────────────────────────────────
 
 function statusBadge(status: string) {
@@ -105,7 +113,6 @@ function stageLabel(stage: string) {
     submitted: 'Awaiting Review',
     under_program_chair_review: 'Approved — Pending Assignment',
     feedback_provided: 'Feedback Provided',
-    assigned_to_department: 'Assigned to Department',
     project_head_reviewing: 'Project Head Reviewing',
     project_head_accepted: 'Project Head Accepted',
     project_head_declined: 'Project Head Declined',
@@ -114,7 +121,6 @@ function stageLabel(stage: string) {
     proposal_changes_requested: 'Changes Requested',
     pending_final_approval: 'Pending Final Approval',
     approved: 'Fully Approved',
-    rejected: 'Rejected',
   }
   return map[stage] ?? stage.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
 }
@@ -153,10 +159,11 @@ function Section({ title, children, color = 'slate' }: { title: string; children
 
 // ── Main Page ───────────────────────────────────────────────────────────────
 
-export default function ProgramChairRequestManagement() {
+export default function ProgramChairRequestManagement({ onRequestApproved }: { onRequestApproved?: () => void }) {
   const [requests, setRequests] = useState<Request[]>([])
   const [programs, setPrograms] = useState<Program[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
+  const [publicUsersByID, setPublicUsersByID] = useState<Record<string, UserProfile>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -172,21 +179,25 @@ export default function ProgramChairRequestManagement() {
   const [reviewStatus, setReviewStatus] = useState<'approved' | 'rejected'>('approved')
   const [reviewNotes, setReviewNotes] = useState('')
   const [reviewFeedback, setReviewFeedback] = useState('')
+  const [reviewProgramCategory, setReviewProgramCategory] = useState('')
+  const [reviewDepartmentID, setReviewDepartmentID] = useState('')
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
 
   // Assign form removed — assignment moved to Program Management
-
-  // Reroute form
-  const [rerouteReq, setRerouteReq] = useState<Request | null>(null)
-  const [rerouteDept, setRerouteDept] = useState('')
-  const [rerouteSubmitting, setRerouteSubmitting] = useState(false)
 
   // Stats
   const total = requests.length
   const pending = requests.filter(r => r.workflow_stage === 'submitted').length
   const reviewed = requests.filter(r => r.status === 'approved').length
   const rejected = requests.filter(r => r.status === 'rejected').length
-  const assigned = requests.filter(r => r.workflow_stage === 'assigned_to_department').length
+
+  const requestedByLabel = (requestedBy: string) => {
+    const user = publicUsersByID[requestedBy]
+    if (!user) return requestedBy
+    const fullName = `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim()
+    if (fullName && user.email) return `${fullName} (${user.email})`
+    return fullName || user.email || requestedBy
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -212,7 +223,18 @@ export default function ProgramChairRequestManagement() {
       const deptRes = await fetch(`${API}/departments`, { headers: authHeaders() })
       if (deptRes.ok) {
         const d = await deptRes.json()
-        setDepartments(d.departments ?? [])
+        setDepartments(filterVisibleDepartments(d.departments ?? []))
+      }
+
+      const publicUsersRes = await fetch(`${API}/users/by-role?role=public_user`, { headers: authHeaders() })
+      if (publicUsersRes.ok) {
+        const d = await publicUsersRes.json()
+        const users = (d.users ?? []) as UserProfile[]
+        const map: Record<string, UserProfile> = {}
+        users.forEach((u) => {
+          if (u.id) map[u.id] = u
+        })
+        setPublicUsersByID(map)
       }
     } catch {
       setError('Failed to load data. Please try again.')
@@ -233,11 +255,19 @@ export default function ProgramChairRequestManagement() {
   // ── Review submit ────────────────────────────────────────────────────────
   async function handleReviewSubmit() {
     if (!reviewReq) return
+    if (reviewStatus === 'approved' && (!reviewProgramCategory || !reviewDepartmentID)) {
+      alert('Please select program category and department before approving.')
+      return
+    }
     setReviewSubmitting(true)
     try {
       const body: Record<string, unknown> = { status: reviewStatus }
       if (reviewNotes) body.review_notes = reviewNotes
       if (reviewFeedback) body.program_chair_feedback = reviewFeedback
+      if (reviewStatus === 'approved') {
+        body.program_category = reviewProgramCategory
+        body.department_id = reviewDepartmentID
+      }
       const res = await fetch(`${API}/requests/${reviewReq.id}/review`, {
         method: 'PATCH',
         headers: authHeaders(),
@@ -251,8 +281,13 @@ export default function ProgramChairRequestManagement() {
       setReviewReq(null)
       setReviewNotes('')
       setReviewFeedback('')
+      setReviewProgramCategory('')
+      setReviewDepartmentID('')
       setReviewStatus('approved')
       await fetchData()
+      if (reviewStatus === 'approved') {
+        onRequestApproved?.()
+      }
     } finally {
       setReviewSubmitting(false)
     }
@@ -273,30 +308,13 @@ export default function ProgramChairRequestManagement() {
     } finally { setDeleteSubmitting(false) }
   }
 
-  // ── Reroute submit ───────────────────────────────────────────────────────
-  async function handleRerouteSubmit() {
-    if (!rerouteReq || !rerouteDept) return
-    setRerouteSubmitting(true)
-    try {
-      const res = await fetch(`${API}/requests/${rerouteReq.id}/reroute`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ target_department_id: rerouteDept }),
-      })
-      if (!res.ok) { const d = await res.json(); alert(d.error || 'Reroute failed'); return }
-      setRerouteReq(null)
-      setRerouteDept('')
-      await fetchData()
-    } finally { setRerouteSubmitting(false) }
-  }
-
   // ── Assign submit ────────────────────────────────────────────────────────
   // Assign functionality moved to Program Management
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+      <div className="max-w-[1920px] mx-auto space-y-6">
 
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -322,131 +340,110 @@ export default function ProgramChairRequestManagement() {
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Total Requests', value: total, icon: <ClipboardList className="h-5 w-5 text-indigo-500" />, border: 'border-l-indigo-500' },
-            { label: 'Awaiting Review', value: pending, icon: <AlertCircle className="h-5 w-5 text-yellow-500" />, border: 'border-l-yellow-500' },
-            { label: 'Approved', value: reviewed, icon: <CheckCircle className="h-5 w-5 text-green-500" />, border: 'border-l-green-500' },
-            { label: 'Assigned to Dept', value: assigned, icon: <UserCheck className="h-5 w-5 text-blue-500" />, border: 'border-l-blue-500' },
+            { label: 'Total Requests', value: total, icon: ClipboardList, color: 'text-indigo-700', bg: 'bg-indigo-50' },
+            { label: 'Awaiting Review', value: pending, icon: AlertCircle, color: 'text-amber-700', bg: 'bg-amber-50' },
+            { label: 'Approved', value: reviewed, icon: CheckCircle, color: 'text-green-700', bg: 'bg-green-50' },
+            { label: 'Rejected', value: rejected, icon: XCircle, color: 'text-red-700', bg: 'bg-red-50' },
           ].map(s => (
-            <Card key={s.label} className={`border-l-4 ${s.border}`}>
-              <CardContent className="pt-5 pb-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-slate-500 font-medium">{s.label}</p>
-                    <p className="text-3xl font-bold text-slate-900 mt-1">{s.value}</p>
-                  </div>
-                  {s.icon}
-                </div>
-              </CardContent>
-            </Card>
+            <div key={s.label} className={`${s.bg} rounded-xl p-4 flex items-center gap-3`}>
+              <s.icon className={`w-8 h-8 ${s.color}`} />
+              <div>
+                <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                <div className="text-xs text-slate-500">{s.label}</div>
+              </div>
+            </div>
           ))}
         </div>
 
-        {/* Filters */}
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Search by title or requester..."
-                  className="pl-9"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-52">
-                  <SelectValue placeholder="All Statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="submitted">Awaiting Review</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="under_program_chair_review">Pending Assignment</SelectItem>
-                  <SelectItem value="assigned_to_department">Assigned</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Single Requests Table */}
+        <div className="bg-white border border-slate-200 rounded-xl">
+          <div className="p-4 border-b border-slate-100">
+            <p className="text-xl font-semibold text-slate-800">Program Requests</p>
+            <p className="text-sm text-slate-500 mt-0.5">Review incoming requests and manage their approval status.</p>
+          </div>
 
-        {/* Table */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold text-slate-700">
-              Requests ({filtered.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex items-center justify-center py-16 text-slate-400">
-                <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading requests...
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                <ClipboardList className="h-10 w-10 mb-2 opacity-30" />
-                <p className="text-sm">No requests found.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-slate-50 text-left">
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Title</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Requested By</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Date</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Stage</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
+          <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Search by title or requester..."
+                className="pl-9"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full md:w-56">
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent className="bg-white">
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="submitted">Awaiting Review</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+                <SelectItem value="under_program_chair_review">Pending Assignment</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="p-4 pb-2">
+            <p className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Requests ({filtered.length})</p>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-slate-400">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading requests...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+              <ClipboardList className="h-10 w-10 mb-2 opacity-30" />
+              <p className="text-sm">No requests found.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-slate-50 text-left">
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Title</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Requested By</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Date</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filtered.map(req => (
+                    <tr key={req.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 max-w-xs">
+                        <p className="font-medium text-slate-900 truncate">{req.request_title}</p>
+                        {req.requested_department && (
+                          <p className="text-xs text-slate-400">{req.requested_department}</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{requestedByLabel(req.requested_by)}</td>
+                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{fmt(req.created_at)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${statusBadge(req.status)}`}>
+                          {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-slate-600 hover:text-indigo-600" onClick={() => setDetailReq(req)}>
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteReq(req)} title="Delete">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filtered.map(req => (
-                      <tr key={req.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3 max-w-xs">
-                          <p className="font-medium text-slate-900 truncate">{req.request_title}</p>
-                          {req.requested_department && (
-                            <p className="text-xs text-slate-400">{req.requested_department}</p>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">{req.requested_by}</td>
-                        <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{fmt(req.created_at)}</td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${statusBadge(req.status)}`}>
-                            {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{stageLabel(req.workflow_stage)}</td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            {/* View */}
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-slate-600 hover:text-indigo-600" onClick={() => setDetailReq(req)}>
-                              <Eye className="h-3.5 w-3.5" />
-                            </Button>
-                            {/* Only allow review via dialog, no quick approve/reject */}
-                            {/* Assign — show when approved and not yet assigned to a department */}
-                            {/* Assignment moved to Program Management */}
-                            {/* Reroute — show when not yet assigned to a department */}
-                            {!req.assigned_department_id && req.status !== 'rejected' && (
-                              <Button variant="ghost" size="sm" className="h-7 px-2 text-amber-600 hover:text-amber-800 hover:bg-amber-50" onClick={() => { setRerouteReq(req); setRerouteDept('') }} title="Reroute to another department">
-                                <CornerUpRight className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                            {/* Delete */}
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteReq(req)} title="Delete">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── View Detail Dialog ─────────────────────────────────────────────── */}
@@ -470,7 +467,7 @@ export default function ProgramChairRequestManagement() {
 
               {/* Request details */}
               <Section title="Request Details" color="slate">
-                <InfoRow label="Requested By" value={detailReq.requested_by} />
+                <InfoRow label="Requested By" value={requestedByLabel(detailReq.requested_by)} />
                 <InfoRow label="Submitted" value={fmt(detailReq.created_at)} />
                 <InfoRow label="Department" value={detailReq.requested_department} />
                 <InfoRow label="Estimated Budget" value={detailReq.estimated_budget != null ? `₱${detailReq.estimated_budget.toLocaleString()}` : '—'} />
@@ -501,12 +498,10 @@ export default function ProgramChairRequestManagement() {
                 </Section>
               )}
 
-              {/* Assignment */}
-              {detailReq.assigned_department_id && (
-                <Section title="Department Assignment" color="blue">
-                  <InfoRow label="Assigned Department" value={departments.find(d => d.id === detailReq.assigned_department_id)?.department_name ?? detailReq.assigned_department_id} />
-                  {detailReq.assigned_to_project_head && <InfoRow label="Project Head" value={detailReq.assigned_to_project_head} />}
-                  <InfoRow label="Assignment Notes" value={detailReq.assignment_notes} />
+              {/* Rejection */}
+              {detailReq.status === 'rejected' && (
+                <Section title="Rejected" color="red">
+                  <InfoRow label="Reason" value={detailReq.review_notes || 'No reason provided'} />
                 </Section>
               )}
 
@@ -542,7 +537,13 @@ export default function ProgramChairRequestManagement() {
             {detailReq?.workflow_stage === 'submitted' && (
               <Button
                 className="bg-yellow-600 hover:bg-yellow-700 text-white"
-                onClick={() => { setDetailReq(null); setReviewReq(detailReq); setReviewStatus('approved') }}
+                onClick={() => {
+                  setDetailReq(null)
+                  setReviewReq(detailReq)
+                  setReviewStatus('approved')
+                  setReviewProgramCategory('')
+                  setReviewDepartmentID('')
+                }}
               >
                 <FileText className="h-4 w-4 mr-1.5" /> Review This Request
               </Button>
@@ -553,7 +554,15 @@ export default function ProgramChairRequestManagement() {
       </Dialog>
 
       {/* ── Review Dialog ──────────────────────────────────────────────────── */}
-      <Dialog open={!!reviewReq} onOpenChange={() => setReviewReq(null)}>
+      <Dialog
+        open={!!reviewReq}
+        onOpenChange={() => {
+          setReviewReq(null)
+          setReviewProgramCategory('')
+          setReviewDepartmentID('')
+          setReviewStatus('approved')
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Review Request</DialogTitle>
@@ -591,6 +600,40 @@ export default function ProgramChairRequestManagement() {
 
               {/* Department assignment moved to Program Management; review only approves/rejects */}
 
+              {reviewStatus === 'approved' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold text-slate-700">Program Category <span className="text-red-500">*</span></Label>
+                    <Select value={reviewProgramCategory} onValueChange={setReviewProgramCategory}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PROGRAM_CATEGORIES.map((category) => (
+                          <SelectItem key={category} value={category}>{category}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-semibold text-slate-700">Department <span className="text-red-500">*</span></Label>
+                    <Select value={reviewDepartmentID} onValueChange={setReviewDepartmentID}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((department) => (
+                          <SelectItem key={department.id} value={department.id}>
+                            {department.department_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <Label className="text-sm font-semibold text-slate-700">Review Notes</Label>
                 <Textarea
@@ -614,7 +657,17 @@ export default function ProgramChairRequestManagement() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setReviewReq(null)}>Cancel</Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReviewReq(null)
+                setReviewProgramCategory('')
+                setReviewDepartmentID('')
+                setReviewStatus('approved')
+              }}
+            >
+              Cancel
+            </Button>
             <Button
               onClick={handleReviewSubmit}
               disabled={reviewSubmitting}
@@ -659,56 +712,6 @@ export default function ProgramChairRequestManagement() {
               {deleteSubmitting
                 ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Deleting...</>
                 : <><Trash2 className="h-4 w-4 mr-1.5" /> Delete</>
-              }
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Reroute Dialog ────────────────────────────────────────────────── */}
-      <Dialog open={!!rerouteReq} onOpenChange={() => setRerouteReq(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-amber-600 flex items-center gap-2">
-              <CornerUpRight className="h-5 w-5" /> Reroute Request
-            </DialogTitle>
-          </DialogHeader>
-          {rerouteReq && (
-            <div className="py-2 space-y-4">
-              <p className="text-sm text-slate-600">
-                Redirect <span className="font-semibold text-slate-800">{rerouteReq.request_title}</span> to a different department whose program chair will handle it.
-              </p>
-              <div className="space-y-1.5">
-                <Label className="text-sm font-semibold text-slate-700">Target Department <span className="text-red-500">*</span></Label>
-                {departments.length > 0 ? (
-                  <Select value={rerouteDept} onValueChange={setRerouteDept}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select destination department..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {departments.map(d => (
-                        <SelectItem key={d.id} value={d.id}>
-                          {d.department_name}{d.department_code ? ` (${d.department_code})` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-xs text-slate-400">No departments loaded.</p>
-                )}
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRerouteReq(null)}>Cancel</Button>
-            <Button
-              onClick={handleRerouteSubmit}
-              disabled={rerouteSubmitting || !rerouteDept}
-              className="bg-amber-600 hover:bg-amber-700 text-white"
-            >
-              {rerouteSubmitting
-                ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Rerouting...</>
-                : <><CornerUpRight className="h-4 w-4 mr-1.5" /> Reroute</>
               }
             </Button>
           </DialogFooter>

@@ -23,9 +23,9 @@ const iconMap = {
   "Reports": FileText,
   "Blog": MessageSquare,
   "Chatbot": Settings,
-  "Request Management": Users,
+  "Project Management": Users,
   "Finance Request": FileText,
-  "Project Proposal": BookOpen,
+
   "Report Submission": FileText,
   "Task Management": MessageSquare,
   "Project Tasks": MessageSquare,
@@ -44,6 +44,10 @@ interface RoleNavigation {
     label: string;
     items: NavItem[];
   };
+}
+
+function normalizeRoleSlug(role?: string | null) {
+  return (role || '').replace(/_/g, '-')
 }
 
 const roleNavigation: RoleNavigation = {
@@ -65,7 +69,6 @@ const roleNavigation: RoleNavigation = {
       { title: "Dashboard", href: "/program-chair-dashboard" },
       { title: "Program Management", href: "/program-chair-program-management" },
       { title: "Project List", href: "/program-chair-project-list" },
-      { title: "Project Recommendation", href: "/program-chair-project-recommendation" },
       { title: "Funds and Budget", href: "/program-chair-funds-and-budget" },
       { title: "Analytics", href: "/program-chair-analytics" },
       { title: "Reports", href: "/program-chair-report" },
@@ -75,9 +78,9 @@ const roleNavigation: RoleNavigation = {
     label: "Project Head",
     items: [
       { title: "Dashboard", href: "/project-head-dashboard" },
-      { title: "Request Management", href: "/project-head-request-management" },
+      { title: "Project Management", href: "/project-head-request-management" },
       { title: "Finance Request", href: "/project-head-finance-request" },
-      { title: "Project Proposal", href: "/project-head-project-proposal" },
+
       { title: "Report Submission", href: "/project-head-report-submission" },
       { title: "Task Management", href: "/project-head-task-management" },
       { title: "Analytics", href: "/project-head-analytics" },
@@ -106,7 +109,7 @@ const roleNavigation: RoleNavigation = {
 export function NavMain({ userRole }: { userRole?: string }) {
     const [openGroups, setOpenGroups] = React.useState<{ [key: string]: boolean }>({});
   const params = useParams();
-  const role = params?.role as string || userRole;
+  const role = normalizeRoleSlug((params?.role as string) || userRole || '');
 
   if (!role || !roleNavigation[role]) {
     return null;

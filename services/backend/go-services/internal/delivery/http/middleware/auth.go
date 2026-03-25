@@ -9,6 +9,19 @@ import (
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/pkg/jwt"
 )
 
+func normalizeRole(role string) string {
+	r := strings.ToLower(strings.TrimSpace(role))
+	r = strings.ReplaceAll(r, "-", "_")
+	r = strings.ReplaceAll(r, " ", "_")
+
+	switch r {
+	case "system_admin", "systemadministrator", "system_administrator":
+		return "admin"
+	default:
+		return r
+	}
+}
+
 func jsonError(w http.ResponseWriter, message string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
@@ -44,7 +57,7 @@ func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 			// Add user information to context
 			ctx := context.WithValue(r.Context(), "user_id", claims.UserID)
 			ctx = context.WithValue(ctx, "email", claims.Email)
-			ctx = context.WithValue(ctx, "role", claims.Role)
+			ctx = context.WithValue(ctx, "role", normalizeRole(claims.Role))
 			ctx = context.WithValue(ctx, "account_status", claims.AccountStatus)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -56,7 +69,7 @@ func AuthMiddleware(jwtSecret string) func(http.Handler) http.Handler {
 func AdminOnlyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		role, ok := r.Context().Value("role").(string)
-		if !ok || role != "admin" {
+		if !ok || normalizeRole(role) != "admin" {
 			jsonError(w, "Admin access required", http.StatusForbidden)
 			return
 		}
@@ -69,12 +82,12 @@ func AdminOnlyMiddleware(next http.Handler) http.Handler {
 func RequireRolesMiddleware(roles ...string) func(http.Handler) http.Handler {
 	allowed := make(map[string]bool, len(roles))
 	for _, r := range roles {
-		allowed[r] = true
+		allowed[normalizeRole(r)] = true
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			role, ok := r.Context().Value("role").(string)
-			if !ok || !allowed[role] {
+			if !ok || !allowed[normalizeRole(role)] {
 				jsonError(w, "Access denied", http.StatusForbidden)
 				return
 			}

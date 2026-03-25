@@ -10,6 +10,7 @@ import (
 type UseCase interface {
 	CreateProgram(ctx context.Context, req *domain.CreateProgramRequest) (*domain.Program, error)
 	GetAllPrograms(ctx context.Context) ([]*domain.Program, error)
+	GetVisiblePrograms(ctx context.Context, userID string, role string) ([]*domain.Program, error)
 	GetProgramByID(ctx context.Context, id string) (*domain.Program, error)
 	GetProgramsByDepartment(ctx context.Context, departmentID string) ([]*domain.Program, error)
 	GetProgramsByProgramChair(ctx context.Context, programChairID string) ([]*domain.Program, error)

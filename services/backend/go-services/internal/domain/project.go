@@ -10,6 +10,10 @@ type Project struct {
 	ProgramID          *string    `json:"program_id" db:"program_id"`
 	DepartmentID       *string    `json:"department_id" db:"department_id"`
 	ProjectHeadID      *string    `json:"project_head_id" db:"project_head_id"`
+	CreationSource     string     `json:"creation_source" db:"creation_source"`
+	RequestID          *string    `json:"request_id" db:"request_id"`
+	CreatedBy          string     `json:"created_by" db:"created_by"`
+	UpdatedBy          *string    `json:"updated_by" db:"updated_by"`
 	Objectives         *string    `json:"objectives" db:"objectives"`
 	BudgetAllocated    *float64   `json:"budget_allocated" db:"budget_allocated"`
 	BudgetUsed         *float64   `json:"budget_used" db:"budget_used"`
@@ -29,6 +33,7 @@ type CreateProjectRequest struct {
 	ProjectDescription *string  `json:"project_description"`
 	ProgramID          *string  `json:"program_id"`
 	DepartmentID       *string  `json:"department_id"`
+	ProjectHeadID      *string  `json:"project_head_id"`                    // NEW
 	Objectives         *string  `json:"objectives"`
 	BudgetAllocated    *float64 `json:"budget_allocated"`
 	StartDate          *string  `json:"start_date"`
@@ -46,4 +51,35 @@ type UpdateProjectRequest struct {
 	StartDate          *string  `json:"start_date"`
 	EndDate            *string  `json:"end_date"`
 	Status             string   `json:"status"`
+}
+
+// UpdateProjectApprovalRequest represents approval action on a pending project
+type UpdateProjectApprovalRequest struct {
+	ApprovalStatus string  `json:"approval_status" validate:"required,oneof=approved rejected"`
+	ReviewNotes    *string `json:"review_notes"`
+}
+
+// BulkUpdateProjectApprovalRequest represents bulk approval action for pending projects.
+type BulkUpdateProjectApprovalRequest struct {
+	ProjectIDs     []string `json:"project_ids" validate:"required,min=1,dive,required"`
+	ApprovalStatus string   `json:"approval_status" validate:"required,oneof=approved rejected"`
+	ReviewNotes    *string  `json:"review_notes"`
+}
+
+// ProjectHeadPreReviewRequest captures project head's pre-approval decision
+// for staff-originated project requests.
+type ProjectHeadPreReviewRequest struct {
+	Decision    string  `json:"decision" validate:"required,oneof=approved rejected"`
+	ReviewNotes *string `json:"review_notes"`
+}
+
+// ReplaceProjectStaffAssignmentsRequest replaces staff assignments for a project.
+type ReplaceProjectStaffAssignmentsRequest struct {
+	StaffIDs []string `json:"staff_ids"`
+}
+
+// ProjectStaffAssignments represents persisted project staff assignment state.
+type ProjectStaffAssignments struct {
+	ProjectID string   `json:"project_id"`
+	StaffIDs  []string `json:"staff_ids"`
 }

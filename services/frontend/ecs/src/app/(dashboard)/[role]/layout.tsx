@@ -29,6 +29,10 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
+function normalizeRoleSlug(role?: string | null) {
+  return (role || '').replace(/_/g, '-')
+}
+
 function toPageTitle(slug: string) {
   return slug.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 }
@@ -138,7 +142,8 @@ function UserProfileHeader() {
               className="w-full flex items-center px-4 py-2 font-medium text-left text-[#BA0021] hover:bg-[#BA0021]/10"
               onClick={() => {
                 setProfileOpen(false);
-                router.push(`/${user.role}/settings`);
+                const roleSlug = normalizeRoleSlug(user.role)
+                router.push(`/${roleSlug}/settings`);
               }}
             >
               <Settings className="mr-2 text-[#BA0021]" />
@@ -166,7 +171,7 @@ import Link from "next/link"
 export default function Layout({ children }: LayoutProps) {
   const params = useParams()
   const pathname = usePathname()
-  const role = (params?.role as string) || 'admin'
+  const role = normalizeRoleSlug((params?.role as string) || 'admin')
   const roleDisplayName = toPageTitle(role)
 
   const segments = pathname?.split('/').filter(Boolean) ?? []

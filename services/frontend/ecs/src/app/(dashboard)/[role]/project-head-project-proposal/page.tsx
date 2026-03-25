@@ -1,5 +1,5 @@
 "use client"
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card';
 import { Badge } from '@/shared/components/ui/Badge';
 import { Input } from '@/shared/components/ui/Input';
@@ -22,6 +22,7 @@ import {
   Lightbulb,
   FileText,
   Building2,
+  FolderOpen,
   Clock,
   AlertCircle,
   CheckCircle2,
@@ -30,24 +31,80 @@ import {
   PhilippinePeso
 } from 'lucide-react';
 
+const API = 'http://localhost:8081/api/v1'
+
+function authHeaders() {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : ''
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+}
+
+interface Program {
+  id: string
+  program_name: string
+  department_id?: string | null
+}
+
+interface Department {
+  id: string
+  department_name: string
+}
+
 export default function ProjectRecommendationPage() {
   const [projectName, setProjectName] = useState('');
-  const [department, setDepartment] = useState('');
+  const [selectedProgramID, setSelectedProgramID] = useState('');
   const [expectedBudget, setExpectedBudget] = useState('');
   const [duration, setDuration] = useState('');
   const [durationType, setDurationType] = useState('months');
   const [details, setDetails] = useState('');
+  const [programs, setPrograms] = useState<Program[]>([])
+  const [departmentsByID, setDepartmentsByID] = useState<Record<string, string>>({})
+  const [loadingPrograms, setLoadingPrograms] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('')
   const [showSuccess, setShowSuccess] = useState(false);
 
-  const departments = [
-    'Engineering',
-    'Marketing',
-    'Research',
-    'Operations',
-    'Finance',
-    'Human Resources'
-  ];
+  const selectedProgram = useMemo(
+    () => programs.find((program) => program.id === selectedProgramID) ?? null,
+    [programs, selectedProgramID],
+  )
+  const selectedDepartmentName = selectedProgram?.department_id
+    ? departmentsByID[selectedProgram.department_id] ?? 'Unknown Department'
+    : 'Not set'
+
+  useEffect(() => {
+    async function fetchScopedPrograms() {
+      setLoadingPrograms(true)
+      setLoadError('')
+      try {
+        const [programsRes, departmentsRes] = await Promise.all([
+          fetch(`${API}/programs`, { headers: authHeaders() }),
+          fetch(`${API}/departments`, { headers: authHeaders() }),
+        ])
+
+        if (!programsRes.ok) {
+          throw new Error('Failed to load assigned programs')
+        }
+        const programsData = await programsRes.json()
+        setPrograms(programsData.programs ?? [])
+
+        if (departmentsRes.ok) {
+          const departmentsData = await departmentsRes.json()
+          const map: Record<string, string> = {}
+          ;(departmentsData.departments ?? []).forEach((department: Department) => {
+            map[department.id] = department.department_name
+          })
+          setDepartmentsByID(map)
+        }
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : 'Failed to load assigned programs')
+      } finally {
+        setLoadingPrograms(false)
+      }
+    }
+
+    fetchScopedPrograms()
+  }, [])
 
   const durationTypes = [
     { value: 'days', label: 'Days' },
@@ -58,32 +115,59 @@ export default function ProjectRecommendationPage() {
 
   const handleClear = () => {
     setProjectName('');
-    setDepartment('');
+    setSelectedProgramID('');
     setExpectedBudget('');
     setDuration('');
     setDurationType('months');
     setDetails('');
+    setSubmitError('')
   };
 
-  const handleSubmit = () => {
-    if (!projectName || !department || !expectedBudget || !duration || !details) {
-      alert('Please fill in all required fields');
+  const handleSubmit = async () => {
+    if (!projectName || !selectedProgramID || !expectedBudget || !duration || !details) {
+      setSubmitError('Please fill in all required fields.')
       return;
     }
 
+    if (!selectedProgram?.department_id) {
+      setSubmitError('Selected program has no department. Please contact admin/program chair.')
+      return
+    }
+
+    setSubmitError('')
     setIsSubmitting(true);
 
-    // Simulate API submission
-    setTimeout(() => {
+    try {
+      const budget = Number(expectedBudget.replace(/[^0-9.]/g, ''))
+      const response = await fetch(`${API}/projects`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          project_name: projectName,
+          program_id: selectedProgramID,
+          department_id: selectedProgram.department_id,
+          objectives: details,
+          budget_allocated: Number.isFinite(budget) ? budget : null,
+        }),
+      })
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload.error || 'Failed to submit project recommendation')
+      }
+
       setIsSubmitting(false);
       setShowSuccess(true);
-      
+
       // Reset form after showing success
       setTimeout(() => {
         handleClear();
         setShowSuccess(false);
       }, 3000);
-    }, 1500);
+    } catch (error) {
+      setIsSubmitting(false)
+      setSubmitError(error instanceof Error ? error.message : 'Failed to submit project recommendation')
+    }
   };
 
   const formatCurrency = (value: string) => {
@@ -109,7 +193,7 @@ export default function ProjectRecommendationPage() {
     setExpectedBudget(value);
   };
 
-  const isFormValid = projectName && department && expectedBudget && duration && details;
+  const isFormValid = projectName && selectedProgramID && expectedBudget && duration && details;
 
   return (
     <div className="min-h-screen bg-linear-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
@@ -151,6 +235,26 @@ export default function ProjectRecommendationPage() {
           </Alert>
         )}
 
+        {loadError && (
+          <Alert className="border-red-300 bg-red-50">
+            <AlertCircle className="h-5 w-5 text-red-600" />
+            <AlertTitle className="text-red-900 font-semibold">Program Load Failed</AlertTitle>
+            <AlertDescription className="text-red-700">
+              {loadError}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {submitError && (
+          <Alert className="border-red-300 bg-red-50">
+            <AlertCircle className="h-5 w-5 text-red-600" />
+            <AlertTitle className="text-red-900 font-semibold">Submission Failed</AlertTitle>
+            <AlertDescription className="text-red-700">
+              {submitError}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Form Section - Takes up 2/3 */}
@@ -180,25 +284,38 @@ export default function ProjectRecommendationPage() {
                   />
                 </div>
 
-                {/* Department */}
+                {/* Program */}
                 <div className="space-y-2">
-                  <Label htmlFor="department" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-purple-600" />
-                    Assigned Department
+                  <Label htmlFor="program" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <FolderOpen className="h-4 w-4 text-purple-600" />
+                    Program
                     <span className="text-red-600">*</span>
                   </Label>
-                  <Select value={department} onValueChange={setDepartment}>
+                  <Select value={selectedProgramID} onValueChange={setSelectedProgramID}>
                     <SelectTrigger className="bg-white border-slate-300 text-slate-900">
-                      <SelectValue placeholder="Select department..." />
+                      <SelectValue placeholder={loadingPrograms ? 'Loading assigned programs...' : 'Select assigned program...'} />
                     </SelectTrigger>
                     <SelectContent className="bg-white border-slate-200">
-                      {departments.map(dept => (
-                        <SelectItem key={dept} value={dept} className="text-slate-900">
-                          {dept}
+                      {programs.map(program => (
+                        <SelectItem key={program.id} value={program.id} className="text-slate-900">
+                          {program.program_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* Assigned Department (derived from program) */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-purple-600" />
+                    Assigned Department
+                  </Label>
+                  <Input
+                    value={selectedProgramID ? selectedDepartmentName : 'Select a program first'}
+                    readOnly
+                    className="bg-slate-50 border-slate-300 text-slate-700"
+                  />
                 </div>
 
                 {/* Expected Budget */}

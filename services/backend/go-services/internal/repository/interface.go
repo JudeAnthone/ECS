@@ -31,6 +31,7 @@ type DepartmentRepository interface {
 type ProgramRepository interface {
 	Create(ctx context.Context, program *domain.Program) error
 	GetAll(ctx context.Context) ([]*domain.Program, error)
+	GetVisibleForUser(ctx context.Context, userID string, role string) ([]*domain.Program, error)
 	GetByID(ctx context.Context, id string) (*domain.Program, error)
 	GetByDepartment(ctx context.Context, departmentID string) ([]*domain.Program, error)
 	GetByProgramChair(ctx context.Context, programChairID string) ([]*domain.Program, error)
@@ -48,7 +49,19 @@ type ProjectRepository interface {
 	GetByProgramID(ctx context.Context, programID string) ([]*domain.Project, error)
 	GetByID(ctx context.Context, id string) (*domain.Project, error)
 	Update(ctx context.Context, id string, req *domain.UpdateProjectRequest) error
+	ProjectHeadPreReview(ctx context.Context, id string, headID string, reviewNotes *string, approved bool) error
+	UpdateApproval(ctx context.Context, id string, approvalStatus string, status string, actorID string, reviewNotes *string) error
 	AssignProjectHead(ctx context.Context, projectID string, headID *string) error
+	GetAssignedStaffIDsByProject(ctx context.Context, projectID string) ([]string, error)
+	ReplaceProjectStaffAssignments(ctx context.Context, projectID string, staffIDs []string, assignedBy string) error
+	CreateProjectTask(ctx context.Context, projectID string, createdBy string, req *domain.CreateProjectTaskRequest) (*domain.ProjectTask, error)
+	GetProjectTaskByID(ctx context.Context, taskID string) (*domain.ProjectTask, error)
+	GetProjectTasks(ctx context.Context, projectID string) ([]*domain.ProjectTask, error)
+	UpdateProjectTaskStatus(ctx context.Context, taskID string, status string) error
+	DeleteProjectTask(ctx context.Context, taskID string) error
+	GetStaffProjectTaskSummaries(ctx context.Context, staffID string) ([]*domain.StaffTaskProjectSummary, error)
+	GetStaffTasks(ctx context.Context, staffID string, projectID string) ([]*domain.StaffTask, error)
+	UpdateStaffTaskStatus(ctx context.Context, taskID string, staffID string, status string) error
 	Delete(ctx context.Context, id string) error
 }
 
