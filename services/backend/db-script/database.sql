@@ -360,6 +360,9 @@ CREATE TABLE projects (
     -- if created from a public request
     request_id              UUID REFERENCES project_requests(id) ON DELETE SET NULL,
     created_by              UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_by_role         VARCHAR(50),
+    created_by_first_name   VARCHAR(100),
+    created_by_last_name    VARCHAR(100),
     updated_by              UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at              TIMESTAMPTZ DEFAULT NOW(),
     updated_at              TIMESTAMPTZ DEFAULT NOW(),

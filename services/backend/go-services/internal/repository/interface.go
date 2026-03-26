@@ -47,6 +47,7 @@ type ProgramRepository interface {
 type ProjectRepository interface {
 	Create(ctx context.Context, project *domain.Project, createdBy string) error
 	GetByProgramID(ctx context.Context, programID string) ([]*domain.Project, error)
+	GetByCreatedBy(ctx context.Context, createdBy string) ([]*domain.Project, error)
 	GetByID(ctx context.Context, id string) (*domain.Project, error)
 	Update(ctx context.Context, id string, req *domain.UpdateProjectRequest) error
 	ProjectHeadPreReview(ctx context.Context, id string, headID string, reviewNotes *string, approved bool) error

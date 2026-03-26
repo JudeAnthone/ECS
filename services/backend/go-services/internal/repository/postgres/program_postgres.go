@@ -165,18 +165,9 @@ func (r *programRepository) GetVisibleForUser(ctx context.Context, userID string
 				p.created_at,
 				p.updated_at
 			FROM programs p
-			LEFT JOIN departments d ON d.id = p.department_id
 			JOIN users u ON u.id = $1
-			WHERE (
-				(u.assigned_program_chair_id IS NOT NULL AND p.program_chair_id = u.assigned_program_chair_id)
-				OR (
-					u.department IS NOT NULL
-					AND (
-						LOWER(TRIM(u.department)) = LOWER(TRIM(COALESCE(d.department_code, '')))
-						OR LOWER(TRIM(u.department)) = LOWER(TRIM(COALESCE(d.department_name, '')))
-					)
-				)
-			  )
+			WHERE u.assigned_program_chair_id IS NOT NULL
+			  AND p.program_chair_id = u.assigned_program_chair_id
 			ORDER BY p.created_at DESC
 		`
 		rows, err = r.db.Query(ctx, query, userID)
@@ -202,26 +193,9 @@ func (r *programRepository) GetVisibleForUser(ctx context.Context, userID string
 				p.created_at,
 				p.updated_at
 			FROM programs p
-			LEFT JOIN departments d ON d.id = p.department_id
 			JOIN users u ON u.id = $1
-			WHERE (
-				(u.assigned_program_chair_id IS NOT NULL AND p.program_chair_id = u.assigned_program_chair_id)
-				OR (
-					u.department IS NOT NULL
-					AND (
-						LOWER(TRIM(u.department)) = LOWER(TRIM(COALESCE(d.department_code, '')))
-						OR LOWER(TRIM(u.department)) = LOWER(TRIM(COALESCE(d.department_name, '')))
-					)
-				)
-				OR EXISTS (
-					SELECT 1 FROM projects pr
-					WHERE pr.program_id = p.id AND pr.project_head_id = u.id
-				)
-				OR EXISTS (
-					SELECT 1 FROM project_requests rq
-					WHERE rq.assigned_program_id = p.id AND rq.assigned_to_project_head = u.id
-				)
-			)
+			WHERE u.assigned_program_chair_id IS NOT NULL
+			  AND p.program_chair_id = u.assigned_program_chair_id
 			ORDER BY p.created_at DESC
 		`
 		rows, err = r.db.Query(ctx, query, userID)

@@ -9,6 +9,7 @@ import (
 // UseCase defines the project use case interface
 type UseCase interface {
 	CreateProject(ctx context.Context, req *domain.CreateProjectRequest, createdBy string, creatorRole string) (*domain.Project, error)
+	GetMyProjects(ctx context.Context, userID string) ([]*domain.Project, error)
 	GetProjectsByProgramID(ctx context.Context, programID string) ([]*domain.Project, error)
 	GetProjectsByProgramIDForUser(ctx context.Context, programID string, userID string, role string) ([]*domain.Project, error)
 	UpdateProject(ctx context.Context, id string, req *domain.UpdateProjectRequest) error

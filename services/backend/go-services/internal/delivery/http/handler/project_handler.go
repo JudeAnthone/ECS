@@ -52,13 +52,35 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 
 // GetProjects handles GET /api/v1/projects?program_id=<id>
 func (h *ProjectHandler) GetProjects(w http.ResponseWriter, r *http.Request) {
+	userID, _ := r.Context().Value("user_id").(string)
+	if userID == "" {
+		respondWithError(w, http.StatusUnauthorized, "user not authenticated")
+		return
+	}
+
+	if r.URL.Query().Get("mine") == "1" {
+		projects, err := h.projectUsecase.GetMyProjects(r.Context(), userID)
+		if err != nil {
+			if strings.HasPrefix(err.Error(), "forbidden:") {
+				respondWithError(w, http.StatusForbidden, strings.TrimPrefix(err.Error(), "forbidden: "))
+				return
+			}
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"projects": projects,
+		})
+		return
+	}
+
 	programID := r.URL.Query().Get("program_id")
 	if programID == "" {
 		respondWithError(w, http.StatusBadRequest, "program_id query parameter is required")
 		return
 	}
 
-	userID, _ := r.Context().Value("user_id").(string)
 	role, _ := r.Context().Value("role").(string)
 
 	projects, err := h.projectUsecase.GetProjectsByProgramIDForUser(r.Context(), programID, userID, role)

@@ -16,13 +16,42 @@ func NewProjectRepository(db *pgxpool.Pool) *ProjectRepository {
 	return &ProjectRepository{db: db}
 }
 
+const projectSelectColumns = `
+	SELECT p.id, p.project_name, p.project_description, p.program_id, p.department_id, p.project_head_id,
+	       p.creation_source, p.request_id, p.created_by, p.updated_by,
+	       p.objectives, p.budget_allocated, p.budget_used, p.start_date, p.end_date, p.progress_percentage,
+	       p.status, p.approval_status,
+	       CASE
+	         WHEN p.approval_status = 'rejected' THEN feedback.latest_rejection_feedback
+	         ELSE NULL
+	       END AS feedback,
+	       COALESCE(creator.role = 'staff', false) AS staff_originated,
+	       p.is_published, p.created_at, p.updated_at,
+	       p.created_by_role, p.created_by_first_name, p.created_by_last_name
+	FROM projects p
+	LEFT JOIN users creator ON creator.id = p.created_by
+	LEFT JOIN LATERAL (
+		SELECT NULLIF(BTRIM(al.details->>'review_notes'), '') AS latest_rejection_feedback
+		FROM activity_logs al
+		WHERE al.entity_type = 'project'
+		  AND al.entity_id = p.id
+		  AND (
+			(al.details->>'approval_status') = 'rejected'
+			OR (al.details->>'status') = 'cancelled'
+		  )
+		ORDER BY al.created_at DESC
+		LIMIT 1
+	) feedback ON true
+`
+
 // Create inserts a new project into the database
 func (r *ProjectRepository) Create(ctx context.Context, p *domain.Project, createdBy string) error {
 	query := `
 		INSERT INTO projects
 			(project_name, project_description, program_id, department_id, objectives,
-			 budget_allocated, start_date, end_date, status, approval_status, creation_source, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'internal_proposal', $11)
+			 budget_allocated, start_date, end_date, status, approval_status, creation_source, created_by,
+			 created_by_role, created_by_first_name, created_by_last_name)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'internal_proposal', $11, $12, $13, $14)
 		RETURNING id, created_at, updated_at
 	`
 	err := r.db.QueryRow(ctx, query,
@@ -37,6 +66,9 @@ func (r *ProjectRepository) Create(ctx context.Context, p *domain.Project, creat
 		p.Status,
 		p.ApprovalStatus,
 		createdBy,
+		p.CreatedByRole,
+		p.CreatedByFirstName,
+		p.CreatedByLastName,
 	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create project: %w", err)
@@ -46,14 +78,9 @@ func (r *ProjectRepository) Create(ctx context.Context, p *domain.Project, creat
 
 // GetByProgramID retrieves all projects belonging to a program
 func (r *ProjectRepository) GetByProgramID(ctx context.Context, programID string) ([]*domain.Project, error) {
-	query := `
-		SELECT id, project_name, project_description, program_id, department_id, project_head_id,
-		       creation_source, request_id, created_by, updated_by,
-		       objectives, budget_allocated, budget_used, start_date, end_date, progress_percentage,
-		       status, approval_status, is_published, created_at, updated_at
-		FROM projects
-		WHERE program_id = $1
-		ORDER BY created_at DESC
+	query := projectSelectColumns + `
+		WHERE p.program_id = $1
+		ORDER BY p.created_at DESC
 	`
 
 	rows, err := r.db.Query(ctx, query, programID)
@@ -69,7 +96,45 @@ func (r *ProjectRepository) GetByProgramID(ctx context.Context, programID string
 			&p.ID, &p.ProjectName, &p.ProjectDescription, &p.ProgramID,
 			&p.DepartmentID, &p.ProjectHeadID, &p.CreationSource, &p.RequestID, &p.CreatedBy, &p.UpdatedBy, &p.Objectives,
 			&p.BudgetAllocated, &p.BudgetUsed, &p.StartDate, &p.EndDate, &p.ProgressPercentage,
-			&p.Status, &p.ApprovalStatus, &p.IsPublished, &p.CreatedAt, &p.UpdatedAt,
+			&p.Status, &p.ApprovalStatus, &p.Feedback, &p.StaffOriginated, &p.IsPublished, &p.CreatedAt, &p.UpdatedAt,
+			&p.CreatedByRole, &p.CreatedByFirstName, &p.CreatedByLastName,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan project: %w", err)
+		}
+		projects = append(projects, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+	if projects == nil {
+		projects = []*domain.Project{}
+	}
+	return projects, nil
+}
+
+// GetByCreatedBy retrieves all projects submitted by a specific creator.
+func (r *ProjectRepository) GetByCreatedBy(ctx context.Context, createdBy string) ([]*domain.Project, error) {
+	query := projectSelectColumns + `
+		WHERE p.created_by = $1
+		ORDER BY p.created_at DESC
+	`
+
+	rows, err := r.db.Query(ctx, query, createdBy)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query projects by creator: %w", err)
+	}
+	defer rows.Close()
+
+	var projects []*domain.Project
+	for rows.Next() {
+		p := &domain.Project{}
+		err := rows.Scan(
+			&p.ID, &p.ProjectName, &p.ProjectDescription, &p.ProgramID,
+			&p.DepartmentID, &p.ProjectHeadID, &p.CreationSource, &p.RequestID, &p.CreatedBy, &p.UpdatedBy, &p.Objectives,
+			&p.BudgetAllocated, &p.BudgetUsed, &p.StartDate, &p.EndDate, &p.ProgressPercentage,
+			&p.Status, &p.ApprovalStatus, &p.Feedback, &p.StaffOriginated, &p.IsPublished, &p.CreatedAt, &p.UpdatedAt,
+			&p.CreatedByRole, &p.CreatedByFirstName, &p.CreatedByLastName,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan project: %w", err)
@@ -87,13 +152,8 @@ func (r *ProjectRepository) GetByProgramID(ctx context.Context, programID string
 
 // GetByID retrieves a single project by ID.
 func (r *ProjectRepository) GetByID(ctx context.Context, id string) (*domain.Project, error) {
-	query := `
-		SELECT id, project_name, project_description, program_id, department_id, project_head_id,
-		       creation_source, request_id, created_by, updated_by,
-		       objectives, budget_allocated, budget_used, start_date, end_date, progress_percentage,
-		       status, approval_status, is_published, created_at, updated_at
-		FROM projects
-		WHERE id = $1
+	query := projectSelectColumns + `
+		WHERE p.id = $1
 	`
 
 	p := &domain.Project{}
@@ -101,7 +161,8 @@ func (r *ProjectRepository) GetByID(ctx context.Context, id string) (*domain.Pro
 		&p.ID, &p.ProjectName, &p.ProjectDescription, &p.ProgramID,
 		&p.DepartmentID, &p.ProjectHeadID, &p.CreationSource, &p.RequestID, &p.CreatedBy, &p.UpdatedBy, &p.Objectives,
 		&p.BudgetAllocated, &p.BudgetUsed, &p.StartDate, &p.EndDate, &p.ProgressPercentage,
-		&p.Status, &p.ApprovalStatus, &p.IsPublished, &p.CreatedAt, &p.UpdatedAt,
+		&p.Status, &p.ApprovalStatus, &p.Feedback, &p.StaffOriginated, &p.IsPublished, &p.CreatedAt, &p.UpdatedAt,
+		&p.CreatedByRole, &p.CreatedByFirstName, &p.CreatedByLastName,
 	); err != nil {
 		return nil, fmt.Errorf("failed to get project: %w", err)
 	}

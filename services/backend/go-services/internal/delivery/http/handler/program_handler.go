@@ -132,6 +132,7 @@ func (h *ProgramHandler) GetProgramsByDepartment(w http.ResponseWriter, r *http.
 // GetProgramsByProgramChair handles GET /api/v1/programs/program-chair/{programChairId}
 func (h *ProgramHandler) GetProgramsByProgramChair(w http.ResponseWriter, r *http.Request) {
 	role, _ := r.Context().Value("role").(string)
+	userID, _ := r.Context().Value("user_id").(string)
 	if role == domain.RoleProjectHead || role == domain.RoleStaff {
 		respondWithError(w, http.StatusForbidden, "Access denied")
 		return
@@ -139,6 +140,11 @@ func (h *ProgramHandler) GetProgramsByProgramChair(w http.ResponseWriter, r *htt
 
 	vars := mux.Vars(r)
 	programChairID := vars["programChairId"]
+
+	if role == domain.RoleProgramChair && userID != "" && programChairID != userID {
+		respondWithError(w, http.StatusForbidden, "You can only view your own programs")
+		return
+	}
 
 	programs, err := h.programUsecase.GetProgramsByProgramChair(r.Context(), programChairID)
 	if err != nil {

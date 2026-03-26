@@ -38,9 +38,7 @@ import {
   Search,
   Trash2,
   UserPlus,
-  Users,
   Wallet,
-  XCircle,
   MoreVertical,
   Eye,
   FolderOpen,
@@ -48,7 +46,6 @@ import {
 
 const API = 'http://localhost:8081/api/v1'
 
-type MainTab = 'project_management' | 'project_requests'
 type ProgramProjectsTab = 'all' | 'assign_staff' | 'task_management'
 
 interface CurrentUser {
@@ -252,7 +249,7 @@ function VerificationBadge({ project }: { project: Project }) {
     return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-red-100 text-red-800 border-red-200">FINAL REJECTED</span>
   }
   if (isForwarded) {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-indigo-100 text-indigo-800 border-indigo-200">PENDING ADMIN/CHAIR</span>
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-indigo-100 text-indigo-800 border-indigo-200">PENDING FINAL APPROVAL</span>
   }
   return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-amber-100 text-amber-800 border-amber-200">AWAITING HEAD REVIEW</span>
 }
@@ -267,14 +264,12 @@ const emptyForm: ProjectFormState = {
 }
 
 const PHRM_STORAGE_KEYS = {
-  mainTab: 'phrm.mainTab',
   programProjectsTab: 'phrm.programProjectsTab',
   selectedProgramID: 'phrm.selectedProgramID',
   taskProjectID: 'phrm.taskProjectID',
 } as const
 
 export default function ProjectHeadRequestManagement() {
-  const [mainTab, setMainTab] = useState<MainTab>('project_management')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -292,7 +287,6 @@ export default function ProjectHeadRequestManagement() {
   const [searchProgramProjects, setSearchProgramProjects] = useState('')
   const [filterProjectOwner, setFilterProjectOwner] = useState<'all' | 'mine'>('all')
   const [filterProjectVerification, setFilterProjectVerification] = useState<'all' | 'accepted' | 'pending' | 'rejected'>('all')
-  const [searchRequests, setSearchRequests] = useState('')
   const [programProjectsTab, setProgramProjectsTab] = useState<ProgramProjectsTab>('all')
   const [selectedAssignProjectID, setSelectedAssignProjectID] = useState<string | null>(null)
   const [assignStaffError, setAssignStaffError] = useState('')
@@ -312,13 +306,10 @@ export default function ProjectHeadRequestManagement() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [creatingProject, setCreatingProject] = useState(false)
+  const [acceptingRequestID, setAcceptingRequestID] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState<ProjectFormState>(emptyForm)
   const [createError, setCreateError] = useState('')
 
-  const [reviewTarget, setReviewTarget] = useState<Project | null>(null)
-  const [reviewDecision, setReviewDecision] = useState<'approved' | 'rejected'>('approved')
-  const [reviewNotes, setReviewNotes] = useState('')
-  const [submittingReview, setSubmittingReview] = useState(false)
   const [viewProjectDetails, setViewProjectDetails] = useState<Project | null>(null)
   const [deleteProjectDialog, setDeleteProjectDialog] = useState<Project | null>(null)
   const [deletingProject, setDeletingProject] = useState(false)
@@ -359,12 +350,6 @@ export default function ProjectHeadRequestManagement() {
     if (!currentUser?.id) return
     
     if (typeof window !== 'undefined') {
-      // Restore mainTab
-      const savedMainTab = localStorage.getItem(PHRM_STORAGE_KEYS.mainTab)
-      if (savedMainTab && (savedMainTab === 'project_management' || savedMainTab === 'project_requests')) {
-        setMainTab(savedMainTab as MainTab)
-      }
-      
       // Restore programProjectsTab
       const savedProgramTab = localStorage.getItem(PHRM_STORAGE_KEYS.programProjectsTab)
       if (savedProgramTab && ['all', 'assign_staff', 'task_management'].includes(savedProgramTab)) {
@@ -386,13 +371,6 @@ export default function ProjectHeadRequestManagement() {
       setDidRestoreSession(true)
     }
   }, [currentUser?.id])
-
-  // Persist mainTab to localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined' && didRestoreSession) {
-      localStorage.setItem(PHRM_STORAGE_KEYS.mainTab, mainTab)
-    }
-  }, [mainTab, didRestoreSession])
 
   // Persist programProjectsTab to localStorage
   useEffect(() => {
@@ -776,51 +754,6 @@ export default function ProjectHeadRequestManagement() {
     await applyStaffAssignmentChange(projectID, staffID, true)
   }
 
-  const departmentStaffIDs = useMemo(() => new Set(departmentStaff.map(s => s.id)), [departmentStaff])
-
-  const myRequests = useMemo(() => {
-    if (!currentUser?.id) return []
-    return allProjects
-      .filter(p => p.created_by === currentUser.id)
-      .sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
-  }, [allProjects, currentUser])
-
-  // Show all requests made by the project head, regardless of status
-  const forwardedForFinal = useMemo(() => {
-    if (!currentUser?.id) return []
-    return allProjects
-      .filter(p => p.created_by === currentUser.id)
-      .sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
-  }, [allProjects, currentUser])
-
-  const departmentStaffRequests = useMemo(() => {
-    return allProjects
-      .filter(p => departmentStaffIDs.has(p.created_by) && p.created_by !== currentUser?.id)
-      .sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
-  }, [allProjects, departmentStaffIDs, currentUser])
-
-  const filteredForwarded = useMemo(() => {
-    const q = searchRequests.toLowerCase()
-    return forwardedForFinal.filter(p =>
-      p.project_name.toLowerCase().includes(q) ||
-      (programNameByID.get(p.program_id || '') || '').toLowerCase().includes(q)
-    )
-  }, [forwardedForFinal, searchRequests, programNameByID])
-
-  const filteredStaffRequests = useMemo(() => {
-    const q = searchRequests.toLowerCase()
-    return departmentStaffRequests.filter(p =>
-      p.project_name.toLowerCase().includes(q) ||
-      (programNameByID.get(p.program_id || '') || '').toLowerCase().includes(q) ||
-      (userNameByID.get(p.created_by) || '').toLowerCase().includes(q)
-    )
-  }, [departmentStaffRequests, searchRequests, programNameByID, userNameByID])
-
-  const awaitingHeadReview = useMemo(
-    () => departmentStaffRequests.filter(p => p.approval_status === 'pending' && p.status === 'pending_approval').length,
-    [departmentStaffRequests]
-  )
-
   const submitCreateProject = async () => {
     if (!selectedProgram) return
     if (selectedProgramIsCancelled) {
@@ -879,45 +812,6 @@ export default function ProjectHeadRequestManagement() {
       setCreateError(msg)
     } finally {
       setCreatingProject(false)
-    }
-  }
-
-  const canHeadReview = (p: Project) => {
-    return p.approval_status === 'pending' && p.status === 'pending_approval' && (!p.project_head_id || p.project_head_id === currentUser?.id)
-  }
-
-  const submitHeadReview = async () => {
-    if (!reviewTarget) return
-
-    setSubmittingReview(true)
-    try {
-      const res = await fetch(`${API}/projects/${reviewTarget.id}/head-review`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({
-          decision: reviewDecision,
-          review_notes: reviewNotes.trim() || null,
-        }),
-      })
-
-      if (!res.ok) {
-        const text = await res.text()
-        let msg = 'Failed to submit review'
-        try {
-          msg = JSON.parse(text).error || msg
-        } catch {
-          msg = text || msg
-        }
-        throw new Error(msg)
-      }
-
-      setReviewTarget(null)
-      setReviewNotes('')
-      await loadData()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit review')
-    } finally {
-      setSubmittingReview(false)
     }
   }
 
@@ -1171,18 +1065,62 @@ export default function ProjectHeadRequestManagement() {
     }
   }
 
+  const canAcceptStaffRequest = (project: Project) => {
+    const createdByStaff = departmentStaff.some(staff => staff.id === project.created_by)
+    if (!createdByStaff) return false
+
+    const awaitingHeadReview = project.approval_status === 'pending' && project.status === 'pending_approval'
+    if (!awaitingHeadReview) return false
+
+    return !project.project_head_id || project.project_head_id === currentUser?.id
+  }
+
+  const acceptStaffRequest = async (project: Project) => {
+    if (!canAcceptStaffRequest(project)) return
+
+    setAcceptingRequestID(project.id)
+    try {
+      const res = await fetch(`${API}/projects/${project.id}/head-review`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          decision: 'approved',
+          review_notes: null,
+        }),
+      })
+
+      if (!res.ok) {
+        const text = await res.text()
+        let msg = 'Failed to accept staff request.'
+        try {
+          msg = JSON.parse(text).error || msg
+        } catch {
+          msg = text || msg
+        }
+        throw new Error(msg)
+      }
+
+      await loadData()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to accept staff request.')
+    } finally {
+      setAcceptingRequestID(null)
+    }
+  }
+
+  const requesterRoleLabel = (createdBy: string) => {
+    if (createdBy === currentUser?.id) return 'Project Head'
+    const role = staffByID.get(createdBy)?.role
+    if (!role) return 'Requester'
+    return role
+      .split('_')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
       <div className="max-w-[1920px] mx-auto space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant={mainTab === 'project_management' ? 'default' : 'outline'} onClick={() => setMainTab('project_management')}>
-            Project Management
-          </Button>
-          <Button variant={mainTab === 'project_requests' ? 'default' : 'outline'} onClick={() => setMainTab('project_requests')}>
-            Project Requests
-          </Button>
-        </div>
-
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">{selectedProgram ? selectedProgram.program_name : 'Project Management'}</h1>
@@ -1225,37 +1163,24 @@ export default function ProjectHeadRequestManagement() {
         )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {(mainTab === 'project_management'
-            ? [
-                { label: 'Assigned Programs', value: departmentPrograms.length, icon: Building2, color: 'text-slate-700', bg: 'bg-slate-50' },
-                {
-                  label: 'Active Programs',
-                  value: departmentPrograms.filter(p => (p.status || '').toLowerCase() === 'active').length,
-                  icon: CheckCircle,
-                  color: 'text-emerald-700',
-                  bg: 'bg-emerald-50',
-                },
-                { label: 'Overall Projects', value: allProjects.length, icon: ClipboardList, color: 'text-blue-700', bg: 'bg-blue-50' },
-                {
-                  label: 'Accepted Projects',
-                  value: allProjects.filter(p => p.approval_status === 'approved').length,
-                  icon: Wallet,
-                  color: 'text-indigo-700',
-                  bg: 'bg-indigo-50',
-                },
-              ]
-            : [
-                { label: 'My Requests', value: myRequests.length, icon: ClipboardList, color: 'text-blue-700', bg: 'bg-blue-50' },
-                { label: 'Pending My Review', value: awaitingHeadReview, icon: Users, color: 'text-amber-700', bg: 'bg-amber-50' },
-                { label: 'Sent for Final Approval', value: forwardedForFinal.length, icon: CheckCircle, color: 'text-green-700', bg: 'bg-green-50' },
-                {
-                  label: 'Final Approved',
-                  value: allProjects.filter(p => p.approval_status === 'approved').length,
-                  icon: Building2,
-                  color: 'text-slate-700',
-                  bg: 'bg-slate-50',
-                },
-              ]).map(s => (
+          {[
+            { label: 'Assigned Programs', value: departmentPrograms.length, icon: Building2, color: 'text-slate-700', bg: 'bg-slate-50' },
+            {
+              label: 'Active Programs',
+              value: departmentPrograms.filter(p => (p.status || '').toLowerCase() === 'active').length,
+              icon: CheckCircle,
+              color: 'text-emerald-700',
+              bg: 'bg-emerald-50',
+            },
+            { label: 'Overall Projects', value: allProjects.length, icon: ClipboardList, color: 'text-blue-700', bg: 'bg-blue-50' },
+            {
+              label: 'Accepted Projects',
+              value: allProjects.filter(p => p.approval_status === 'approved').length,
+              icon: Wallet,
+              color: 'text-indigo-700',
+              bg: 'bg-indigo-50',
+            },
+          ].map(s => (
             <div key={s.label} className={`${s.bg} rounded-xl p-4 flex items-center gap-3`}>
               <s.icon className={`w-8 h-8 ${s.color}`} />
               <div>
@@ -1266,8 +1191,7 @@ export default function ProjectHeadRequestManagement() {
           ))}
         </div>
 
-        {mainTab === 'project_management' && (
-          <>
+        <>
             {!selectedProgram && (
               <div className="bg-white border border-slate-200 rounded-xl">
                 <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-3">
@@ -1487,7 +1411,6 @@ export default function ProjectHeadRequestManagement() {
                           <tr className="bg-slate-50 border-b text-left">
                             <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Project Name</th>
                             <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Requested By</th>
-                            <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Budget</th>
                             <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Lifecycle</th>
                             <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Verification</th>
                             <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Created</th>
@@ -1496,7 +1419,11 @@ export default function ProjectHeadRequestManagement() {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {selectedProgramProjectsByTab.map(p => (
-                            <tr key={p.id} className="hover:bg-slate-50">
+                            <tr
+                              key={p.id}
+                              className="hover:bg-slate-50 cursor-pointer"
+                              onClick={() => setViewProjectDetails(p)}
+                            >
                               <td className="px-4 py-3 font-medium text-slate-900">{p.project_name}</td>
                               <td className="px-4 py-3 text-slate-700 text-xs">
                                 <span className="flex items-center gap-2">
@@ -1513,17 +1440,12 @@ export default function ProjectHeadRequestManagement() {
                                   })()}
                                   <span>{userNameByID.get(p.created_by) || p.created_by}</span>
                                 </span>
-                              </td>
-                              <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
-                                <span className="flex items-center gap-1">
-                                  <Wallet className="h-3.5 w-3.5 text-slate-400" />
-                                  {fmtBudget(p.budget_allocated)}
-                                </span>
+                                <span className="block text-[11px] text-slate-500 mt-1 ml-8">{requesterRoleLabel(p.created_by)}</span>
                               </td>
                               <td className="px-4 py-3"><LifecycleBadge status={p.status} /></td>
                               <td className="px-4 py-3"><VerificationBadge project={p} /></td>
                               <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">{fmtDate(p.created_at)}</td>
-                              <td className="px-4 py-3 text-right">
+                              <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" size="sm"><MoreVertical className="w-4 h-4" /></Button>
@@ -1531,6 +1453,17 @@ export default function ProjectHeadRequestManagement() {
                                   <DropdownMenuContent align="end" className="bg-white">
                                     <DropdownMenuItem onClick={() => setViewProjectDetails(p)}>
                                       <Eye className="w-4 h-4 mr-2" /> View Project
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      disabled={!canAcceptStaffRequest(p) || acceptingRequestID === p.id}
+                                      onClick={() => acceptStaffRequest(p)}
+                                    >
+                                      {acceptingRequestID === p.id ? (
+                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                      ) : (
+                                        <CheckCircle className="w-4 h-4 mr-2" />
+                                      )}
+                                      Accept Staff Request
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                       disabled={!isProjectApproved(p)}
@@ -1596,7 +1529,7 @@ export default function ProjectHeadRequestManagement() {
                                     : project.approval_status === 'rejected'
                                       ? 'Final rejected'
                                       : project.project_head_id && project.status !== 'pending_approval'
-                                        ? 'Pending admin/chair'
+                                        ? 'Pending final approval'
                                         : 'Awaiting head review'}
                                 </p>
                               </button>
@@ -2015,118 +1948,6 @@ export default function ProjectHeadRequestManagement() {
               </Card>
             )}
           </>
-        )}
-
-        {mainTab === 'project_requests' && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold text-slate-700">Project Requests</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="relative w-full sm:w-96">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Search requests..."
-                  value={searchRequests}
-                  onChange={e => setSearchRequests(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Approval Status</h3>
-                <div className="overflow-x-auto border rounded-lg">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 border-b text-left">
-                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Project</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Program</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Requested By</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Verification</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Submitted</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filteredForwarded.length === 0 ? (
-                        <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-500">No requests currently queued for final approval.</td></tr>
-                      ) : filteredForwarded.map(p => (
-                        <tr key={p.id} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-medium text-slate-900">{p.project_name}</td>
-                          <td className="px-4 py-3 text-slate-700">{programNameByID.get(p.program_id || '') || '-'}</td>
-                          <td className="px-4 py-3 text-slate-700 text-xs">{userNameByID.get(p.created_by) || p.created_by}</td>
-                          <td className="px-4 py-3"><VerificationBadge project={p} /></td>
-                          <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">{fmtDate(p.created_at)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Department Staff Requests (Approve/Reject)</h3>
-                <div className="overflow-x-auto border rounded-lg">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 border-b text-left">
-                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Project Request</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Program</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Requested By</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Budget</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Verification</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filteredStaffRequests.length === 0 ? (
-                        <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No department staff requests found.</td></tr>
-                      ) : filteredStaffRequests.map(p => (
-                        <tr key={p.id} className="hover:bg-slate-50">
-                          <td className="px-4 py-3 font-medium text-slate-900">{p.project_name}</td>
-                          <td className="px-4 py-3 text-slate-700">{programNameByID.get(p.program_id || '') || '-'}</td>
-                          <td className="px-4 py-3 text-slate-700 text-xs">{userNameByID.get(p.created_by) || p.created_by}</td>
-                          <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{fmtBudget(p.budget_allocated)}</td>
-                          <td className="px-4 py-3"><VerificationBadge project={p} /></td>
-                          <td className="px-4 py-3 whitespace-nowrap">
-                            {canHeadReview(p) ? (
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  className="h-7 px-2 bg-emerald-600 hover:bg-emerald-700"
-                                  onClick={() => {
-                                    setReviewTarget(p)
-                                    setReviewDecision('approved')
-                                    setReviewNotes('')
-                                  }}
-                                >
-                                  <CheckCircle className="h-3.5 w-3.5 mr-1" /> Approve
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 px-2 text-red-600 border-red-200 hover:bg-red-50"
-                                  onClick={() => {
-                                    setReviewTarget(p)
-                                    setReviewDecision('rejected')
-                                    setReviewNotes('')
-                                  }}
-                                >
-                                  <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
-                                </Button>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-500">No action</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
 
       {/* Task Project Selection Dialog */}
@@ -2473,47 +2294,6 @@ export default function ProjectHeadRequestManagement() {
             <Button onClick={submitCreateProject} disabled={creatingProject} className="bg-slate-900 hover:bg-slate-800">
               {creatingProject ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Submit Project Request
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!reviewTarget} onOpenChange={() => !submittingReview && setReviewTarget(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{reviewDecision === 'approved' ? 'Approve' : 'Reject'} Department Staff Request</DialogTitle>
-          </DialogHeader>
-
-          {reviewTarget && (
-            <div className="space-y-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                <p className="font-semibold text-slate-900">{reviewTarget.project_name}</p>
-                <p className="text-slate-600">Program: {programNameByID.get(reviewTarget.program_id || '') || '-'}</p>
-                <p className="text-slate-600">Requested by: {userNameByID.get(reviewTarget.created_by) || reviewTarget.created_by}</p>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Review Notes</label>
-                <textarea
-                  rows={4}
-                  value={reviewNotes}
-                  onChange={e => setReviewNotes(e.target.value)}
-                  className="w-full mt-1 rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  placeholder="Optional notes"
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setReviewTarget(null)} disabled={submittingReview}>Cancel</Button>
-            <Button
-              onClick={submitHeadReview}
-              disabled={submittingReview}
-              className={reviewDecision === 'approved' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}
-            >
-              {submittingReview ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {reviewDecision === 'approved' ? 'Approve & Forward' : 'Reject Request'}
             </Button>
           </DialogFooter>
         </DialogContent>

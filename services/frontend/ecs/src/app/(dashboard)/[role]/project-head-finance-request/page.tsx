@@ -217,7 +217,7 @@ export default function FundRequestPage() {
                       type="date"
                       value={dateNeeded}
                       onChange={(e) => setDateNeeded(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
+                      min={typeof window === 'undefined' ? '' : new Date().toISOString().split('T')[0]}
                       className="bg-white border-slate-300 text-slate-900"
                     />
                   </div>

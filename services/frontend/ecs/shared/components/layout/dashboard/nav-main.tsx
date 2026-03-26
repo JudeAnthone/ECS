@@ -12,7 +12,7 @@ import {
 import Link from "next/link"
 import { BarChart2, Users, Home, FileText, BookOpen, MessageSquare, Settings, ChevronDown, ChevronUp } from "lucide-react"
 // Icon mapping for menu items
-const iconMap = {
+const iconMap: { [key: string]: React.ComponentType<any> } = {
   Dashboard: Home,
   "User Management": Users,
   "Program Management": BookOpen,
@@ -31,6 +31,7 @@ const iconMap = {
   "Project Tasks": MessageSquare,
   "Browse Programs": BookOpen,
   "Request Form": FileText,
+  "Request a Project": FileText,
 };
 import { useParams, usePathname } from "next/navigation"
 
@@ -92,6 +93,7 @@ const roleNavigation: RoleNavigation = {
     items: [
       { title: "Dashboard", href: "/staff-dashboard" },
       { title: "Project Tasks", href: "/staff-project-task" },
+      { title: "Request a Project", href: "/staff-request-project" },
       { title: "Analytics", href: "/staff-project-analytics" },
       { title: "Reports", href: "/staff-report" },
     ],

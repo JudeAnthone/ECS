@@ -38,6 +38,20 @@ func NewProjectUseCase(
 	return &projectUseCase{projectRepo: projectRepo, userRepo: userRepo, deptRepo: deptRepo, programRepo: programRepo}
 }
 
+// GetMyProjects retrieves all projects created by the current user.
+func (uc *projectUseCase) GetMyProjects(ctx context.Context, userID string) ([]*domain.Project, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, fmt.Errorf("forbidden: user id is required")
+	}
+
+	projects, err := uc.projectRepo.GetByCreatedBy(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get projects: %w", err)
+	}
+
+	return projects, nil
+}
+
 // CreateProject creates a new project under a program
 func (uc *projectUseCase) CreateProject(ctx context.Context, req *domain.CreateProjectRequest, createdBy string, creatorRole string) (*domain.Project, error) {
 	var startDate, endDate *time.Time
@@ -142,6 +156,15 @@ func (uc *projectUseCase) CreateProject(ctx context.Context, req *domain.CreateP
 		ApprovalStatus:     approvalStatus,
 	}
 
+	// Fetch creator user info to store with project
+	creator, err := uc.userRepo.GetByID(ctx, createdBy)
+	if err == nil && creator != nil {
+		rolePtr := &creatorRole
+		project.CreatedByRole = rolePtr
+		project.CreatedByFirstName = &creator.FirstName
+		project.CreatedByLastName = &creator.LastName
+	}
+
 	if err := uc.projectRepo.Create(ctx, project, createdBy); err != nil {
 		return nil, fmt.Errorf("failed to create project: %w", err)
 	}
@@ -176,6 +199,16 @@ func (uc *projectUseCase) GetProjectsByProgramIDForUser(ctx context.Context, pro
 		}
 	}
 
+	if role == domain.RoleProgramChair {
+		program, err := uc.programRepo.GetByID(ctx, programID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve program: %w", err)
+		}
+		if program.ProgramChairID == nil || *program.ProgramChairID != userID {
+			return nil, fmt.Errorf("forbidden: you can only access projects under your assigned programs")
+		}
+	}
+
 	return uc.GetProjectsByProgramID(ctx, programID)
 }
 
@@ -194,6 +227,9 @@ func (uc *projectUseCase) UpdateProjectApproval(ctx context.Context, id string, 
 	}
 	if req.ApprovalStatus != "approved" && req.ApprovalStatus != "rejected" {
 		return fmt.Errorf("approval_status must be approved or rejected")
+	}
+	if req.ApprovalStatus == "rejected" && normalizeOptionalString(req.ReviewNotes) == nil {
+		return fmt.Errorf("review_notes is required when rejecting a project")
 	}
 
 	project, err := uc.projectRepo.GetByID(ctx, id)
@@ -239,6 +275,9 @@ func (uc *projectUseCase) UpdateProjectApproval(ctx context.Context, id string, 
 func (uc *projectUseCase) ProjectHeadPreReview(ctx context.Context, id string, headID string, input *domain.ProjectHeadPreReviewRequest) error {
 	if input == nil || (input.Decision != "approved" && input.Decision != "rejected") {
 		return fmt.Errorf("decision must be approved or rejected")
+	}
+	if input.Decision == "rejected" && normalizeOptionalString(input.ReviewNotes) == nil {
+		return fmt.Errorf("review_notes is required when rejecting a project")
 	}
 
 	project, err := uc.projectRepo.GetByID(ctx, id)

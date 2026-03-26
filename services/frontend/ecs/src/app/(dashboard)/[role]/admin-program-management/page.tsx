@@ -59,6 +59,11 @@ interface Project {
   end_date?: string;
   status: string;
   approval_status: string;
+  staff_originated?: boolean;
+  created_by?: string;
+  created_by_role?: string;
+  created_by_first_name?: string;
+  created_by_last_name?: string;
   created_at: string;
 }
 
@@ -73,17 +78,18 @@ interface UserOption {
   first_name: string;
   last_name: string;
   email: string;
+  role?: string;
   department?: string;
   assigned_program_chair_id?: string;
   avatar_url?: string | null;
 }
 
 function UserAvatar({ user, size = 'md' }: { user: UserOption; size?: 'sm' | 'md' | 'lg' }) {
-  const szClass = size === 'sm' ? 'w-7 h-7 text-xs' : size === 'lg' ? 'w-12 h-12 text-base' : 'w-9 h-9 text-sm';
+  const szClass = size === 'sm' ? 'h-6 w-6 text-[10px]' : size === 'lg' ? 'h-12 w-12 text-base' : 'h-9 w-9 text-xs';
   const initials = `${user.first_name[0] ?? ''}${user.last_name[0] ?? ''}`.toUpperCase();
   return user.avatar_url
-    ? <img src={user.avatar_url} alt={initials} className={`${szClass} rounded-full object-cover shrink-0`} />
-    : <div className={`${szClass} rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center shrink-0`}>{initials}</div>;
+    ? <img src={user.avatar_url} alt={initials} className={`${szClass} rounded-full object-cover border border-slate-200 shrink-0`} />
+    : <div className={`${szClass} rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center border border-slate-300 shrink-0`}>{initials}</div>;
 }
 
 function UserPickerList({ users, value, onChange, emptyLabel, isDisabled, disabledReason }: {
@@ -149,6 +155,11 @@ function authHeaders() {
   return { 'Authorization': `Bearer ${getToken()}`, 'Content-Type': 'application/json' };
 }
 
+function formatDisplayDate(date?: string | null) {
+  if (!date) return '-';
+  return new Date(date).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     draft: 'bg-gray-100 text-gray-700',
@@ -164,8 +175,8 @@ function StatusBadge({ status }: { status: string }) {
     pending_approval: 'bg-orange-100 text-orange-700',
   };
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium capitalize ${map[status] ?? 'bg-gray-100 text-gray-700'}`}>
-      {status.replace('_', ' ')}
+    <span className={`px-2 py-1 rounded-full text-xs font-medium ${map[status] ?? 'bg-gray-100 text-gray-700'}`}>
+      {status.replace(/_/g, ' ').toUpperCase()}
     </span>
   );
 }
@@ -415,21 +426,39 @@ function ProjectsView({ program, departments, onBack }: {
   const [assignHeadOpen, setAssignHeadOpen] = useState(false);
   const [assignHeadProject, setAssignHeadProject] = useState<Project | null>(null);
   const [heads, setHeads] = useState<UserOption[]>([]);
+  const [staffUsers, setStaffUsers] = useState<UserOption[]>([]);
+  const [adminUsers, setAdminUsers] = useState<UserOption[]>([]);
+  const [chairUsers, setChairUsers] = useState<UserOption[]>([]);
   const [selectedHeadID, setSelectedHeadID] = useState('__none__');
   const [assignHeadError, setAssignHeadError] = useState('');
   const [projectTab, setProjectTab] = useState<'all' | 'pending'>('all');
   const [deleteProjectDialog, setDeleteProjectDialog] = useState<Project | null>(null);
   const [projectApprovalDialog, setProjectApprovalDialog] = useState<{ project: Project; approvalStatus: 'approved' | 'rejected' } | null>(null);
+  const [viewProjectDialog, setViewProjectDialog] = useState<Project | null>(null);
   const [reviewNotes, setReviewNotes] = useState('');
   const emptyForm = { project_name: '', project_description: '', objectives: '', budget_allocated: '', start_date: '', end_date: '' };
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => {
     loadProjects();
-    fetch(`${API}/users/by-role?role=project_head`, { headers: authHeaders() })
-      .then(r => r.ok ? r.json() : Promise.resolve({ users: [] }))
-      .then(d => setHeads(d.users || []))
-      .catch(() => setHeads([]));
+    Promise.all([
+      fetch(`${API}/users/by-role?role=project_head`, { headers: authHeaders() })
+        .then(r => r.ok ? r.json() : Promise.resolve({ users: [] }))
+        .then(d => setHeads(d.users || []))
+        .catch(() => setHeads([])),
+      fetch(`${API}/users/by-role?role=staff`, { headers: authHeaders() })
+        .then(r => r.ok ? r.json() : Promise.resolve({ users: [] }))
+        .then(d => setStaffUsers(d.users || []))
+        .catch(() => setStaffUsers([])),
+      fetch(`${API}/users/by-role?role=admin`, { headers: authHeaders() })
+        .then(r => r.ok ? r.json() : Promise.resolve({ users: [] }))
+        .then(d => setAdminUsers(d.users || []))
+        .catch(() => setAdminUsers([])),
+      fetch(`${API}/users/by-role?role=program_chair`, { headers: authHeaders() })
+        .then(r => r.ok ? r.json() : Promise.resolve({ users: [] }))
+        .then(d => setChairUsers(d.users || []))
+        .catch(() => setChairUsers([])),
+    ]);
   }, []);
 
   const eligibleHeads = React.useMemo(() => {
@@ -441,6 +470,26 @@ function ProjectsView({ program, departments, onBack }: {
 
   const loadProjects = async () => {
     try {
+      // Refresh user lists to ensure we have all possible creators
+      const [headRes, staffRes, adminRes] = await Promise.all([
+        fetch(`${API}/users/by-role?role=project_head`, { headers: authHeaders() }),
+        fetch(`${API}/users/by-role?role=staff`, { headers: authHeaders() }),
+        fetch(`${API}/users/by-role?role=admin`, { headers: authHeaders() }),
+      ]);
+      
+      if (headRes.ok) {
+        const headData = await headRes.json();
+        setHeads(headData.users || []);
+      }
+      if (staffRes.ok) {
+        const staffData = await staffRes.json();
+        setStaffUsers(staffData.users || []);
+      }
+      if (adminRes.ok) {
+        const adminData = await adminRes.json();
+        setAdminUsers(adminData.users || []);
+      }
+      
       const res = await fetch(`${API}/projects?program_id=${program.id}`, { headers: authHeaders() });
       const data = await res.json();
       setProjects(data.projects || []);
@@ -453,7 +502,7 @@ function ProjectsView({ program, departments, onBack }: {
     if (form.end_date && form.start_date && form.end_date < form.start_date)
       return 'End date cannot be before start date.';
     if (form.end_date && program.end_date && form.end_date > program.end_date.split('T')[0])
-      return `Project end date cannot exceed the program end date (${new Date(program.end_date).toLocaleDateString()}).`;
+      return `Project end date cannot exceed the program end date (${formatDisplayDate(program.end_date)}).`;
     if (form.budget_allocated) {
       const budget = parseFloat(form.budget_allocated);
       const alreadyAllocated = projects
@@ -531,6 +580,10 @@ function ProjectsView({ program, departments, onBack }: {
     if (!projectApprovalDialog) return;
     const { project, approvalStatus } = projectApprovalDialog;
     const action = approvalStatus === 'approved' ? 'approve' : 'reject';
+    if (approvalStatus === 'rejected' && !reviewNotes.trim()) {
+      setPageError('Review notes are required when rejecting a project.');
+      return;
+    }
 
     const res = await fetch(`${API}/projects/${project.id}/approval`, {
       method: 'PATCH',
@@ -591,6 +644,66 @@ function ProjectsView({ program, departments, onBack }: {
     p.project_name.toLowerCase().includes(search.toLowerCase())
   );
   const programDepartment = departments.find((d) => d.id === program.department_id);
+
+  const verificationBadge = (p: Project) => {
+    const isForwarded = p.approval_status === 'pending' && !!p.project_head_id && p.status !== 'pending_approval';
+    if (p.approval_status === 'approved') {
+      return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-emerald-100 text-emerald-800 border-emerald-200">FINAL APPROVED</span>;
+    }
+    if (p.approval_status === 'rejected') {
+      return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-red-100 text-red-800 border-red-200">FINAL REJECTED</span>;
+    }
+    if (isForwarded) {
+      return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-indigo-100 text-indigo-800 border-indigo-200">PENDING FINAL APPROVAL</span>;
+    }
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-amber-100 text-amber-800 border-amber-200">AWAITING HEAD REVIEW</span>;
+  };
+
+  const requesterName = (p: Project) => {
+    if (p.created_by_first_name && p.created_by_last_name) {
+      return `${p.created_by_first_name} ${p.created_by_last_name}`.trim();
+    }
+    // Fallback for old data
+    if (p.staff_originated === true) return 'Department Staff';
+    return 'Admin';
+  };
+
+  const requesterRole = (p: Project) => {
+    if (p.created_by_role) {
+      const role = (p.created_by_role || '').trim();
+      if (role) {
+        return role
+          .split('_')
+          .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(' ');
+      }
+    }
+    // Fallback for old data
+    if (p.staff_originated === true) return 'Staff';
+    if (p.created_by) return 'Unknown Role';
+    return 'Admin';
+  };
+
+  const requesterUserByID = React.useMemo(() => {
+    const map = new Map<string, UserOption>();
+    [...staffUsers, ...adminUsers, ...chairUsers].forEach(u => map.set(u.id, u));
+    return map;
+  }, [staffUsers, adminUsers, chairUsers]);
+
+  const requesterUser = (p: Project): UserOption => {
+    const existing = p.created_by ? requesterUserByID.get(p.created_by) : undefined;
+    if (existing) return existing;
+
+    const fallbackName = requesterName(p).split(' ');
+    return {
+      id: p.created_by || p.id,
+      first_name: fallbackName[0] || 'User',
+      last_name: fallbackName.slice(1).join(' ') || '',
+      email: '',
+      role: p.staff_originated ? 'staff' : 'admin',
+      avatar_url: null,
+    };
+  };
 
   const total = projects.length;
   const active = projects.filter(p => p.status === 'in_progress').length;
@@ -717,7 +830,7 @@ function ProjectsView({ program, departments, onBack }: {
             <Dialog open={createOpen} onOpenChange={v => { setCreateOpen(v); if (!v) setFormError(''); }}>
               <DialogTrigger asChild>
                 <Button className="flex items-center gap-2" onClick={() => { setForm(emptyForm); setFormError(''); }}>
-                  <Plus className="w-4 h-4" /> Add Project
+                  <Plus className="w-4 h-4" /> Create Project
                 </Button>
               </DialogTrigger>
               <DialogContent className="bg-white max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -735,47 +848,65 @@ function ProjectsView({ program, departments, onBack }: {
         {loading ? (
           <div className="text-center py-12 text-slate-400">Loading projects...</div>
         ) : (
-          <Table>
+          <Table className="w-full text-sm">
             <TableHeader>
-              <TableRow>
-                <TableHead>Project Name</TableHead>
-                <TableHead>Budget</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Approval</TableHead>
-                <TableHead>Start</TableHead>
-                <TableHead>End</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+              <TableRow className="bg-slate-50 border-b text-left">
+                <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Project Name</TableHead>
+                <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Requested By</TableHead>
+                <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Lifecycle</TableHead>
+                <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Verification</TableHead>
+                <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Created</TableHead>
+                <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-slate-400">
+                  <TableCell colSpan={6} className="px-4 py-12 text-center text-slate-400">
                     {projectTab === 'pending' ? 'No pending projects found under this program' : 'No projects found under this program'}
                   </TableCell>
                 </TableRow>
               ) : filtered.map(p => (
-                <TableRow key={p.id} className="hover:bg-slate-50">
-                  <TableCell className="font-medium">{p.project_name}</TableCell>
-                  <TableCell>{p.budget_allocated ? `₱${p.budget_allocated.toLocaleString()}` : '-'}</TableCell>
-                  <TableCell><StatusBadge status={p.status} /></TableCell>
-                  <TableCell><StatusBadge status={p.approval_status} /></TableCell>
-                  <TableCell>{p.start_date ? new Date(p.start_date).toLocaleDateString() : '-'}</TableCell>
-                  <TableCell>{p.end_date ? new Date(p.end_date).toLocaleDateString() : '-'}</TableCell>
-                  <TableCell className="text-right">
+                <TableRow key={p.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setViewProjectDialog(p)}>
+                  <TableCell className="px-4 py-3 font-medium text-slate-900">{p.project_name}</TableCell>
+                  <TableCell className="px-4 py-3 text-slate-700 text-xs">
+                    <span className="flex items-center gap-2">
+                      <UserAvatar user={requesterUser(p)} size="sm" />
+                      <span>{requesterName(p)}</span>
+                    </span>
+                    <span className="block text-[11px] text-slate-500 mt-1 ml-8">{requesterRole(p)}</span>
+                  </TableCell>
+                  <TableCell className="px-4 py-3"><StatusBadge status={p.status} /></TableCell>
+                  <TableCell className="px-4 py-3">{verificationBadge(p)}</TableCell>
+                  <TableCell className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">{formatDisplayDate(p.created_at)}</TableCell>
+                  <TableCell className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                    {(() => {
+                      const pendingFinalDecision = p.approval_status === 'pending';
+                      const staffAwaitingHeadReview = !!p.staff_originated && (p.status === 'pending_approval' || !p.project_head_id);
+                      const canFinalReview = pendingFinalDecision && !staffAwaitingHeadReview;
+                      return (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm"><MoreVertical className="w-4 h-4" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="bg-white">
-                        {p.approval_status !== 'approved' && (
-                          <DropdownMenuItem onClick={() => handleProjectApproval(p, 'approved')} className="text-green-700">
+                        <DropdownMenuItem
+                          onClick={() => handleProjectApproval(p, 'approved')}
+                          className="text-green-700"
+                          disabled={!canFinalReview}
+                        >
                             <CheckCircle className="w-4 h-4 mr-2" /> Approve Project
-                          </DropdownMenuItem>
-                        )}
-                        {p.approval_status !== 'rejected' && (
-                          <DropdownMenuItem onClick={() => handleProjectApproval(p, 'rejected')} className="text-orange-700">
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleProjectApproval(p, 'rejected')}
+                          className="text-orange-700"
+                          disabled={!canFinalReview}
+                        >
                             <XCircle className="w-4 h-4 mr-2" /> Reject Project
+                        </DropdownMenuItem>
+                        {staffAwaitingHeadReview && (
+                          <DropdownMenuItem disabled className="text-xs text-slate-500">
+                            Waiting for Project Head pre-review
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem onClick={() => openEdit(p)}>
@@ -789,6 +920,8 @@ function ProjectsView({ program, departments, onBack }: {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
+                      )
+                    })()}
                   </TableCell>
                 </TableRow>
               ))}
@@ -905,6 +1038,47 @@ function ProjectsView({ program, departments, onBack }: {
               <Button onClick={handleAssignHead}>Save Assignment</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewProjectDialog} onOpenChange={(open) => { if (!open) setViewProjectDialog(null); }}>
+        <DialogContent className="bg-white max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewProjectDialog?.project_name}</DialogTitle>
+            <DialogDescription>Project Details</DialogDescription>
+          </DialogHeader>
+          {viewProjectDialog && (
+            <div className="space-y-4 pt-2">
+              <div className="flex flex-wrap gap-2">
+                <StatusBadge status={viewProjectDialog.status} />
+                {verificationBadge(viewProjectDialog)}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Requested By</label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <UserAvatar user={requesterUser(viewProjectDialog)} size="md" />
+                    <div>
+                      <p className="text-slate-600 text-sm">{requesterName(viewProjectDialog)}</p>
+                      <p className="text-xs text-slate-500">{requesterRole(viewProjectDialog)}</p>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Created</label>
+                  <p className="mt-1 text-slate-600 text-sm">{formatDisplayDate(viewProjectDialog.created_at)}</p>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Description</label>
+                <p className="mt-1 text-slate-600 text-sm">{viewProjectDialog.project_description || 'No description'}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Objectives</label>
+                <p className="mt-1 text-slate-600 text-sm">{viewProjectDialog.objectives || 'Not defined'}</p>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
@@ -1188,16 +1362,6 @@ export default function AdminProgramManagement() {
                   <Input placeholder="Search programs..." value={search}
                     onChange={e => setSearch(e.target.value)} className="pl-9" />
                 </div>
-                <Select value={filterDept} onValueChange={setFilterDept}>
-                  <SelectTrigger className="w-[180px]">
-                    <Filter className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="All Departments" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white">
-                    <SelectItem value="all">All Departments</SelectItem>
-                    {departments.map(d => <SelectItem key={d.id} value={d.id}>{d.department_code}</SelectItem>)}
-                  </SelectContent>
-                </Select>
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
                   <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Statuses" /></SelectTrigger>
                   <SelectContent className="bg-white">
@@ -1214,28 +1378,29 @@ export default function AdminProgramManagement() {
               {loading ? (
                 <div className="text-center py-12 text-slate-400">Loading programs...</div>
               ) : (
-                <Table>
+                <Table className="w-full text-sm">
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Program Name</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Department</TableHead>
-                      <TableHead>Overall Budget</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                    <TableRow className="bg-slate-50 border-b text-left">
+                      <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Program Name</TableHead>
+                      <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Category</TableHead>
+                      <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Department</TableHead>
+                      <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Target Beneficiary</TableHead>
+                      <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Overall Budget</TableHead>
+                      <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</TableHead>
+                      <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Created</TableHead>
+                      <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filtered.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-12 text-slate-400">
+                        <TableCell colSpan={8} className="px-4 py-12 text-center text-slate-400">
                           No programs found
                         </TableCell>
                       </TableRow>
                     ) : filtered.map(p => (
-                      <TableRow key={p.id} className="hover:bg-slate-50">
-                        <TableCell>
+                      <TableRow key={p.id} className="hover:bg-slate-50 transition-colors">
+                        <TableCell className="px-4 py-3">
                           <button
                             onClick={() => setDrillProgram(p)}
                             className="font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
@@ -1244,12 +1409,16 @@ export default function AdminProgramManagement() {
                             <ChevronRight className="w-4 h-4" />
                           </button>
                         </TableCell>
-                        <TableCell>{p.program_category || '-'}</TableCell>
-                        <TableCell>{departments.find(d => d.id === p.department_id)?.department_code || '-'}</TableCell>
-                        <TableCell>{p.spent_budget ? `₱${p.spent_budget.toLocaleString()}` : '₱0'}</TableCell>
-                        <TableCell><StatusBadge status={p.status} /></TableCell>
-                        <TableCell>{new Date(p.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="px-4 py-3">{p.program_category || '-'}</TableCell>
+                        <TableCell className="px-4 py-3">{(() => {
+                          const department = departments.find(d => d.id === p.department_id)
+                          return department ? `${department.department_name} (${department.department_code})` : '-'
+                        })()}</TableCell>
+                        <TableCell className="px-4 py-3">{p.target_beneficiaries || '-'}</TableCell>
+                        <TableCell className="px-4 py-3">{p.spent_budget ? `₱${p.spent_budget.toLocaleString()}` : '₱0'}</TableCell>
+                        <TableCell className="px-4 py-3"><StatusBadge status={p.status} /></TableCell>
+                        <TableCell className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">{formatDisplayDate(p.created_at)}</TableCell>
+                        <TableCell className="px-4 py-3 text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm"><MoreVertical className="w-4 h-4" /></Button>
@@ -1447,13 +1616,13 @@ export default function AdminProgramManagement() {
                       <div>
                         <label className="text-sm font-medium text-slate-700">Start Date</label>
                         <p className="mt-1 text-slate-600 text-sm">
-                          {selected.start_date ? new Date(selected.start_date).toLocaleDateString() : 'Not set'}
+                          {selected.start_date ? formatDisplayDate(selected.start_date) : 'Not set'}
                         </p>
                       </div>
                       <div>
                         <label className="text-sm font-medium text-slate-700">End Date</label>
                         <p className="mt-1 text-slate-600 text-sm">
-                          {selected.end_date ? new Date(selected.end_date).toLocaleDateString() : 'Not set'}
+                          {selected.end_date ? formatDisplayDate(selected.end_date) : 'Not set'}
                         </p>
                       </div>
                     </div>
