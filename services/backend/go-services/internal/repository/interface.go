@@ -66,6 +66,12 @@ type ProjectRepository interface {
 	Delete(ctx context.Context, id string) error
 }
 
+// BudgetRepository defines operations for budget-related queries
+type BudgetRepository interface {
+	GetTotalBudget(ctx context.Context) (float64, error)
+	GetAllBudgetRequests(ctx context.Context) ([]*domain.BudgetRequest, error)
+}
+
 // RequestRepository defines methods for extension service request data access
 type RequestRepository interface {
 	Create(ctx context.Context, req *domain.ProjectRequest) error

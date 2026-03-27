@@ -146,6 +146,9 @@ func (uc *programUseCase) UpdateProgram(ctx context.Context, id string, req *dom
 	if req.Status != nil {
 		program.Status = *req.Status
 	}
+	if req.BudgetAllocation != nil {
+		program.BudgetAllocation = req.BudgetAllocation
+	}
 
 	// Parse and update dates if provided
 	if req.StartDate != nil && *req.StartDate != "" {
@@ -173,6 +176,19 @@ func (uc *programUseCase) UpdateProgram(ctx context.Context, id string, req *dom
 		return nil, fmt.Errorf("failed to update program: %w", err)
 	}
 
+	return program, nil
+}
+
+// UpdateProgramBudget updates only the budget allocation for a program
+func (uc *programUseCase) UpdateProgramBudget(ctx context.Context, id string, budget *float64) (*domain.Program, error) {
+	program, err := uc.programRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("program not found: %w", err)
+	}
+	program.BudgetAllocation = budget
+	if err := uc.programRepo.Update(ctx, program); err != nil {
+		return nil, fmt.Errorf("failed to update program budget: %w", err)
+	}
 	return program, nil
 }
 

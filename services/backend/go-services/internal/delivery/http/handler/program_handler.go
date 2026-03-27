@@ -301,3 +301,31 @@ func (h *ProgramHandler) AssignProgramChair(w http.ResponseWriter, r *http.Reque
 	}
 	respondWithJSON(w, http.StatusOK, map[string]string{"message": "Program chair assigned"})
 }
+
+// UpdateProgramBudget handles PATCH /api/v1/programs/{id}/budget
+func (h *ProgramHandler) UpdateProgramBudget(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	id := vars["id"]
+
+	// only admin can change program budgets
+	role, _ := r.Context().Value("role").(string)
+	if role != domain.RoleAdmin {
+		respondWithError(w, http.StatusForbidden, "Access denied")
+		return
+	}
+
+	var body struct {
+		BudgetAllocation *float64 `json:"budget_allocation"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	prog, err := h.programUsecase.UpdateProgramBudget(r.Context(), id, body.BudgetAllocation)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondWithJSON(w, http.StatusOK, prog)
+}

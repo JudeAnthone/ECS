@@ -10,6 +10,7 @@ import (
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/pkg/database"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/repository/postgres"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/auth"
+	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/budget"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/department"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/program"
 	projectuc "github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/project"
@@ -43,6 +44,10 @@ func SetupRoutes() *mux.Router {
 	programHandler := handler.NewProgramHandler(programUsecase)
 	projectHandler := handler.NewProjectHandler(projectUsecase)
 	requestHandler := handler.NewRequestHandler(requestUsecase)
+	// budget
+	budgetRepo := postgres.NewBudgetRepository(database.DB)
+	budgetUsecase := budget.NewBudgetUsecase(budgetRepo)
+	budgetHandler := handler.NewBudgetHandler(budgetUsecase)
 
 	// Root endpoint
 	r.HandleFunc("/", handler.RootHandler).Methods("GET")
@@ -124,6 +129,13 @@ func SetupRoutes() *mux.Router {
 	api.Handle("/users/{id}/reject", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.RejectUser))).Methods("PUT")
 	api.Handle("/users/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.UpdateUser))).Methods("PUT")
 	api.Handle("/users/{id}", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.DeleteUser))).Methods("DELETE")
+
+	// Budget routes (admin only)
+	api.Handle("/budgets/summary", middleware.AdminOnlyMiddleware(http.HandlerFunc(budgetHandler.GetTotalBudget))).Methods("GET")
+	api.Handle("/budget-requests", middleware.AdminOnlyMiddleware(http.HandlerFunc(budgetHandler.GetBudgetRequests))).Methods("GET")
+
+	// Program budget update (admin only)
+	api.Handle("/programs/{id}/budget", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.UpdateProgramBudget))).Methods("PATCH")
 
 	return r
 }

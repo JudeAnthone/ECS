@@ -20,6 +20,7 @@ const iconMap: { [key: string]: React.ComponentType<any> } = {
   "Project Recommendation": BookOpen,
   "Funds and Budget": FileText,
   "Analytics": BarChart2,
+  "Budget Management": FileText,
   "Reports": FileText,
   "Blog": MessageSquare,
   "Chatbot": Settings,
@@ -57,20 +58,21 @@ const roleNavigation: RoleNavigation = {
     items: [
       { title: "Dashboard", href: "/admin-dashboard" },
       { title: "User Management", href: "/admin-user-management" },
-      { title: "Program Management", href: "/admin-program-management" },
+    { title: "Program Management", href: "/admin-program-management" },
+    { title: "Budget Management", href: "/admin-budget-management" },
       { title: "Analytics", href: "/admin-analytics" },
       { title: "Reports", href: "/admin-report" },
       { title: "Blog", href: "/admin-blog" },
       { title: "Chatbot", href: "/admin-chatbot" },
     ],
   },
-  "program-chair": {
+      "program-chair": {
     label: "Program Chair",
     items: [
       { title: "Dashboard", href: "/program-chair-dashboard" },
       { title: "Program Management", href: "/program-chair-program-management" },
-      { title: "Project List", href: "/program-chair-project-list" },
-      { title: "Funds and Budget", href: "/program-chair-funds-and-budget" },
+        { title: "Budget Management", href: "/program-chair-budget-management" },
+        { title: "Project List", href: "/program-chair-project-list" },
       { title: "Analytics", href: "/program-chair-analytics" },
       { title: "Reports", href: "/program-chair-report" },
     ],
@@ -80,7 +82,7 @@ const roleNavigation: RoleNavigation = {
     items: [
       { title: "Dashboard", href: "/project-head-dashboard" },
       { title: "Project Management", href: "/project-head-request-management" },
-      { title: "Finance Request", href: "/project-head-finance-request" },
+      { title: "Budget Management", href: "/project-head-budget-management" },
 
       { title: "Report Submission", href: "/project-head-report-submission" },
       { title: "Task Management", href: "/project-head-task-management" },

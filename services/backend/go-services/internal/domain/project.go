@@ -38,7 +38,7 @@ type CreateProjectRequest struct {
 	ProjectDescription *string  `json:"project_description"`
 	ProgramID          *string  `json:"program_id"`
 	DepartmentID       *string  `json:"department_id"`
-	ProjectHeadID      *string  `json:"project_head_id"`                    // NEW
+	ProjectHeadID      *string  `json:"project_head_id"` // NEW
 	Objectives         *string  `json:"objectives"`
 	BudgetAllocated    *float64 `json:"budget_allocated"`
 	StartDate          *string  `json:"start_date"`

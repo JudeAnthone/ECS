@@ -11,10 +11,10 @@ import (
 )
 
 type mockProjectRepo struct {
-	createdByProjects      []*domain.Project
-	projectByID            *domain.Project
-	getByCreatedByCalled   bool
-	updateApprovalCalled   bool
+	createdByProjects       []*domain.Project
+	projectByID             *domain.Project
+	getByCreatedByCalled    bool
+	updateApprovalCalled    bool
 	projectHeadReviewCalled bool
 }
 
@@ -140,7 +140,9 @@ type mockProgramRepo struct {
 }
 
 func (m *mockProgramRepo) Create(ctx context.Context, program *domain.Program) error { return nil }
-func (m *mockProgramRepo) GetAll(ctx context.Context) ([]*domain.Program, error)     { return []*domain.Program{}, nil }
+func (m *mockProgramRepo) GetAll(ctx context.Context) ([]*domain.Program, error) {
+	return []*domain.Program{}, nil
+}
 func (m *mockProgramRepo) GetVisibleForUser(ctx context.Context, userID string, role string) ([]*domain.Program, error) {
 	if m.visiblePrograms != nil {
 		return m.visiblePrograms, nil
@@ -162,8 +164,10 @@ func (m *mockProgramRepo) GetByDepartment(ctx context.Context, departmentID stri
 func (m *mockProgramRepo) GetByProgramChair(ctx context.Context, programChairID string) ([]*domain.Program, error) {
 	return []*domain.Program{}, nil
 }
-func (m *mockProgramRepo) CountDistinctAssignedChairs(ctx context.Context) (int, error) { return 0, nil }
-func (m *mockProgramRepo) Update(ctx context.Context, program *domain.Program) error     { return nil }
+func (m *mockProgramRepo) CountDistinctAssignedChairs(ctx context.Context) (int, error) {
+	return 0, nil
+}
+func (m *mockProgramRepo) Update(ctx context.Context, program *domain.Program) error { return nil }
 func (m *mockProgramRepo) UpdateStatus(ctx context.Context, id string, status string) error {
 	return nil
 }

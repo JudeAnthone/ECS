@@ -15,6 +15,8 @@ type UseCase interface {
 	GetProgramsByDepartment(ctx context.Context, departmentID string) ([]*domain.Program, error)
 	GetProgramsByProgramChair(ctx context.Context, programChairID string) ([]*domain.Program, error)
 	UpdateProgram(ctx context.Context, id string, req *domain.UpdateProgramRequest) (*domain.Program, error)
+	// UpdateProgramBudget updates only the budget allocation for a program
+	UpdateProgramBudget(ctx context.Context, id string, budget *float64) (*domain.Program, error)
 	UpdateProgramStatus(ctx context.Context, id string, status string) error
 	UpdateProgramApproval(ctx context.Context, id string, req *domain.UpdateProgramApprovalRequest, approvedBy string) error
 	AssignProgramChair(ctx context.Context, programID string, chairID *string) error
