@@ -7,10 +7,55 @@ import { Button } from '@/shared/components/ui/Button';
 import { Label } from '@/shared/components/ui/Label';
 import { Textarea } from '@/shared/components/ui/TextArea';
 import { PhilippinePeso, FileText, Calendar, Building2, CheckCircle2, UploadCloud, Printer } from 'lucide-react';
-import budgetService, { Allocation, RequestItem, ReportItem } from '@/shared/lib/budget-service';
+import { API_URL } from '@/shared/lib/api-config';
+
+type Allocation = {
+  allocated: number;
+  spent: number;
+  remaining: number;
+  percent: number;
+};
+
+type RequestItem = {
+  id: string;
+  projectName: string;
+  date: string;
+  amount: number;
+  status: 'pending' | 'approved' | 'declined';
+};
+
+type ReportItem = {
+  id: string;
+  name: string;
+  uploadedAt: string;
+  uploader: string;
+  url?: string;
+};
+
+type DepartmentSummary = {
+  id: string;
+  department_code?: string;
+  department_name?: string;
+};
+
+type ChairDepartmentAllocationRaw = {
+  department_id?: string;
+  allocated_budget?: number;
+  spent_budget?: number;
+};
+
+type RequestRaw = {
+  id: string;
+  request_title?: string;
+  project_name?: string;
+  project_id?: string;
+  created_at?: string;
+  estimated_budget?: number;
+  status?: string;
+};
 
 export default function ProjectHeadBudgetManagementPage() {
-  const deptId = 'dept-001'; // TODO: wire real dept id from route/session
+  const API = `${API_URL}/api/v1`;
 
   const [allocation, setAllocation] = useState<Allocation | null>(null);
   const [requests, setRequests] = useState<RequestItem[]>([]);
@@ -26,19 +71,105 @@ export default function ProjectHeadBudgetManagementPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  function authHeaders() {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '';
+    return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  }
+
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const alloc = await budgetService.getAllocation(deptId);
-      const reqs = await budgetService.listRequests(deptId);
-      const reps = await budgetService.listReports(deptId);
-      if (!mounted) return;
-      setAllocation(alloc);
-      setRequests(reqs);
-      setReports(reps);
+      try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const chairID = user.assigned_program_chair_id;
+        const userDepartment = String(user.department || '').toLowerCase();
+
+        // Determine the current project head's department ID.
+        let departmentId = '';
+        const deptRes = await fetch(`${API}/departments`, { headers: authHeaders() });
+        let departments: DepartmentSummary[] = [];
+        if (deptRes.ok) {
+          const dd = await deptRes.json();
+          departments = dd.departments || [];
+          const matched = departments.find((d) =>
+            String(d.department_code || '').toLowerCase() === userDepartment ||
+            String(d.department_name || '').toLowerCase() === userDepartment
+          );
+          departmentId = matched?.id || '';
+        }
+
+        // Load this chair's per-department allocation (query specific department for accuracy)
+        let nextAllocation: Allocation = { allocated: 0, spent: 0, remaining: 0, percent: 0 };
+        if (chairID) {
+          // If we have a departmentId, prefer the targeted fetch. Otherwise we'll fetch all and try fuzzy match.
+          const allocRes = departmentId
+            ? await fetch(`${API}/budgets/chair-departments?chair_id=${chairID}&department_id=${departmentId}`, { headers: authHeaders() })
+            : await fetch(`${API}/budgets/chair-departments?chair_id=${chairID}`, { headers: authHeaders() });
+          if (allocRes.ok) {
+            const ad = await allocRes.json();
+            const items: ChairDepartmentAllocationRaw[] = ad.chair_department_budgets || [];
+            let mine: ChairDepartmentAllocationRaw | null = null;
+            if (departmentId) {
+              // if deptId was used, items should contain the single match
+              mine = items.length > 0 ? items[0] : null;
+            } else {
+              // No departmentId — try to find by department name/code using the user's stored department string
+              if (items.length > 0) {
+                const needle = (userDepartment || '').trim().toLowerCase();
+                mine = items.find((it) => {
+                  const name = String(it.department_name || '').toLowerCase();
+                  const codeMatch = departments.find(d => d.id === it.department_id)?.department_code || '';
+                  const code = String(codeMatch || '').toLowerCase();
+                  return name === needle || name.includes(needle) || code === needle || code.includes(needle);
+                }) || null;
+                // final fallback: exact department_id match if user.department stores an id string
+                if (!mine && userDepartment) {
+                  mine = items.find((it) => it.department_id === userDepartment) || null;
+                }
+              }
+            }
+            if (mine) {
+              const allocated = Number(mine.allocated_budget || 0);
+              const spent = Number(mine.spent_budget || 0);
+              const remaining = Math.max(0, allocated - spent);
+              const percent = allocated > 0 ? Math.min(100, Math.round((spent / allocated) * 100)) : 0;
+              nextAllocation = { allocated, spent, remaining, percent };
+            }
+          }
+        }
+
+        const reqRes = await fetch(`${API}/requests`, { headers: authHeaders() });
+        let nextRequests: RequestItem[] = [];
+        if (reqRes.ok) {
+          const rd = await reqRes.json();
+          const toStatus = (status?: string): RequestItem['status'] => {
+            if (status === 'approved') return 'approved';
+            if (status === 'rejected') return 'declined';
+            return 'pending';
+          };
+          nextRequests = ((rd.requests || []) as RequestRaw[]).map((r) => ({
+            id: r.id,
+            projectName: r.request_title || r.project_name || r.project_id || 'Untitled',
+            date: r.created_at ? String(r.created_at).split('T')[0] : '',
+            amount: Number(r.estimated_budget || 0),
+            status: toStatus(r.status),
+          }));
+        }
+
+        if (!mounted) return;
+        setAllocation(nextAllocation);
+        setRequests(nextRequests);
+        setReports([]);
+      } catch (error) {
+        console.error(error);
+        if (!mounted) return;
+        setAllocation({ allocated: 0, spent: 0, remaining: 0, percent: 0 });
+        setRequests([]);
+        setReports([]);
+      }
     })();
     return () => { mounted = false };
-  }, []);
+  }, [API]);
 
   const validateFile = (f: File) => {
     const allowed = ['application/pdf', 'image/png', 'image/jpeg'];
@@ -71,16 +202,33 @@ export default function ProjectHeadBudgetManagementPage() {
     setIsSubmitting(true);
     setUploadProgress(0);
 
-    const fd = new FormData();
-    fd.append('projectName', projectName);
-    fd.append('amount', amount);
-    fd.append('dateNeeded', dateNeeded);
-    fd.append('details', details);
-    fd.append('departmentId', deptId);
-    if (file) fd.append('file', file);
-
     try {
-      const created = await budgetService.createRequest(fd, (p) => setUploadProgress(p));
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const payload = {
+        request_title: projectName,
+        request_description: details,
+        requested_department: user.department || null,
+        justification: details,
+      };
+      setUploadProgress(70);
+      const res = await fetch(`${API}/requests`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Failed to submit request');
+      }
+      const createdRaw = await res.json();
+      const created: RequestItem = {
+        id: createdRaw.id,
+        projectName,
+        amount: Number(amount || 0),
+        date: createdRaw.created_at ? String(createdRaw.created_at).split('T')[0] : new Date().toISOString().split('T')[0],
+        status: 'pending',
+      };
+      setUploadProgress(100);
       // optimistic update
       setRequests(prev => [created, ...prev]);
       // reset form
@@ -144,18 +292,18 @@ export default function ProjectHeadBudgetManagementPage() {
           <CardContent className="space-y-4">
             {allocation ? (
               <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                <div className="flex gap-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
                   <div>
-                    <p className="text-sm text-slate-500">Allocated</p>
-                    <p className="text-xl font-semibold text-slate-900">{formatCurrency(allocation.allocated)}</p>
+                    <p className="text-xs text-slate-500 uppercase">ALLOCATED</p>
+                    <p className="text-2xl font-semibold text-slate-900">{formatCurrency(allocation.allocated)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Spent</p>
-                    <p className="text-xl font-semibold text-slate-900">{formatCurrency(allocation.spent)}</p>
+                    <p className="text-xs text-slate-500 uppercase">REMAINING</p>
+                    <p className="text-2xl font-semibold text-slate-900">{formatCurrency(allocation.remaining)}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Remaining</p>
-                    <p className="text-xl font-semibold text-slate-900">{formatCurrency(allocation.remaining)}</p>
+                    <p className="text-xs text-slate-500">Spent</p>
+                    <p className="text-lg font-medium text-slate-700">{formatCurrency(allocation.spent)}</p>
                   </div>
                 </div>
                 <div className="w-full lg:w-1/2">
@@ -224,7 +372,7 @@ export default function ProjectHeadBudgetManagementPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Sent Requests</CardTitle>
-                <CardDescription>Requests you've submitted</CardDescription>
+                <CardDescription>Requests you&apos;ve submitted</CardDescription>
               </CardHeader>
               <CardContent>
                 {requests.length === 0 ? <p className="text-sm text-slate-600">No requests found</p> : (

@@ -133,6 +133,11 @@ func SetupRoutes() *mux.Router {
 	// Budget routes (admin only)
 	api.Handle("/budgets/summary", middleware.AdminOnlyMiddleware(http.HandlerFunc(budgetHandler.GetTotalBudget))).Methods("GET")
 	api.Handle("/budget-requests", middleware.AdminOnlyMiddleware(http.HandlerFunc(budgetHandler.GetBudgetRequests))).Methods("GET")
+	api.Handle("/budgets/chairs", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(budgetHandler.GetProgramChairBudgets))).Methods("GET")
+	api.Handle("/budgets/chairs/{chairId}", middleware.AdminOnlyMiddleware(http.HandlerFunc(budgetHandler.SetProgramChairBudget))).Methods("PATCH")
+	api.Handle("/budgets/chair-departments", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(budgetHandler.GetChairDepartmentBudgets))).Methods("GET")
+	api.Handle("/budgets/chairs/{chairId}/departments/{departmentId}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(budgetHandler.SetChairDepartmentBudget))).Methods("PATCH")
+	api.Handle("/budgets/chairs/{chairId}/departments/{departmentId}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(budgetHandler.DeleteChairDepartmentBudget))).Methods("DELETE")
 
 	// Program budget update (admin only)
 	api.Handle("/programs/{id}/budget", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.UpdateProgramBudget))).Methods("PATCH")

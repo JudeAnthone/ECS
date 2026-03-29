@@ -11,6 +11,8 @@ DROP TABLE IF EXISTS sla_metrics CASCADE;
 DROP TABLE IF EXISTS task_assignments CASCADE;
 DROP TABLE IF EXISTS tasks CASCADE;
 DROP TABLE IF EXISTS budget_requests CASCADE;
+DROP TABLE IF EXISTS chair_department_budgets CASCADE;
+DROP TABLE IF EXISTS program_chair_budgets CASCADE;
 DROP TABLE IF EXISTS kpi_reports CASCADE;
 DROP TABLE IF EXISTS documents CASCADE;
 DROP TABLE IF EXISTS program_feedback CASCADE;
@@ -220,6 +222,51 @@ CREATE TABLE departments (
 
 CREATE INDEX idx_departments_program_chair ON departments(program_chair_id);
 CREATE INDEX idx_departments_active ON departments(is_active);
+
+-- ==========================================
+-- Program Chair Budgets (Admin -> Chair)
+-- ==========================================
+CREATE TABLE program_chair_budgets (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    chair_id            UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    allocated_budget    DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    spent_budget        DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW(),
+
+    CONSTRAINT chk_program_chair_budget_non_negative CHECK (
+        allocated_budget >= 0 AND spent_budget >= 0
+    ),
+    CONSTRAINT chk_program_chair_spent_le_allocated CHECK (
+        spent_budget <= allocated_budget OR allocated_budget = 0
+    )
+);
+
+CREATE INDEX idx_program_chair_budgets_chair ON program_chair_budgets(chair_id);
+
+-- ==========================================
+-- Chair Department Budgets (Chair -> Department)
+-- ==========================================
+CREATE TABLE chair_department_budgets (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    chair_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    department_id       UUID NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    allocated_budget    DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    spent_budget        DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW(),
+
+    UNIQUE(chair_id, department_id),
+    CONSTRAINT chk_chair_department_budget_non_negative CHECK (
+        allocated_budget >= 0 AND spent_budget >= 0
+    ),
+    CONSTRAINT chk_chair_department_spent_le_allocated CHECK (
+        spent_budget <= allocated_budget OR allocated_budget = 0
+    )
+);
+
+CREATE INDEX idx_chair_department_budgets_chair ON chair_department_budgets(chair_id);
+CREATE INDEX idx_chair_department_budgets_department ON chair_department_budgets(department_id);
 
 -- ==========================================
 -- Programs Table

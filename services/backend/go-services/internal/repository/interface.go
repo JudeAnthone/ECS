@@ -70,6 +70,11 @@ type ProjectRepository interface {
 type BudgetRepository interface {
 	GetTotalBudget(ctx context.Context) (float64, error)
 	GetAllBudgetRequests(ctx context.Context) ([]*domain.BudgetRequest, error)
+	GetProgramChairBudgets(ctx context.Context, chairID *string) ([]*domain.ProgramChairBudget, error)
+	SetProgramChairBudget(ctx context.Context, chairID string, allocatedBudget float64) (*domain.ProgramChairBudget, error)
+	GetChairDepartmentBudgets(ctx context.Context, chairID *string) ([]*domain.ChairDepartmentBudget, error)
+	SetChairDepartmentBudget(ctx context.Context, chairID string, departmentID string, allocatedBudget float64) (*domain.ChairDepartmentBudget, error)
+	DeleteChairDepartmentBudget(ctx context.Context, chairID string, departmentID string) error
 }
 
 // RequestRepository defines methods for extension service request data access
