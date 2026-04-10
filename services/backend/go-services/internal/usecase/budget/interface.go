@@ -18,39 +18,39 @@ type UseCase interface {
 
 // BudgetRequestDTO is a lightweight DTO for handlers
 type BudgetRequestDTO struct {
-	ID               string  `json:"id"`
-	ProjectID        string  `json:"project_id"`
-	ProjectName      string  `json:"project_name"`
-	DepartmentID     string  `json:"department_id"`
-	DepartmentName   string  `json:"department_name"`
+	ID                        string  `json:"id"`
+	ProjectID                 string  `json:"project_id"`
+	ProjectName               string  `json:"project_name"`
+	DepartmentID              string  `json:"department_id"`
+	DepartmentName            string  `json:"department_name"`
 	DepartmentAllocatedBudget float64 `json:"department_allocated_budget"`
-	DepartmentSpentBudget float64 `json:"department_spent_budget"`
+	DepartmentSpentBudget     float64 `json:"department_spent_budget"`
 	DepartmentRemainingBudget float64 `json:"department_remaining_budget"`
-	RequestedBy      string  `json:"requested_by"`
-	RequestedByName  string  `json:"requested_by_name"`
-	Amount           float64 `json:"amount"`
-	Reason           string  `json:"reason"`
-	NeededByDate     string  `json:"needed_by_date"`
-	Status           string  `json:"status"`
-	WorkflowStage    string  `json:"workflow_stage"`
-	DocumentURL      string  `json:"document_url"`
-	DocumentName     string  `json:"document_name"`
-	ReviewedBy       string  `json:"reviewed_by"`
-	ReviewedByName   string  `json:"reviewed_by_name"`
-	ReviewNotes      string  `json:"review_notes"`
-	ReviewedAt       string  `json:"reviewed_at"`
-	ChairSlipNumber  string  `json:"chair_slip_number"`
-	ChairSlipGeneratedAt string `json:"chair_slip_generated_at"`
-	CreatedAt        string  `json:"created_at"`
+	RequestedBy               string  `json:"requested_by"`
+	RequestedByName           string  `json:"requested_by_name"`
+	Amount                    float64 `json:"amount"`
+	Reason                    string  `json:"reason"`
+	NeededByDate              string  `json:"needed_by_date"`
+	Status                    string  `json:"status"`
+	WorkflowStage             string  `json:"workflow_stage"`
+	DocumentURL               string  `json:"document_url"`
+	DocumentName              string  `json:"document_name"`
+	ReviewedBy                string  `json:"reviewed_by"`
+	ReviewedByName            string  `json:"reviewed_by_name"`
+	ReviewNotes               string  `json:"review_notes"`
+	ReviewedAt                string  `json:"reviewed_at"`
+	ChairSlipNumber           string  `json:"chair_slip_number"`
+	ChairSlipGeneratedAt      string  `json:"chair_slip_generated_at"`
+	CreatedAt                 string  `json:"created_at"`
 }
 
 type CreateBudgetRequestInput struct {
-	ProjectID       string  `json:"project_id"`
-	Amount          float64 `json:"amount"`
-	Reason          string  `json:"reason"`
-	NeededByDate    *string `json:"needed_by_date"`
-	DocumentURL     string  `json:"document_url"`
-	DocumentName    string  `json:"document_name"`
+	ProjectID    string  `json:"project_id"`
+	Amount       float64 `json:"amount"`
+	Reason       string  `json:"reason"`
+	NeededByDate *string `json:"needed_by_date"`
+	DocumentURL  string  `json:"document_url"`
+	DocumentName string  `json:"document_name"`
 }
 
 type ReviewBudgetRequestInput struct {

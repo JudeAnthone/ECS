@@ -22,26 +22,26 @@ type StaffTaskProjectSummary struct {
 
 // CreateProjectTaskRequest represents task creation payload from project management UI.
 type CreateProjectTaskRequest struct {
-	Title       string   `json:"title"`
-	Description *string  `json:"description"`
-	AssigneeIDs []string `json:"assignee_ids"`
-	BudgetNeeded float64 `json:"budget_needed"`
-	Priority    string   `json:"priority"`
-	DueDate     *string  `json:"due_date"`
+	Title        string   `json:"title"`
+	Description  *string  `json:"description"`
+	AssigneeIDs  []string `json:"assignee_ids"`
+	BudgetNeeded float64  `json:"budget_needed"`
+	Priority     string   `json:"priority"`
+	DueDate      *string  `json:"due_date"`
 }
 
 // ProjectTask represents a task record for project management views.
 type ProjectTask struct {
-	ID          string     `json:"id"`
-	ProjectID   string     `json:"project_id"`
-	Title       string     `json:"title"`
-	Description *string    `json:"description"`
-	AssigneeIDs []string   `json:"assignee_ids"`
-	BudgetNeeded float64   `json:"budget_needed"`
-	Status      string     `json:"status"`
-	Priority    string     `json:"priority"`
-	DueDate     *time.Time `json:"due_date"`
-	CreatedAt   time.Time  `json:"created_at"`
+	ID           string     `json:"id"`
+	ProjectID    string     `json:"project_id"`
+	Title        string     `json:"title"`
+	Description  *string    `json:"description"`
+	AssigneeIDs  []string   `json:"assignee_ids"`
+	BudgetNeeded float64    `json:"budget_needed"`
+	Status       string     `json:"status"`
+	Priority     string     `json:"priority"`
+	DueDate      *time.Time `json:"due_date"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // UpdateProjectTaskStatusRequest updates project task lifecycle status.
@@ -51,16 +51,16 @@ type UpdateProjectTaskStatusRequest struct {
 
 // StaffTask represents a single task visible to a staff member.
 type StaffTask struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Description *string    `json:"description"`
-	ProjectID   string     `json:"project_id"`
-	ProjectName string     `json:"project_name"`
-	BudgetNeeded float64   `json:"budget_needed"`
-	DateGiven   time.Time  `json:"date_given"`
-	Deadline    *time.Time `json:"deadline"`
-	Status      string     `json:"status"`
-	Priority    string     `json:"priority"`
+	ID           string     `json:"id"`
+	Title        string     `json:"title"`
+	Description  *string    `json:"description"`
+	ProjectID    string     `json:"project_id"`
+	ProjectName  string     `json:"project_name"`
+	BudgetNeeded float64    `json:"budget_needed"`
+	DateGiven    time.Time  `json:"date_given"`
+	Deadline     *time.Time `json:"deadline"`
+	Status       string     `json:"status"`
+	Priority     string     `json:"priority"`
 }
 
 // UpdateStaffTaskStatusRequest updates task status by assigned staff.

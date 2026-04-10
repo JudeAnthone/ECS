@@ -645,12 +645,12 @@ func (uc *projectUseCase) CreateProjectTask(ctx context.Context, projectID strin
 
 	description := normalizeOptionalString(req.Description)
 	createReq := &domain.CreateProjectTaskRequest{
-		Title:       strings.TrimSpace(req.Title),
-		Description: description,
-		AssigneeIDs: uniqueAssignees,
+		Title:        strings.TrimSpace(req.Title),
+		Description:  description,
+		AssigneeIDs:  uniqueAssignees,
 		BudgetNeeded: req.BudgetNeeded,
-		Priority:    priority,
-		DueDate:     dueDate,
+		Priority:     priority,
+		DueDate:      dueDate,
 	}
 
 	task, err := uc.projectRepo.CreateProjectTask(ctx, projectID, actorID, createReq)
