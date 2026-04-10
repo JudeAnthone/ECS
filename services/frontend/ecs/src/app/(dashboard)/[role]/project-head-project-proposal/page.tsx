@@ -124,7 +124,7 @@ export default function ProjectRecommendationPage() {
   };
 
   const handleSubmit = async () => {
-    if (!projectName || !selectedProgramID || !expectedBudget || !duration || !details) {
+    if (!projectName || !selectedProgramID || !duration || !details) {
       setSubmitError('Please fill in all required fields.')
       return;
     }
@@ -138,7 +138,6 @@ export default function ProjectRecommendationPage() {
     setIsSubmitting(true);
 
     try {
-      const budget = Number(expectedBudget.replace(/[^0-9.]/g, ''))
       const response = await fetch(`${API}/projects`, {
         method: 'POST',
         headers: authHeaders(),
@@ -147,7 +146,6 @@ export default function ProjectRecommendationPage() {
           program_id: selectedProgramID,
           department_id: selectedProgram.department_id,
           objectives: details,
-          budget_allocated: Number.isFinite(budget) ? budget : null,
         }),
       })
 
@@ -193,7 +191,7 @@ export default function ProjectRecommendationPage() {
     setExpectedBudget(value);
   };
 
-  const isFormValid = projectName && selectedProgramID && expectedBudget && duration && details;
+  const isFormValid = projectName && selectedProgramID && duration && details;
 
   return (
     <div className="min-h-screen bg-linear-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
@@ -318,12 +316,11 @@ export default function ProjectRecommendationPage() {
                   />
                 </div>
 
-                {/* Expected Budget */}
+                {/* Estimated Budget (Optional) */}
                 <div className="space-y-2">
                   <Label htmlFor="budget" className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                     <PhilippinePeso className="h-4 w-4 text-purple-600" />
-                    Expected Budget
-                    <span className="text-red-600">*</span>
+                    Estimated Budget (Optional)
                   </Label>
                   <div className="relative">
                     <PhilippinePeso className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-purple-600" />
@@ -336,6 +333,10 @@ export default function ProjectRecommendationPage() {
                       className="pl-8 bg-white border-slate-300 text-slate-900 font-semibold"
                     />
                   </div>
+                  <p className="text-xs text-slate-500">
+                    Final project budget allocation is set by the Program Chair from department funds.
+                    Spending and staff/task budgeting are unlocked only after a budget request is approved for the project.
+                  </p>
                   {expectedBudget && (
                     <p className="text-sm text-slate-600 mt-1">
                       Estimated Budget: <span className="font-semibold text-purple-600">{formatCurrency(expectedBudget)}</span>
@@ -471,7 +472,7 @@ export default function ProjectRecommendationPage() {
                   <h4 className="font-semibold text-blue-900 mb-2">Review Process</h4>
                   <p className="text-sm text-blue-800">
                     All recommendations are reviewed by the project committee within <span className="font-semibold">5-7 business days</span>. 
-                    Selected projects will proceed to detailed planning phase.
+                    Selected projects proceed to detailed planning, then require approved budget requests before spend-linked operations can start.
                   </p>
                 </div>
 

@@ -35,7 +35,7 @@ import {
 
 import { Avatar, AvatarImage, AvatarFallback } from "@/shared/components/ui/Avatar";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/shared/components/ui/Card';
-import { ClipboardList, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { ClipboardList, Clock, CheckCircle2, XCircle, Plus, FolderOpen, Loader2 } from 'lucide-react';
 
 const API = "http://localhost:8081/api/v1";
 
@@ -61,7 +61,6 @@ interface ProjectFormState {
   project_name: string;
   project_description: string;
   objectives: string;
-  budget_allocated: string;
   start_date: string;
   end_date: string;
   program_id: string;
@@ -71,7 +70,6 @@ const emptyForm: ProjectFormState = {
   project_name: "",
   project_description: "",
   objectives: "",
-  budget_allocated: "",
   start_date: "",
   end_date: "",
   program_id: "",
@@ -149,7 +147,7 @@ export default function StaffRequestProjectPage() {
       const res = await fetch(`${API}/projects`, {
         method: "POST",
         headers: authHeaders(),
-        body: JSON.stringify({ ...form, budget_allocated: form.budget_allocated ? Number(form.budget_allocated) : null }),
+        body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error("Failed to submit request");
       setModalOpen(false);
@@ -168,65 +166,71 @@ export default function StaffRequestProjectPage() {
   const totalCount = requests.length;
 
   return (
-    <div className="p-6 min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">Request a Project</h1>
-        <Button onClick={() => setModalOpen(true)} className="bg-[#0a0a23] text-white font-semibold px-6 py-2 rounded-lg shadow">+ New Request</Button>
-      </div>
-      {/* Status Cards - styled like dashboard */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <div className="rounded-xl bg-white shadow flex flex-row items-center gap-4 p-4 border-t-4 border-blue-500">
-          <div className="flex items-center justify-center bg-blue-50 rounded-full h-12 w-12">
-            <ClipboardList className="h-6 w-6 text-blue-600" />
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+      <div className="max-w-[1920px] mx-auto space-y-6">
+        <div className="flex items-center justify-between gap-4">
           <div>
-            <div className="text-2xl font-bold text-blue-700 leading-none">{totalCount}</div>
-            <div className="text-xs font-semibold text-slate-600 mt-1">My Requests</div>
+            <h1 className="text-3xl font-bold text-slate-900">Request a Project</h1>
+            <p className="text-slate-500 mt-1">Create and track project requests under approved programs.</p>
+          </div>
+          <Button onClick={() => setModalOpen(true)} className="bg-slate-900 hover:bg-slate-800 text-white shadow-sm">
+            <Plus className="h-4 w-4 mr-1.5" /> New Request
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-blue-50 flex items-center justify-center">
+              <ClipboardList className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900 leading-none">{totalCount}</div>
+              <div className="text-xs font-medium text-slate-500 mt-1">My Requests</div>
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-amber-50 flex items-center justify-center">
+              <Clock className="h-5 w-5 text-amber-500" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900 leading-none">{pendingCount}</div>
+              <div className="text-xs font-medium text-slate-500 mt-1">Pending</div>
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-emerald-50 flex items-center justify-center">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900 leading-none">{approvedCount}</div>
+              <div className="text-xs font-medium text-slate-500 mt-1">Approved</div>
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-rose-50 flex items-center justify-center">
+              <XCircle className="h-5 w-5 text-rose-500" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900 leading-none">{rejectedCount}</div>
+              <div className="text-xs font-medium text-slate-500 mt-1">Rejected</div>
+            </div>
           </div>
         </div>
-        <div className="rounded-xl bg-white shadow flex flex-row items-center gap-4 p-4 border-t-4 border-yellow-400">
-          <div className="flex items-center justify-center bg-yellow-50 rounded-full h-12 w-12">
-            <Clock className="h-6 w-6 text-yellow-500" />
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-yellow-600 leading-none">{pendingCount}</div>
-            <div className="text-xs font-semibold text-slate-600 mt-1">Pending</div>
-          </div>
-        </div>
-        <div className="rounded-xl bg-white shadow flex flex-row items-center gap-4 p-4 border-t-4 border-green-500">
-          <div className="flex items-center justify-center bg-green-50 rounded-full h-12 w-12">
-            <CheckCircle2 className="h-6 w-6 text-green-600" />
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-green-700 leading-none">{approvedCount}</div>
-            <div className="text-xs font-semibold text-slate-600 mt-1">Approved</div>
-          </div>
-        </div>
-        <div className="rounded-xl bg-white shadow flex flex-row items-center gap-4 p-4 border-t-4 border-red-500">
-          <div className="flex items-center justify-center bg-red-50 rounded-full h-12 w-12">
-            <XCircle className="h-6 w-6 text-red-500" />
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-red-700 leading-none">{rejectedCount}</div>
-            <div className="text-xs font-semibold text-slate-600 mt-1">Rejected</div>
-          </div>
-        </div>
-      </div>
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-xl w-full">
+        <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-2xl w-full bg-white">
           <DialogHeader>
-            <DialogTitle className="text-lg font-semibold">Create Project Request</DialogTitle>
+            <DialogTitle className="text-xl font-semibold text-slate-900">Create Project Request</DialogTitle>
           </DialogHeader>
           {/* Program/Department Info Box */}
-          <div className="mb-4 rounded-lg bg-slate-50 border border-slate-200 p-4">
-            <div className="font-bold text-sm mb-1">
+          <div className="mb-4 rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2">
+            <div className="font-semibold text-sm text-slate-900">
               Program: {programs.find(p => p.id === form.program_id)?.program_name || 'Select a Program'}
             </div>
-            <div className="text-xs text-slate-700 mb-1">
+            <div className="text-xs text-slate-600">
               Department: College of Computer Studies (CCS)
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-700 mt-1">
-              <span>Administered by:</span>
+            <div className="flex items-center gap-2 text-xs text-slate-600 pt-1">
+              <span className="font-medium">Administered by:</span>
               <Avatar className="size-5">
                 <AvatarImage src={programChair?.avatar_url || undefined} alt={programChair ? `${programChair.first_name} ${programChair.last_name}` : "Program Chair"} />
                 <AvatarFallback>
@@ -238,43 +242,39 @@ export default function StaffRequestProjectPage() {
               <span className="font-medium">{programChair ? `${programChair.first_name} ${programChair.last_name}` : "Program Chair"}</span>
             </div>
             {!form.program_id && (
-              <div className="mt-3 p-2 rounded bg-red-100 text-red-700 text-xs font-semibold border border-red-300">
+              <div className="mt-3 p-2 rounded-lg bg-red-50 text-red-700 text-xs font-medium border border-red-200">
                 No program selected. You cannot request a project until a program is selected.
               </div>
             )}
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1 tracking-wide">PROJECT NAME</label>
-              <Input name="project_name" value={form.project_name} onChange={handleChange} required placeholder="Enter project name" disabled={!form.program_id} />
+              <label className="block text-xs font-semibold text-slate-600 mb-1 tracking-wide uppercase">Project Name</label>
+              <Input name="project_name" value={form.project_name} onChange={handleChange} required placeholder="Enter project name" disabled={!form.program_id} className="border-slate-300 focus:border-slate-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1 tracking-wide">DESCRIPTION</label>
-              <Textarea name="project_description" value={form.project_description} onChange={handleChange} required placeholder="Short project description" disabled={!form.program_id} />
+              <label className="block text-xs font-semibold text-slate-600 mb-1 tracking-wide uppercase">Description</label>
+              <Textarea name="project_description" value={form.project_description} onChange={handleChange} required placeholder="Short project description" disabled={!form.program_id} className="border-slate-300 focus:border-slate-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1 tracking-wide">OBJECTIVES</label>
-              <Textarea name="objectives" value={form.objectives} onChange={handleChange} required placeholder="Project objectives" disabled={!form.program_id} />
+              <label className="block text-xs font-semibold text-slate-600 mb-1 tracking-wide uppercase">Objectives</label>
+              <Textarea name="objectives" value={form.objectives} onChange={handleChange} required placeholder="Project objectives" disabled={!form.program_id} className="border-slate-300 focus:border-slate-500" />
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="flex-1">
-                <label className="block text-xs font-bold text-slate-700 mb-1 tracking-wide">BUDGET</label>
-                <Input name="budget_allocated" value={form.budget_allocated} onChange={handleChange} type="number" min="0" placeholder="0" disabled={!form.program_id} />
+                <label className="block text-xs font-semibold text-slate-600 mb-1 tracking-wide uppercase">Start Date</label>
+                <Input name="start_date" value={form.start_date} onChange={handleChange} type="date" required placeholder="dd/mm/yyyy" disabled={!form.program_id} className="border-slate-300 focus:border-slate-500" />
               </div>
               <div className="flex-1">
-                <label className="block text-xs font-bold text-slate-700 mb-1 tracking-wide">START DATE</label>
-                <Input name="start_date" value={form.start_date} onChange={handleChange} type="date" required placeholder="dd/mm/yyyy" disabled={!form.program_id} />
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-slate-700 mb-1 tracking-wide">END DATE</label>
-                <Input name="end_date" value={form.end_date} onChange={handleChange} type="date" required placeholder="dd/mm/yyyy" disabled={!form.program_id} />
+                <label className="block text-xs font-semibold text-slate-600 mb-1 tracking-wide uppercase">End Date</label>
+                <Input name="end_date" value={form.end_date} onChange={handleChange} type="date" required placeholder="dd/mm/yyyy" disabled={!form.program_id} className="border-slate-300 focus:border-slate-500" />
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1 tracking-wide">PROGRAM</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1 tracking-wide uppercase">Program</label>
               <Select value={form.program_id} onValueChange={val => setForm(f => ({ ...f, program_id: val }))} required>
-                <SelectTrigger><SelectValue placeholder="Select Program" /></SelectTrigger>
-                <SelectContent>
+                <SelectTrigger className="border-slate-300"><SelectValue placeholder="Select Program" /></SelectTrigger>
+                <SelectContent className="bg-white">
                   {programs
                     .filter(p => p.status === 'active' && p.approval_status === 'approved')
                     .map(p => (
@@ -283,43 +283,44 @@ export default function StaffRequestProjectPage() {
                 </SelectContent>
               </Select>
             </div>
-            {error && <div className="text-red-600 text-sm">{error}</div>}
+            {error && <div className="text-sm text-red-600">{error}</div>}
             <div className="flex justify-end gap-2 mt-4">
               <DialogClose asChild>
-                <Button type="button" variant="secondary">Cancel</Button>
+                <Button type="button" variant="outline" className="border-slate-300">Cancel</Button>
               </DialogClose>
-              <Button type="submit" disabled={submitting || !form.program_id} className="bg-[#0a0a23] text-white font-semibold">{submitting ? <Spinner /> : "Submit Project Request"}</Button>
+              <Button type="submit" disabled={submitting || !form.program_id} className="bg-slate-900 hover:bg-slate-800 text-white font-semibold">{submitting ? <Spinner /> : "Submit Project Request"}</Button>
             </div>
           </form>
         </DialogContent>
       </Dialog>
-      <Card className="bg-white rounded-xl shadow-lg p-0">
-        <CardHeader className="px-6 pt-6 pb-2">
-          <CardTitle className="text-xl font-bold text-slate-900 mb-1">Project Requests</CardTitle>
+      <Card className="bg-white border border-slate-200 rounded-xl shadow-sm">
+        <CardHeader className="px-6 pt-6 pb-2 border-b border-slate-100">
+          <CardTitle className="text-xl font-semibold text-slate-900 mb-1">Project Requests</CardTitle>
+          <CardDescription className="text-slate-500">Review your submitted project requests and their approval status.</CardDescription>
         </CardHeader>
-        <CardContent className="px-6 pb-6">
+        <CardContent className="px-6 pb-6 pt-6">
           {loading ? <Spinner /> : (
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="w-full text-sm">
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="font-bold text-slate-700">Project Name</TableHead>
-                    <TableHead className="font-bold text-slate-700">Program</TableHead>
-                    <TableHead className="font-bold text-slate-700">Status</TableHead>
-                    <TableHead className="font-bold text-slate-700">Created At</TableHead>
-                    <TableHead className="font-bold text-slate-700">Feedback</TableHead>
+                  <TableRow className="border-b bg-slate-50 text-left">
+                    <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Project Name</TableHead>
+                    <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Program</TableHead>
+                    <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</TableHead>
+                    <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Created At</TableHead>
+                    <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Feedback</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className="divide-y divide-slate-100">
                   {requests.length === 0 ? (
-                    <TableRow><TableCell colSpan={5} className="text-center text-slate-400">No requests found.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="px-4 py-10 text-center text-slate-400">No requests found.</TableCell></TableRow>
                   ) : requests.map(r => (
-                    <TableRow key={r.id}>
-                      <TableCell>{r.project_name}</TableCell>
-                      <TableCell>{programs.find(p => p.id === r.program_id)?.program_name || '-'}</TableCell>
-                      <TableCell><Badge>{r.approval_status || 'pending'}</Badge></TableCell>
-                      <TableCell>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</TableCell>
-                      <TableCell>{r.approval_status === 'rejected' ? (r.feedback || '-') : '-'}</TableCell>
+                    <TableRow key={r.id} className="hover:bg-slate-50 transition-colors">
+                      <TableCell className="px-4 py-3 font-medium text-slate-900">{r.project_name}</TableCell>
+                      <TableCell className="px-4 py-3 text-slate-700">{programs.find(p => p.id === r.program_id)?.program_name || '-'}</TableCell>
+                      <TableCell className="px-4 py-3"><Badge className="capitalize">{r.approval_status || 'pending'}</Badge></TableCell>
+                      <TableCell className="px-4 py-3 text-slate-600">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</TableCell>
+                      <TableCell className="px-4 py-3 text-slate-600">{r.approval_status === 'rejected' ? (r.feedback || '-') : '-'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -328,6 +329,7 @@ export default function StaffRequestProjectPage() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

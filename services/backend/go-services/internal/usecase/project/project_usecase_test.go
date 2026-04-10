@@ -14,11 +14,15 @@ type mockProjectRepo struct {
 	createdByProjects       []*domain.Project
 	projectByID             *domain.Project
 	getByCreatedByCalled    bool
+	createCalled            bool
+	createdProject          *domain.Project
 	updateApprovalCalled    bool
 	projectHeadReviewCalled bool
 }
 
 func (m *mockProjectRepo) Create(ctx context.Context, project *domain.Project, createdBy string) error {
+	m.createCalled = true
+	m.createdProject = project
 	return nil
 }
 
@@ -29,6 +33,10 @@ func (m *mockProjectRepo) GetByProgramID(ctx context.Context, programID string) 
 func (m *mockProjectRepo) GetByCreatedBy(ctx context.Context, createdBy string) ([]*domain.Project, error) {
 	m.getByCreatedByCalled = true
 	return m.createdByProjects, nil
+}
+
+func (m *mockProjectRepo) GetByProjectHeadID(ctx context.Context, headID string) ([]*domain.Project, error) {
+	return []*domain.Project{}, nil
 }
 
 func (m *mockProjectRepo) GetByID(ctx context.Context, id string) (*domain.Project, error) {
@@ -189,6 +197,86 @@ func (m *mockDepartmentRepo) GetByID(ctx context.Context, id string) (*domain.De
 }
 func (m *mockDepartmentRepo) GetByCode(ctx context.Context, code string) (*domain.Department, error) {
 	return &domain.Department{DepartmentCode: code}, nil
+}
+
+func stringPtr(v string) *string { return &v }
+
+func float64Ptr(v float64) *float64 { return &v }
+
+func TestCreateProject_ProjectHeadRejectsBudgetAllocated(t *testing.T) {
+	ctx := context.Background()
+	projectRepo := &mockProjectRepo{}
+	programRepo := &mockProgramRepo{
+		visiblePrograms: []*domain.Program{{ID: "program-1", DepartmentID: stringPtr("dept-1")}},
+	}
+	uc := NewProjectUseCase(projectRepo, &mockUserRepo{}, &mockDepartmentRepo{}, programRepo)
+
+	_, err := uc.CreateProject(ctx, &domain.CreateProjectRequest{
+		ProjectName:     "Project A",
+		ProgramID:       stringPtr("program-1"),
+		BudgetAllocated: float64Ptr(10000),
+	}, "head-1", domain.RoleProjectHead)
+	if err == nil {
+		t.Fatalf("expected error when project head provides budget_allocated")
+	}
+	if !strings.Contains(err.Error(), "cannot set budget at creation") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if projectRepo.createCalled {
+		t.Fatalf("did not expect create to be called")
+	}
+}
+
+func TestCreateProject_ProjectHeadWithoutBudgetAllowed(t *testing.T) {
+	ctx := context.Background()
+	projectRepo := &mockProjectRepo{}
+	programRepo := &mockProgramRepo{
+		visiblePrograms: []*domain.Program{{ID: "program-1", DepartmentID: stringPtr("dept-1")}},
+	}
+	uc := NewProjectUseCase(projectRepo, &mockUserRepo{}, &mockDepartmentRepo{}, programRepo)
+
+	created, err := uc.CreateProject(ctx, &domain.CreateProjectRequest{
+		ProjectName: "Project A",
+		ProgramID:   stringPtr("program-1"),
+	}, "head-1", domain.RoleProjectHead)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !projectRepo.createCalled {
+		t.Fatalf("expected create to be called")
+	}
+	if created.BudgetAllocated != nil {
+		t.Fatalf("expected nil budget for project head creation")
+	}
+	if created.ProjectHeadID == nil || *created.ProjectHeadID != "head-1" {
+		t.Fatalf("expected project_head_id to auto-assign to creator for project head")
+	}
+}
+
+func TestCreateProject_ProgramChairCannotCreateProject(t *testing.T) {
+	ctx := context.Background()
+	projectRepo := &mockProjectRepo{}
+	programRepo := &mockProgramRepo{
+		programsByID: map[string]*domain.Program{
+			"program-1": {ID: "program-1", ProgramChairID: stringPtr("chair-1")},
+		},
+	}
+	uc := NewProjectUseCase(projectRepo, &mockUserRepo{}, &mockDepartmentRepo{}, programRepo)
+
+	_, err := uc.CreateProject(ctx, &domain.CreateProjectRequest{
+		ProjectName:     "Project A",
+		ProgramID:       stringPtr("program-1"),
+		BudgetAllocated: float64Ptr(25000),
+	}, "chair-1", domain.RoleProgramChair)
+	if err == nil {
+		t.Fatalf("expected forbidden error for program chair project creation")
+	}
+	if !strings.Contains(err.Error(), "only project heads can create projects") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if projectRepo.createCalled {
+		t.Fatalf("did not expect create to be called")
+	}
 }
 
 func TestGetMyProjects(t *testing.T) {

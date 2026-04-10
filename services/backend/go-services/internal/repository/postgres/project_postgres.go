@@ -48,10 +48,10 @@ const projectSelectColumns = `
 func (r *ProjectRepository) Create(ctx context.Context, p *domain.Project, createdBy string) error {
 	query := `
 		INSERT INTO projects
-			(project_name, project_description, program_id, department_id, objectives,
+			(project_name, project_description, program_id, department_id, project_head_id, objectives,
 			 budget_allocated, start_date, end_date, status, approval_status, creation_source, created_by,
 			 created_by_role, created_by_first_name, created_by_last_name)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'internal_proposal', $11, $12, $13, $14)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'internal_proposal', $12, $13, $14, $15)
 		RETURNING id, created_at, updated_at
 	`
 	err := r.db.QueryRow(ctx, query,
@@ -59,6 +59,7 @@ func (r *ProjectRepository) Create(ctx context.Context, p *domain.Project, creat
 		p.ProjectDescription,
 		p.ProgramID,
 		p.DepartmentID,
+		p.ProjectHeadID,
 		p.Objectives,
 		p.BudgetAllocated,
 		p.StartDate,
@@ -123,6 +124,43 @@ func (r *ProjectRepository) GetByCreatedBy(ctx context.Context, createdBy string
 	rows, err := r.db.Query(ctx, query, createdBy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query projects by creator: %w", err)
+	}
+	defer rows.Close()
+
+	var projects []*domain.Project
+	for rows.Next() {
+		p := &domain.Project{}
+		err := rows.Scan(
+			&p.ID, &p.ProjectName, &p.ProjectDescription, &p.ProgramID,
+			&p.DepartmentID, &p.ProjectHeadID, &p.CreationSource, &p.RequestID, &p.CreatedBy, &p.UpdatedBy, &p.Objectives,
+			&p.BudgetAllocated, &p.BudgetUsed, &p.StartDate, &p.EndDate, &p.ProgressPercentage,
+			&p.Status, &p.ApprovalStatus, &p.Feedback, &p.StaffOriginated, &p.IsPublished, &p.CreatedAt, &p.UpdatedAt,
+			&p.CreatedByRole, &p.CreatedByFirstName, &p.CreatedByLastName,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan project: %w", err)
+		}
+		projects = append(projects, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+	if projects == nil {
+		projects = []*domain.Project{}
+	}
+	return projects, nil
+}
+
+// GetByProjectHeadID retrieves all projects currently assigned to a project head.
+func (r *ProjectRepository) GetByProjectHeadID(ctx context.Context, headID string) ([]*domain.Project, error) {
+	query := projectSelectColumns + `
+		WHERE p.project_head_id = $1
+		ORDER BY p.updated_at DESC, p.created_at DESC
+	`
+
+	rows, err := r.db.Query(ctx, query, headID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query projects by project head: %w", err)
 	}
 	defer rows.Close()
 
@@ -353,6 +391,21 @@ func (r *ProjectRepository) ReplaceProjectStaffAssignments(ctx context.Context, 
 	}
 	defer tx.Rollback(ctx)
 
+	var hasApprovedRequest bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM budget_requests
+			WHERE project_id = $1::uuid
+			  AND status = 'approved'::budget_request_status
+		)
+	`, projectID).Scan(&hasApprovedRequest); err != nil {
+		return fmt.Errorf("failed to validate approved budget requests: %w", err)
+	}
+	if !hasApprovedRequest {
+		return fmt.Errorf("cannot assign project staff before an approved budget request exists")
+	}
+
 	// Capture current assigned staff before replacement so we can detect removals.
 	previousRows, err := tx.Query(ctx, `
 		SELECT staff_id::text
@@ -460,6 +513,64 @@ func (r *ProjectRepository) CreateProjectTask(ctx context.Context, projectID str
 	}
 	defer tx.Rollback(ctx)
 
+	var projectBudgetAllocated *float64
+	var projectBudgetUsed float64
+	if err := tx.QueryRow(ctx, `
+		SELECT budget_allocated, COALESCE(budget_used, 0)
+		FROM projects
+		WHERE id = $1::uuid
+		FOR UPDATE
+	`, projectID).Scan(&projectBudgetAllocated, &projectBudgetUsed); err != nil {
+		return nil, fmt.Errorf("failed to load project budget: %w", err)
+	}
+	if projectBudgetAllocated == nil {
+		return nil, fmt.Errorf("project has no allocated budget")
+	}
+	if req.BudgetNeeded < 0 {
+		return nil, fmt.Errorf("task budget_needed cannot be negative")
+	}
+	if projectBudgetUsed+req.BudgetNeeded > *projectBudgetAllocated {
+		remaining := *projectBudgetAllocated - projectBudgetUsed
+		if remaining < 0 {
+			remaining = 0
+		}
+		return nil, fmt.Errorf("insufficient project budget: remaining %.2f, requested %.2f", remaining, req.BudgetNeeded)
+	}
+
+	if req.BudgetNeeded > 0 {
+		var approvedBudget float64
+		if err := tx.QueryRow(ctx, `
+			SELECT COALESCE(SUM(amount), 0)
+			FROM budget_requests
+			WHERE project_id = $1::uuid
+			  AND status = 'approved'::budget_request_status
+		`, projectID).Scan(&approvedBudget); err != nil {
+			return nil, fmt.Errorf("failed to load approved budget requests: %w", err)
+		}
+
+		if approvedBudget <= 0 {
+			return nil, fmt.Errorf("cannot create budgeted tasks before an approved budget request exists")
+		}
+
+		var committedTaskBudget float64
+		if err := tx.QueryRow(ctx, `
+			SELECT COALESCE(SUM(budget_needed), 0)
+			FROM tasks
+			WHERE project_id = $1::uuid
+			  AND status <> 'cancelled'::task_status
+		`, projectID).Scan(&committedTaskBudget); err != nil {
+			return nil, fmt.Errorf("failed to load existing task budget commitments: %w", err)
+		}
+
+		if committedTaskBudget+req.BudgetNeeded > approvedBudget {
+			remainingApproved := approvedBudget - committedTaskBudget
+			if remainingApproved < 0 {
+				remainingApproved = 0
+			}
+			return nil, fmt.Errorf("insufficient approved budget request amount: remaining %.2f, requested %.2f", remainingApproved, req.BudgetNeeded)
+		}
+	}
+
 	var assignedTo *string
 	if len(req.AssigneeIDs) > 0 {
 		assignedTo = &req.AssigneeIDs[0]
@@ -467,14 +578,15 @@ func (r *ProjectRepository) CreateProjectTask(ctx context.Context, projectID str
 
 	task := &domain.ProjectTask{}
 	err = tx.QueryRow(ctx, `
-		INSERT INTO tasks (project_id, title, description, status, priority, assigned_to, created_by, due_date)
-		VALUES ($1::uuid, $2, $3, 'pending', $4, $5::uuid, $6::uuid, $7::date)
-		RETURNING id::text, project_id::text, title, description, status, priority, due_date, created_at
-	`, projectID, req.Title, req.Description, req.Priority, assignedTo, createdBy, req.DueDate).Scan(
+		INSERT INTO tasks (project_id, title, description, budget_needed, status, priority, assigned_to, created_by, due_date)
+		VALUES ($1::uuid, $2, $3, $4, 'pending', $5, $6::uuid, $7::uuid, $8::date)
+		RETURNING id::text, project_id::text, title, description, budget_needed, status, priority, due_date, created_at
+	`, projectID, req.Title, req.Description, req.BudgetNeeded, req.Priority, assignedTo, createdBy, req.DueDate).Scan(
 		&task.ID,
 		&task.ProjectID,
 		&task.Title,
 		&task.Description,
+		&task.BudgetNeeded,
 		&task.Status,
 		&task.Priority,
 		&task.DueDate,
@@ -510,6 +622,7 @@ func (r *ProjectRepository) GetProjectTaskByID(ctx context.Context, taskID strin
 			project_id::text,
 			title,
 			description,
+			budget_needed,
 			COALESCE(
 				ARRAY(
 					SELECT ta.user_id::text
@@ -530,6 +643,7 @@ func (r *ProjectRepository) GetProjectTaskByID(ctx context.Context, taskID strin
 		&t.ProjectID,
 		&t.Title,
 		&t.Description,
+		&t.BudgetNeeded,
 		&t.AssigneeIDs,
 		&t.Status,
 		&t.Priority,
@@ -551,6 +665,7 @@ func (r *ProjectRepository) GetProjectTasks(ctx context.Context, projectID strin
 			t.project_id::text,
 			t.title,
 			t.description,
+			t.budget_needed,
 			COALESCE(
 				ARRAY(
 					SELECT ta.user_id::text
@@ -581,6 +696,7 @@ func (r *ProjectRepository) GetProjectTasks(ctx context.Context, projectID strin
 			&t.ProjectID,
 			&t.Title,
 			&t.Description,
+			&t.BudgetNeeded,
 			&t.AssigneeIDs,
 			&t.Status,
 			&t.Priority,
@@ -619,12 +735,32 @@ func (r *ProjectRepository) UpdateProjectTaskStatus(ctx context.Context, taskID 
 
 // DeleteProjectTask removes a persisted task by id.
 func (r *ProjectRepository) DeleteProjectTask(ctx context.Context, taskID string) error {
-	result, err := r.db.Exec(ctx, `DELETE FROM tasks WHERE id = $1::uuid`, taskID)
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var taskExists bool
+	if err := tx.QueryRow(ctx, `
+		SELECT TRUE
+		FROM tasks
+		WHERE id = $1::uuid
+		FOR UPDATE
+	`, taskID).Scan(&taskExists); err != nil {
+		return fmt.Errorf("task not found")
+	}
+
+	result, err := tx.Exec(ctx, `DELETE FROM tasks WHERE id = $1::uuid`, taskID)
 	if err != nil {
 		return fmt.Errorf("failed to delete project task: %w", err)
 	}
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("task not found")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit task deletion: %w", err)
 	}
 
 	return nil
@@ -719,6 +855,7 @@ func (r *ProjectRepository) GetStaffTasks(ctx context.Context, staffID string, p
 			t.description,
 			t.project_id::text,
 			p.project_name,
+			t.budget_needed,
 			t.created_at,
 			t.due_date,
 			t.status,
@@ -753,6 +890,7 @@ func (r *ProjectRepository) GetStaffTasks(ctx context.Context, staffID string, p
 			&t.Description,
 			&t.ProjectID,
 			&t.ProjectName,
+			&t.BudgetNeeded,
 			&t.DateGiven,
 			&t.Deadline,
 			&t.Status,

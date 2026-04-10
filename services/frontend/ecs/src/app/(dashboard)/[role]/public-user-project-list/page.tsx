@@ -82,7 +82,7 @@ function ProgramCard({ program, onClick }: { program: Program; onClick: () => vo
     >
       <div className="p-5">
         <div className="flex items-start justify-between gap-3 mb-3">
-          <h3 className="font-semibold text-slate-800 text-base leading-snug group-hover:text-indigo-600 transition-colors">
+          <h3 className="font-semibold text-slate-800 text-base leading-snug group-hover:text-[#BA0021] transition-colors">
             {program.program_name}
           </h3>
           <StatusBadge status={program.status} />
@@ -118,7 +118,7 @@ function ProgramCard({ program, onClick }: { program: Program; onClick: () => vo
       </div>
       <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 rounded-b-xl flex items-center justify-between">
         <span className="text-xs text-slate-400">Click to view projects</span>
-        <FolderOpen className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+        <FolderOpen className="w-4 h-4 text-slate-400 group-hover:text-[#BA0021] transition-colors" />
       </div>
     </div>
   );
@@ -220,16 +220,16 @@ export default function ProjectsViewPage() {
   // ── Programs list view ──────────────────────────────────────────────────────
   if (!selectedProgram) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+      <div className="min-h-screen bg-white p-6">
         <div className="max-w-6xl mx-auto space-y-6">
           {/* Header */}
-          <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4 flex-wrap rounded-3xl border border-slate-200 bg-white px-6 py-6 shadow-sm">
             <div>
               <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Extension Projects Directory</h1>
               <p className="text-slate-500 mt-1">Browse active programs and their projects</p>
             </div>
-            <Badge className="bg-indigo-600 text-white px-4 py-2">
-              <FolderOpen className="h-4 w-4 mr-2" /> Programs
+              <Badge className="bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2">
+                <FolderOpen className="h-4 w-4 mr-2 text-[#BA0021]" /> Programs
             </Badge>
           </div>
 
@@ -257,11 +257,11 @@ export default function ProjectsViewPage() {
 
   // ── Projects drill-down view ────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+    <div className="min-h-screen bg-white p-6">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => setSelectedProgram(null)} className="shrink-0">
+          <Button variant="outline" onClick={() => setSelectedProgram(null)} className="shrink-0 border-slate-300 text-slate-700 hover:bg-slate-50">
             <ArrowLeft className="w-4 h-4 mr-1" /> Programs
           </Button>
           <div className="min-w-0">
@@ -272,7 +272,7 @@ export default function ProjectsViewPage() {
         </div>
 
         {/* Program info strip */}
-        <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600">
+        <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600 shadow-sm">
           {selectedProgram.program_category && (
             <span className="flex items-center gap-1.5"><Layers className="w-4 h-4 text-slate-400" /> {selectedProgram.program_category}</span>
           )}
@@ -302,7 +302,7 @@ export default function ProjectsViewPage() {
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-44">
+            <SelectTrigger className="w-44 border-slate-300 bg-white">
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent className="bg-white">

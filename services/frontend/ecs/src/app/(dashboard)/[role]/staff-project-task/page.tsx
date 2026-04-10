@@ -131,6 +131,13 @@ export default function StaffProjectTaskPage() {
     return map;
   }, [tasks]);
 
+  const getProjectCompletionPercent = useCallback((projectId: string) => {
+    const projectTasks = tasksByProject.get(projectId) || [];
+    if (projectTasks.length === 0) return 0;
+    const completedCount = projectTasks.filter(task => task.status === 'completed').length;
+    return Math.round((completedCount / projectTasks.length) * 100);
+  }, [tasksByProject]);
+
   const getStatusColor = (status: TaskStatus) => {
     switch (status) {
       case 'completed':
@@ -237,30 +244,30 @@ export default function StaffProjectTaskPage() {
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+    <div className="min-h-screen bg-white p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-4xl font-bold text-slate-900 mb-2 tracking-tight">My Projects & Tasks</h1>
-            <p className="text-slate-600 text-lg">Track your assigned projects and manage your tasks</p>
+            <p className="text-slate-500 text-lg">Track your assigned projects and manage your tasks</p>
           </div>
-          <Badge className="bg-teal-600 text-white px-4 py-2 text-sm">
-            <FolderKanban className="h-4 w-4 mr-2" />
+          <Badge className="bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 text-sm">
+            <FolderKanban className="h-4 w-4 mr-2 text-slate-600" />
             Staff Dashboard
           </Badge>
         </div>
 
         {loading && (
-          <Card>
+          <Card className="border-slate-200 shadow-sm">
             <CardContent className="p-8 flex items-center justify-center gap-3 text-slate-600">
-              <Loader2 className="h-5 w-5 animate-spin" />
+              <Loader2 className="h-5 w-5 animate-spin text-slate-500" />
               Loading assigned projects and tasks...
             </CardContent>
           </Card>
         )}
 
         {error && (
-          <Alert className="border-red-300 bg-red-50">
+          <Alert className="border-red-200 bg-red-50">
             <AlertTriangle className="h-5 w-5 text-red-600" />
             <AlertTitle className="text-red-900 font-semibold">Error</AlertTitle>
             <AlertDescription className="text-red-700">{error}</AlertDescription>
@@ -268,15 +275,15 @@ export default function StaffProjectTaskPage() {
         )}
 
         {showSuccess && (
-          <Alert className="border-green-300 bg-green-50">
+          <Alert className="border-emerald-200 bg-emerald-50">
             <CheckCircle className="h-5 w-5 text-green-600" />
-            <AlertTitle className="text-green-900 font-semibold">Success</AlertTitle>
-            <AlertDescription className="text-green-700">{successMessage}</AlertDescription>
+            <AlertTitle className="text-emerald-900 font-semibold">Success</AlertTitle>
+            <AlertDescription className="text-emerald-700">{successMessage}</AlertDescription>
           </Alert>
         )}
 
         {!loading && !error && projects.length === 0 && (
-          <Card>
+          <Card className="border-slate-200 shadow-sm">
             <CardContent className="p-8 text-center text-slate-600">
               No assigned projects found yet.
             </CardContent>
@@ -287,13 +294,13 @@ export default function StaffProjectTaskPage() {
           <>
             <div className="space-y-4">
               <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                <FolderKanban className="h-6 w-6 text-teal-600" />
+                <FolderKanban className="h-6 w-6 text-slate-500" />
                 Assigned Projects
               </h2>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {projects.map(project => (
-                  <Card key={project.project_id} className="bg-white border-slate-200 shadow-lg hover:shadow-xl transition-shadow">
+                  <Card key={project.project_id} className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between mb-2">
                         <CardTitle className="text-lg text-slate-900">{project.project_name}</CardTitle>
@@ -324,10 +331,13 @@ export default function StaffProjectTaskPage() {
                       <div className="border-t border-slate-200 pt-4">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-semibold text-slate-700">Progress</span>
-                          <span className="text-lg font-bold text-teal-600">{project.progress}%</span>
+                          <span className="text-lg font-bold text-slate-900">{getProjectCompletionPercent(project.project_id)}%</span>
                         </div>
-                        <div className="w-full bg-slate-200 rounded-full h-3 mb-3">
-                          <div className="bg-teal-600 h-3 rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(project.progress, 100))}%` }} />
+                        <div className="w-full bg-slate-200 rounded-full h-3 mb-3 overflow-hidden">
+                          <div
+                            className="bg-slate-900 h-3 rounded-full transition-all"
+                            style={{ width: `${getProjectCompletionPercent(project.project_id)}%` }}
+                          />
                         </div>
                         <div className="grid grid-cols-3 gap-2 text-xs">
                           <div className="flex items-center gap-1">
@@ -352,7 +362,7 @@ export default function StaffProjectTaskPage() {
 
             <div className="space-y-4">
               <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                <TrendingUp className="h-6 w-6 text-teal-600" />
+                <TrendingUp className="h-6 w-6 text-slate-500" />
                 My Tasks
               </h2>
 
@@ -361,17 +371,17 @@ export default function StaffProjectTaskPage() {
                   const projectTasks = tasksByProject.get(project.project_id) || [];
                   if (projectTasks.length === 0) {
                     return (
-                      <Card key={project.project_id} className="bg-white border-slate-200 shadow-lg">
-                        <CardHeader className="bg-slate-50 border-b border-slate-200">
+                      <Card key={project.project_id} className="bg-white border-slate-200 shadow-sm">
+                        <CardHeader className="bg-white border-b border-slate-200">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                              <FolderKanban className="h-5 w-5 text-teal-600" />
+                              <FolderKanban className="h-5 w-5 text-slate-500" />
                               <div>
                                 <CardTitle className="text-xl text-slate-900">{project.project_name}</CardTitle>
                                 <CardDescription className="text-slate-600 text-sm">No tasks assigned yet</CardDescription>
                               </div>
                             </div>
-                            <Badge className="bg-teal-100 text-teal-700 border-teal-300">{project.project_id}</Badge>
+                            <Badge className="bg-slate-100 text-slate-700 border-slate-200">{project.project_id}</Badge>
                           </div>
                         </CardHeader>
                       </Card>
@@ -379,17 +389,17 @@ export default function StaffProjectTaskPage() {
                   }
 
                   return (
-                    <Card key={project.project_id} className="bg-white border-slate-200 shadow-lg">
-                      <CardHeader className="bg-slate-50 border-b border-slate-200">
+                    <Card key={project.project_id} className="bg-white border-slate-200 shadow-sm">
+                      <CardHeader className="bg-white border-b border-slate-200">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <FolderKanban className="h-5 w-5 text-teal-600" />
+                            <FolderKanban className="h-5 w-5 text-slate-500" />
                             <div>
                               <CardTitle className="text-xl text-slate-900">{project.project_name}</CardTitle>
                               <CardDescription className="text-slate-600 text-sm">{projectTasks.length} {projectTasks.length === 1 ? 'task' : 'tasks'} assigned</CardDescription>
                             </div>
                           </div>
-                          <Badge className="bg-teal-100 text-teal-700 border-teal-300">{project.project_id}</Badge>
+                          <Badge className="bg-slate-100 text-slate-700 border-slate-200">{project.project_id}</Badge>
                         </div>
                       </CardHeader>
                       <CardContent className="p-6">
@@ -399,7 +409,7 @@ export default function StaffProjectTaskPage() {
                             const overdue = daysLeft != null && daysLeft < 0;
 
                             return (
-                              <Card key={task.id} className="border-slate-200 hover:shadow-md transition-shadow">
+                              <Card key={task.id} className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                                 <CardContent className="p-5">
                                   <div className="space-y-4">
                                     <div className="flex items-start gap-4">
@@ -413,7 +423,7 @@ export default function StaffProjectTaskPage() {
                                           <Badge className={`${getPriorityColor(task.priority)} font-semibold`}>{formatStatus(task.priority)}</Badge>
                                         </div>
 
-                                        <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+                                        <div className="bg-slate-50 rounded-lg p-4 space-y-3 border border-slate-200">
                                           <div className="grid grid-cols-2 gap-4">
                                             <div className="flex items-center gap-2">
                                               <Calendar className="h-4 w-4 text-slate-500" />
@@ -432,14 +442,14 @@ export default function StaffProjectTaskPage() {
                                           </div>
 
                                           {overdue ? (
-                                            <Alert className="border-red-300 bg-red-50 py-2">
+                                            <Alert className="border-red-200 bg-red-50 py-2">
                                               <AlertTriangle className="h-4 w-4 text-red-600" />
                                               <AlertDescription className="text-red-700 text-sm">
                                                 <span className="font-semibold">Overdue by {Math.abs(daysLeft || 0)} days</span>
                                               </AlertDescription>
                                             </Alert>
                                           ) : daysLeft != null && daysLeft <= 3 && task.status !== 'completed' && task.status !== 'cancelled' ? (
-                                            <Alert className="border-amber-300 bg-amber-50 py-2">
+                                            <Alert className="border-amber-200 bg-amber-50 py-2">
                                               <AlertTriangle className="h-4 w-4 text-amber-600" />
                                               <AlertDescription className="text-amber-700 text-sm">
                                                 <span className="font-semibold">Due in {daysLeft} {daysLeft === 1 ? 'day' : 'days'}</span>
@@ -451,7 +461,7 @@ export default function StaffProjectTaskPage() {
                                             <span className="text-sm font-semibold text-slate-700">Update Status:</span>
                                             {task.status === 'pending' ? (
                                               <Button
-                                                className="bg-blue-600 hover:bg-blue-700"
+                                                className="bg-[#BA0021] hover:bg-[#930018] text-white"
                                                 onClick={() => updateTaskStatus(task.id, 'in_progress')}
                                               >
                                                 Accept Task

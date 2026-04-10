@@ -34,8 +34,8 @@ import {
   Send,
   MoreVertical,
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/shared/components/ui/Dialog';
-import { Loader2, Check, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/shared/components/ui/Dialog';
+import { Loader2, Check, X, Eye, Printer } from 'lucide-react';
 import { API_URL } from '@/shared/lib/api-config';
 
 type ProgramRecord = {
@@ -75,6 +75,51 @@ type RequestRecord = {
   approved_by?: string;
 };
 
+type BudgetRequestRecord = {
+  id: string;
+  project_id?: string;
+  project_name?: string;
+  department_id?: string;
+  department_name?: string;
+  department_allocated_budget?: number;
+  department_spent_budget?: number;
+  department_remaining_budget?: number;
+  requested_by_name?: string;
+  amount?: number;
+  reason?: string;
+  needed_by_date?: string;
+  status?: string;
+  workflow_stage?: string;
+  document_url?: string;
+  document_name?: string;
+  reviewed_by_name?: string;
+  review_notes?: string;
+  chair_slip_number?: string;
+  chair_slip_generated_at?: string;
+  created_at?: string;
+};
+
+function budgetStageLabel(stage?: string) {
+  const normalized = String(stage || '').toLowerCase();
+  if (normalized === 'pending') return 'Pending';
+  if (normalized === 'approved') return 'Approved';
+  if (normalized === 'declined') return 'Declined';
+  return 'Pending';
+}
+
+function getBudgetRequestDocumentUrl(documentUrl?: string) {
+  const raw = String(documentUrl || '').trim()
+  if (!raw) return ''
+  if (/^https?:\/\//i.test(raw)) return raw
+  const normalized = raw.replace(/\\/g, '/').replace(/^\/+/, '')
+  if (normalized.startsWith('uploads/')) return `${API_URL}/${normalized}`
+  return `${API_URL}/uploads/${normalized.replace(/^uploads\//, '')}`
+}
+
+function canChairReviewBudgetRequest(stage?: string) {
+  return String(stage || '').toLowerCase() === 'pending'
+}
+
 export default function ProgramChairBudgetManagementPage() {
   const API = `${API_URL}/api/v1`
 
@@ -84,6 +129,7 @@ export default function ProgramChairBudgetManagementPage() {
   const [totalBudget, setTotalBudget] = useState<number | null>(null)
   const [chairDepartmentBudgets, setChairDepartmentBudgets] = useState<ChairDepartmentBudgetRecord[]>([])
   const [requests, setRequests] = useState<RequestRecord[]>([])
+  const [budgetRequests, setBudgetRequests] = useState<BudgetRequestRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [allocDeptId, setAllocDeptId] = useState('')
   const [allocAmount, setAllocAmount] = useState('')
@@ -92,6 +138,8 @@ export default function ProgramChairBudgetManagementPage() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [allocBlocked, setAllocBlocked] = useState(false)
   const [allocBlockDetails, setAllocBlockDetails] = useState<{ requested: number; available: number; overBy: number } | null>(null)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [toastVisible, setToastVisible] = useState(false)
   const [error, setError] = useState('')
   const [revertDialog, setRevertDialog] = useState<{ deptId: string; deptName?: string } | null>(null)
   const [revertSubmitting, setRevertSubmitting] = useState(false)
@@ -100,6 +148,13 @@ export default function ProgramChairBudgetManagementPage() {
   // Slip modal
   const [approvedSlip, setApprovedSlip] = useState<RequestRecord | null>(null)
   const [reviewSubmitting, setReviewSubmitting] = useState(false)
+  const [budgetReviewReq, setBudgetReviewReq] = useState<BudgetRequestRecord | null>(null)
+  const [budgetReviewStatus, setBudgetReviewStatus] = useState<'approved' | 'declined'>('approved')
+  const [budgetReviewNotes, setBudgetReviewNotes] = useState('')
+  const [budgetReviewSubmitting, setBudgetReviewSubmitting] = useState(false)
+  const [budgetDeleteReq, setBudgetDeleteReq] = useState<BudgetRequestRecord | null>(null)
+  const [budgetDeleteSubmitting, setBudgetDeleteSubmitting] = useState(false)
+  const [approvedBudgetSlip, setApprovedBudgetSlip] = useState<BudgetRequestRecord | null>(null)
 
   function authHeaders() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : ''
@@ -169,6 +224,14 @@ export default function ProgramChairBudgetManagementPage() {
         const filtered = fetchedProgram ? all.filter((r) => r.assigned_program_id === fetchedProgram.id || r.assigned_program_id == null) : all
         setRequests(filtered)
       }
+
+      const budgetReqRes = await fetch(`${API}/budget-requests`, { headers: authHeaders() })
+      if (budgetReqRes.ok) {
+        const bd = await budgetReqRes.json()
+        setBudgetRequests(bd.requests || [])
+      } else {
+        setBudgetRequests([])
+      }
     } catch (error) {
       setError('Failed to load data')
       console.error(error)
@@ -224,6 +287,17 @@ export default function ProgramChairBudgetManagementPage() {
     setConfirmOpen(true)
   }
 
+  useEffect(() => {
+    if (!toast) return
+    setToastVisible(true)
+    const hideTimer = setTimeout(() => setToastVisible(false), 2700)
+    const clearTimer = setTimeout(() => setToast(null), 3000)
+    return () => {
+      clearTimeout(hideTimer)
+      clearTimeout(clearTimer)
+    }
+  }, [toast])
+
   const handleDeptChange = (v: string) => {
     setAllocDeptId(v)
     const existing = chairDepartmentBudgets.find(b => b.department_id === v)
@@ -256,6 +330,7 @@ export default function ProgramChairBudgetManagementPage() {
           friendly = 'Allocation failed — cap limit reached.'
         }
         setAllocErrorDialog(`${friendly}\n\nDetails: ${raw}`)
+        setToast({ message: friendly, type: 'error' })
         setConfirmOpen(false)
         return
       }
@@ -290,11 +365,12 @@ export default function ProgramChairBudgetManagementPage() {
       setConfirmOpen(false)
       setAllocBlocked(false)
       setAllocBlockDetails(null)
-      alert('Department allocation saved')
+      setToast({ message: 'Department allocation saved successfully!', type: 'success' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to assign allocation'
       console.error(error)
       setAllocErrorDialog(message)
+      setToast({ message: message, type: 'error' })
     } finally { setAllocSubmitting(false) }
   }
 
@@ -318,12 +394,12 @@ export default function ProgramChairBudgetManagementPage() {
       // remove from local state
       setChairDepartmentBudgets(prev => prev.filter(p => p.department_id !== revertDialog.deptId))
       await fetchData()
-      alert('Department allocation reverted')
+      setToast({ message: 'Department allocation reverted.', type: 'success' })
       setRevertDialog(null)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to revert allocation'
       console.error(err)
-      alert(msg)
+      setToast({ message: msg, type: 'error' })
     } finally {
       setRevertSubmitting(false)
     }
@@ -345,14 +421,88 @@ export default function ProgramChairBudgetManagementPage() {
         } as RequestRecord)
       }
       await fetchData()
+      setToast({ message: status === 'approved' ? 'Request approved successfully!' : 'Request rejected successfully!', type: 'success' })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Action failed'
-      alert(message)
+      setToast({ message, type: 'error' })
       console.error(error)
     } finally { setReviewSubmitting(false) }
   }
 
   const printSlip = () => { window.print() }
+
+  const handleBudgetReview = async () => {
+    if (!budgetReviewReq) return
+    if (!canChairReviewBudgetRequest(budgetReviewReq.workflow_stage)) {
+      setToast({ message: 'This request has already been reviewed.', type: 'error' })
+      return
+    }
+    if (budgetReviewStatus === 'declined' && !budgetReviewNotes.trim()) {
+      setError('Please add review notes when declining a budget request.')
+      return
+    }
+    setBudgetReviewSubmitting(true)
+    try {
+      const body: Record<string, unknown> = { approval_status: budgetReviewStatus }
+      if (budgetReviewNotes.trim()) body.review_notes = budgetReviewNotes.trim()
+      const res = await fetch(`${API}/budget-requests/${budgetReviewReq.id}/review`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || 'Budget review failed')
+      }
+      const updated = await res.json()
+      if (budgetReviewStatus === 'approved') {
+        setApprovedBudgetSlip(updated)
+      }
+      setBudgetReviewReq(null)
+      setBudgetReviewNotes('')
+      setBudgetReviewStatus('approved')
+      await fetchData()
+      setToast({ message: budgetReviewStatus === 'approved' ? 'Budget request approved successfully.' : 'Budget request declined successfully.', type: 'success' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Budget review failed'
+      setError(message)
+      setToast({ message, type: 'error' })
+    } finally {
+      setBudgetReviewSubmitting(false)
+    }
+  }
+
+  const handleDeleteBudgetRequest = async () => {
+    if (!budgetDeleteReq) return
+    setBudgetDeleteSubmitting(true)
+    try {
+      const res = await fetch(`${API}/budget-requests/${budgetDeleteReq.id}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      })
+      if (!res.ok) {
+        const txt = await res.text()
+        let message = 'Failed to delete budget request'
+        try {
+          message = JSON.parse(txt).error || message
+        } catch {
+          message = txt || message
+        }
+        throw new Error(message)
+      }
+      if (budgetReviewReq?.id === budgetDeleteReq.id) {
+        setBudgetReviewReq(null)
+      }
+      setBudgetDeleteReq(null)
+      await fetchData()
+      setToast({ message: 'Budget request deleted successfully.', type: 'success' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete budget request'
+      setToast({ message, type: 'error' })
+    } finally {
+      setBudgetDeleteSubmitting(false)
+    }
+  }
 
   const spent = Number(chairBudget?.spent_budget ?? 0)
   const allocated = Number(chairBudget?.allocated_budget ?? 0)
@@ -380,8 +530,15 @@ export default function ProgramChairBudgetManagementPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+    <div className="min-h-screen bg-white p-6">
       <div className="max-w-[1920px] mx-auto space-y-6">
+        {toast && (
+          <div className="fixed top-4 right-4 z-50">
+            <div className={`rounded-lg shadow-lg px-4 py-3 text-sm font-medium transition-all duration-300 ${toastVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'} ${toast.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+              {toast.message}
+            </div>
+          </div>
+        )}
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Budget Management</h1>
@@ -477,7 +634,7 @@ export default function ProgramChairBudgetManagementPage() {
               </div>
             </div>
             <div>
-              <Button onClick={handleAssignDept} className="w-full" disabled={!allocDeptId || allocSubmitting}>{allocSubmitting ? 'Saving…' : 'Assign'}</Button>
+              <Button onClick={handleAssignDept} className="w-full bg-[#BA0021] hover:bg-[#930018] text-white" disabled={!allocDeptId || allocSubmitting}>{allocSubmitting ? 'Saving…' : 'Assign'}</Button>
             </div>
           </div>
 
@@ -525,46 +682,59 @@ export default function ProgramChairBudgetManagementPage() {
           </div>
         </div>
 
-        {/* Requests table */}
         <div className="bg-white border border-slate-200 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium">Budget Requests</h3>
-            <div className="text-xs text-slate-500">Approve or decline project requests</div>
+            <div>
+              <h3 className="text-sm font-medium">Budget Requests</h3>
+              <p className="text-xs text-slate-500 mt-1">Review Project Head submissions and provide chair feedback.</p>
+            </div>
+            <div className="text-xs text-slate-500">Chair Review</div>
           </div>
           {loading ? (
             <div className="py-8 text-slate-400">Loading…</div>
-          ) : requests.length === 0 ? (
+          ) : budgetRequests.length === 0 ? (
             <div className="py-8 text-center text-slate-400">No budget requests yet.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-slate-50 text-left">
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Request ID</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Project</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Requested By</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Amount</th>
-                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Stage</th>
                     <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {requests.map(r => (
-                    <tr key={r.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3">{r.id}</td>
-                      <td className="px-4 py-3">{r.project_name || r.project_id}</td>
-                      <td className="px-4 py-3">{r.requested_by_name || r.requested_by}</td>
-                      <td className="px-4 py-3">{formatCurrency(r.estimated_budget || r.amount)}</td>
-                      <td className="px-4 py-3">{(r.status || '').toUpperCase()}</td>
+                  {budgetRequests.map((request) => (
+                    <tr key={request.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3 max-w-xs">
+                        <p className="font-medium text-slate-900 truncate">{request.project_name || request.project_id}</p>
+                        <p className="text-xs text-slate-400 truncate">{request.reason}</p>
+                      </td>
+                      <td className="px-4 py-3">{request.requested_by_name || '—'}</td>
+                      <td className="px-4 py-3">{formatCurrency(Number(request.amount || 0))}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <Button size="sm" variant="ghost" onClick={() => handleReview(r, 'approved')} disabled={reviewSubmitting}>
-                            <Check className="w-4 h-4 text-green-600" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleReview(r, 'rejected')} disabled={reviewSubmitting}>
-                            <X className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </div>
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${request.status === 'approved' ? 'bg-green-50 text-green-700 border-green-200' : request.status === 'declined' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                          {budgetStageLabel(request.workflow_stage)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Budget request actions">
+                              <MoreVertical className="h-4 w-4 text-slate-600" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-white border-slate-200">
+                            <DropdownMenuItem onClick={() => {
+                              setBudgetReviewReq(request)
+                              setBudgetReviewStatus('approved')
+                              setBudgetReviewNotes(request.review_notes || '')
+                            }}>View details</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}
@@ -594,6 +764,147 @@ export default function ProgramChairBudgetManagementPage() {
               </div>
             )}
             <DialogFooter />
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={!!budgetReviewReq}
+          onOpenChange={() => {
+            setBudgetReviewReq(null)
+            setBudgetReviewStatus('approved')
+            setBudgetReviewNotes('')
+          }}
+        >
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Review Budget Request</DialogTitle>
+              <DialogDescription>Approve or reject the request from the Project Head.</DialogDescription>
+            </DialogHeader>
+            {budgetReviewReq && (
+              <div className="space-y-4 mt-1">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
+                  <p className="font-semibold text-slate-900">{budgetReviewReq.project_name || budgetReviewReq.project_id}</p>
+                  <p>Amount: {formatCurrency(budgetReviewReq.amount)}</p>
+                  <p>Department: {budgetReviewReq.department_name || budgetReviewReq.department_id || '—'}</p>
+                  <p>Department Allocated: {formatCurrency(Number(budgetReviewReq.department_allocated_budget || 0))}</p>
+                  <p>Department Spent: {formatCurrency(Number(budgetReviewReq.department_spent_budget || 0))}</p>
+                  <p>Department Remaining: {formatCurrency(Number(budgetReviewReq.department_remaining_budget || 0))}</p>
+                  <p>
+                    Remaining After Approval:{' '}
+                    {formatCurrency(Number(budgetReviewReq.department_remaining_budget || 0) - Number(budgetReviewReq.amount || 0))}
+                  </p>
+                  <p>Stage: {budgetStageLabel(budgetReviewReq.workflow_stage)}</p>
+                  <p>Document: {budgetReviewReq.document_name || budgetReviewReq.document_url || '—'}</p>
+                  {budgetReviewReq.reviewed_by_name && <p>Reviewed by: {budgetReviewReq.reviewed_by_name}</p>}
+                  {budgetReviewReq.review_notes && <p>Review notes: {budgetReviewReq.review_notes}</p>}
+                  <div className="pt-2 flex flex-wrap gap-2">
+                    {budgetReviewReq.document_url && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-slate-300"
+                        onClick={() => window.open(getBudgetRequestDocumentUrl(budgetReviewReq.document_url), '_blank', 'noopener,noreferrer')}
+                      >
+                        <FileText className="h-4 w-4 mr-1.5" /> View file
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {!canChairReviewBudgetRequest(budgetReviewReq.workflow_stage) && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    This request has already moved past chair review.
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold text-slate-700">Decision</Label>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => canChairReviewBudgetRequest(budgetReviewReq.workflow_stage) && setBudgetReviewStatus('approved')}
+                      disabled={!canChairReviewBudgetRequest(budgetReviewReq.workflow_stage) || budgetReviewSubmitting}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 text-sm font-semibold transition-all ${budgetReviewStatus === 'approved' ? 'border-green-500 bg-green-50 text-green-700' : 'border-slate-200 text-slate-500 hover:border-green-300'} ${!canChairReviewBudgetRequest(budgetReviewReq.workflow_stage) || budgetReviewSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <CheckCircle2 className="h-4 w-4" /> Approve
+                    </button>
+                    <button
+                      onClick={() => canChairReviewBudgetRequest(budgetReviewReq.workflow_stage) && setBudgetReviewStatus('declined')}
+                      disabled={!canChairReviewBudgetRequest(budgetReviewReq.workflow_stage) || budgetReviewSubmitting}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 text-sm font-semibold transition-all ${budgetReviewStatus === 'declined' ? 'border-red-500 bg-red-50 text-red-700' : 'border-slate-200 text-slate-500 hover:border-red-300'} ${!canChairReviewBudgetRequest(budgetReviewReq.workflow_stage) || budgetReviewSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <X className="h-4 w-4" /> Decline
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-semibold text-slate-700">Review Notes</Label>
+                  <Textarea
+                    placeholder="Add chair feedback or review notes"
+                    value={budgetReviewNotes}
+                    onChange={(event) => setBudgetReviewNotes(event.target.value)}
+                    rows={4}
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setBudgetReviewReq(null)
+                setBudgetReviewStatus('approved')
+                setBudgetReviewNotes('')
+              }}>Cancel</Button>
+              <Button
+                onClick={handleBudgetReview}
+                disabled={budgetReviewSubmitting || !canChairReviewBudgetRequest(budgetReviewReq?.workflow_stage)}
+                className={budgetReviewStatus === 'approved' ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}
+              >
+                {budgetReviewSubmitting ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Saving...</> : budgetReviewStatus === 'approved' ? <><CheckCircle2 className="h-4 w-4 mr-1.5" /> Approve Request</> : <><X className="h-4 w-4 mr-1.5" /> Decline Request</>}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={!!approvedBudgetSlip} onOpenChange={() => setApprovedBudgetSlip(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Budget Approval Slip</DialogTitle>
+            </DialogHeader>
+            {approvedBudgetSlip && (
+              <div className="space-y-3 p-2">
+                <div className="text-sm text-slate-600">Slip No: <span className="font-semibold">{approvedBudgetSlip.chair_slip_number || 'Generated'}</span></div>
+                <div className="text-sm text-slate-600">Request ID: <span className="font-semibold">{approvedBudgetSlip.id}</span></div>
+                <div className="text-sm text-slate-600">Project: <span className="font-semibold">{approvedBudgetSlip.project_name || approvedBudgetSlip.project_id}</span></div>
+                <div className="text-sm text-slate-600">Amount: <span className="font-semibold">{formatCurrency(Number(approvedBudgetSlip.amount || 0))}</span></div>
+                <div className="text-sm text-slate-600">Generated At: <span className="font-semibold">{approvedBudgetSlip.chair_slip_generated_at ? new Date(approvedBudgetSlip.chair_slip_generated_at).toLocaleString() : 'Now'}</span></div>
+                <div className="pt-4">
+                  <Button onClick={() => window.print()} className="mr-2">Print Slip</Button>
+                  <Button variant="outline" onClick={() => setApprovedBudgetSlip(null)}>Close</Button>
+                </div>
+              </div>
+            )}
+            <DialogFooter />
+          </DialogContent>
+        </Dialog>
+        <Dialog open={!!budgetDeleteReq} onOpenChange={() => setBudgetDeleteReq(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete Budget Request</DialogTitle>
+              <DialogDescription>This will permanently delete the request and its uploaded document.</DialogDescription>
+            </DialogHeader>
+            {budgetDeleteReq && (
+              <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                <p className="font-semibold text-slate-900">{budgetDeleteReq.project_name || budgetDeleteReq.project_id}</p>
+                <p>Amount: {formatCurrency(Number(budgetDeleteReq.amount || 0))}</p>
+                <p>Stage: {budgetStageLabel(budgetDeleteReq.workflow_stage)}</p>
+                <p>Document: {budgetDeleteReq.document_name || budgetDeleteReq.document_url || '—'}</p>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setBudgetDeleteReq(null)} disabled={budgetDeleteSubmitting}>Cancel</Button>
+              <Button variant="destructive" onClick={handleDeleteBudgetRequest} disabled={budgetDeleteSubmitting}>
+                {budgetDeleteSubmitting ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> Deleting...</> : 'Delete request'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
         {/* Revert allocation confirm dialog */}

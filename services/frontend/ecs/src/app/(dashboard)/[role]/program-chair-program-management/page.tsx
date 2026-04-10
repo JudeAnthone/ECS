@@ -85,6 +85,12 @@ interface UserOption {
   avatar_url?: string | null;
 }
 
+interface ChairDepartmentBudget {
+  department_id?: string;
+  allocated_budget?: number;
+  spent_budget?: number;
+}
+
 const API = 'http://localhost:8081/api/v1';
 
 function getToken() { return localStorage.getItem('auth_token'); }
@@ -95,6 +101,10 @@ function authHeaders() {
 function formatDisplayDate(date?: string | null) {
   if (!date) return '-';
   return new Date(date).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function normalize(value?: string | null) {
+  return (value || '').toLowerCase();
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -108,6 +118,7 @@ function StatusBadge({ status }: { status: string }) {
     rejected: 'bg-red-100 text-red-700',
     on_hold: 'bg-yellow-100 text-yellow-700',
     in_progress: 'bg-green-100 text-green-700',
+    needs_funding: 'bg-yellow-100 text-yellow-800',
     planning: 'bg-purple-100 text-purple-700',
     pending_approval: 'bg-orange-100 text-orange-700',
   };
@@ -271,10 +282,11 @@ function ProgramForm({ formData, setFormData, departments, onSubmit, onCancel, s
 }
 
 // ─── PROJECT FORM ─────────────────────────────────────────────────────────────
-function ProjectForm({ formData, setFormData, onSubmit, onCancel, submitLabel, error }: {
+function ProjectForm({ formData, setFormData, onSubmit, onCancel, submitLabel, error, showBudgetSection = true }: {
   formData: any; setFormData: any;
-  onSubmit: () => void; onCancel: () => void; submitLabel: string; error?: string;
+  onSubmit: () => void; onCancel: () => void; submitLabel: string; error?: string; showBudgetSection?: boolean;
 }) {
+  const budgetLocked = submitLabel.toLowerCase().includes('update');
   return (
     <div className="space-y-5 pt-1">
       <div className="rounded-lg border border-slate-200 overflow-hidden">
@@ -309,6 +321,7 @@ function ProjectForm({ formData, setFormData, onSubmit, onCancel, submitLabel, e
         </div>
       </div>
 
+      {showBudgetSection && (
       <div className="rounded-lg border border-slate-200 overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
           <Wallet className="w-4 h-4 text-slate-500" />
@@ -324,8 +337,14 @@ function ProjectForm({ formData, setFormData, onSubmit, onCancel, submitLabel, e
               <Input type="number" value={formData.budget_allocated}
                 onChange={e => setFormData({ ...formData, budget_allocated: e.target.value })}
                 placeholder="0.00"
+                disabled={budgetLocked}
                 className="pl-7 border-slate-300" />
             </div>
+            <p className="text-xs text-slate-500">
+              {budgetLocked
+                ? 'Budget allocation is locked after project creation. Spending is adjusted through approved budget requests.'
+                : 'Project allocation is a planning cap. Actual spend is released through approved budget requests.'}
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -347,6 +366,7 @@ function ProjectForm({ formData, setFormData, onSubmit, onCancel, submitLabel, e
           </div>
         </div>
       </div>
+      )}
 
       {error && (
         <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -367,13 +387,15 @@ function ProjectsView({ program, departments, onBack }: {
   program: Program; departments: Department[]; onBack: () => void;
 }) {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [budgetRequests, setBudgetRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
+  const [filterProjectLifecycle, setFilterProjectLifecycle] = useState<'all' | 'needs_funding' | 'pending_approval' | 'in_progress' | 'completed' | 'cancelled'>('all');
   const [editOpen, setEditOpen] = useState(false);
   const [selected, setSelected] = useState<Project | null>(null);
   const [formError, setFormError] = useState('');
   const [pageError, setPageError] = useState('');
+  const [pageSuccess, setPageSuccess] = useState('');
   const [assignHeadOpen, setAssignHeadOpen] = useState(false);
   const [assignHeadProject, setAssignHeadProject] = useState<Project | null>(null);
   const [heads, setHeads] = useState<UserOption[]>([]);
@@ -383,19 +405,72 @@ function ProjectsView({ program, departments, onBack }: {
   const [assignHeadError, setAssignHeadError] = useState('');
   const [projectTab, setProjectTab] = useState<'all' | 'pending'>('all');
   const [deleteProjectDialog, setDeleteProjectDialog] = useState<Project | null>(null);
+  const [deleteProjectError, setDeleteProjectError] = useState<string | null>(null);
   const [projectApprovalDialog, setProjectApprovalDialog] = useState<{ project: Project; approvalStatus: 'approved' | 'rejected' } | null>(null);
   const [viewProjectDialog, setViewProjectDialog] = useState<Project | null>(null);
+  const [viewStaffIDs, setViewStaffIDs] = useState<string[]>([]);
+  const [viewStaffLoading, setViewStaffLoading] = useState(false);
   const [reviewNotes, setReviewNotes] = useState('');
+  const [departmentAllocationCap, setDepartmentAllocationCap] = useState<number | null>(null);
+  const [departmentAllocationSpent, setDepartmentAllocationSpent] = useState<number | null>(null);
   const emptyForm = { project_name: '', project_description: '', objectives: '', budget_allocated: '', start_date: '', end_date: '' };
   const [form, setForm] = useState(emptyForm);
+
+  // Fetch all budget requests for the program
+  const loadBudgetRequests = async () => {
+    try {
+      const res = await fetch(`${API}/budget-requests`, { headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        // Filter to only budget requests for projects in this program
+        const allRequests = data.budget_requests || data.requests || [];
+        const programProjectIds = new Set(projects.map(p => p.id));
+        const filtered = allRequests.filter((r: any) => 
+          programProjectIds.has(r.project_id)
+        );
+        setBudgetRequests(filtered);
+      } else {
+        setBudgetRequests([]);
+      }
+    } catch {
+      setBudgetRequests([]);
+    }
+  };
   const currentUser = AuthService.getUser();
   const eligibleHeads = React.useMemo(
     () => heads.filter((h) => h.assigned_program_chair_id === currentUser?.id),
     [heads, currentUser?.id]
   );
 
+  const loadDepartmentAllocationCap = async () => {
+    if (!currentUser?.id || !program.department_id) {
+      setDepartmentAllocationCap(null);
+      setDepartmentAllocationSpent(null);
+      return;
+    }
+    try {
+      const res = await fetch(
+        `${API}/budgets/chair-departments?chair_id=${currentUser.id}&department_id=${program.department_id}`,
+        { headers: authHeaders() }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const item: ChairDepartmentBudget | undefined = data?.chair_department_budgets?.[0];
+        setDepartmentAllocationCap(Number(item?.allocated_budget || 0));
+        setDepartmentAllocationSpent(Number(item?.spent_budget || 0));
+      } else {
+        setDepartmentAllocationCap(null);
+        setDepartmentAllocationSpent(null);
+      }
+    } catch {
+      setDepartmentAllocationCap(null);
+      setDepartmentAllocationSpent(null);
+    }
+  };
+
   useEffect(() => {
     loadProjects();
+    loadDepartmentAllocationCap();
     Promise.all([
       fetch(`${API}/users/by-role?role=project_head`, { headers: authHeaders() })
         .then(r => r.ok ? r.json() : Promise.resolve({ users: [] }))
@@ -411,6 +486,15 @@ function ProjectsView({ program, departments, onBack }: {
         .catch(() => setChairUsers([])),
     ]);
   }, []);
+
+  // Load budget requests whenever projects change
+  useEffect(() => {
+    if (projects.length > 0) {
+      loadBudgetRequests();
+    } else {
+      setBudgetRequests([]);
+    }
+  }, [projects]);
 
   const loadProjects = async () => {
     try {
@@ -442,40 +526,18 @@ function ProjectsView({ program, departments, onBack }: {
       return 'End date cannot be before start date.';
     if (form.end_date && program.end_date && form.end_date > program.end_date.split('T')[0])
       return `Project end date cannot exceed the program end date (${formatDisplayDate(program.end_date)}).`;
-    if (form.budget_allocated) {
-      const budget = parseFloat(form.budget_allocated);
-      const alreadyAllocated = projects
-        .filter(p => p.approval_status === 'approved' && p.id !== selected?.id)
-        .reduce((s, p) => s + (p.budget_allocated || 0), 0);
-      const programBudget = program.budget_allocation || 0;
-      const remaining = programBudget - alreadyAllocated;
-      if (programBudget > 0 && budget > remaining)
-        return `Budget ₱${budget.toLocaleString()} exceeds remaining program budget of ₱${remaining.toLocaleString()}.`;
-    }
+    const budget = parseFloat(form.budget_allocated);
+    if (!Number.isFinite(budget) || budget <= 0) return 'Enter a budget greater than 0.';
+    if (departmentAllocationCap === null)
+      return 'No department allocation found for this program. Set department allocation in Program Chair Budget Management first.';
+    const committedExcludingCurrent = projects
+      .filter(p => p.id !== selected?.id)
+      .filter(p => p.approval_status !== 'rejected' && p.status !== 'cancelled')
+      .reduce((s, p) => s + (p.budget_allocated || 0), 0);
+    const remaining = departmentAllocationCap - committedExcludingCurrent;
+    if (budget > remaining)
+      return `Budget ₱${budget.toLocaleString()} exceeds remaining department allocation of ₱${Math.max(0, remaining).toLocaleString()}.`;
     return '';
-  };
-
-  const handleCreate = async () => {
-    const validationError = validateProjectForm();
-    if (validationError) { setFormError(validationError); return; }
-    setFormError('');
-    const res = await fetch(`${API}/projects`, {
-      method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({
-        project_name: form.project_name,
-        project_description: form.project_description || null,
-        program_id: program.id,
-        department_id: program.department_id || null,
-        objectives: form.objectives || null,
-        budget_allocated: form.budget_allocated ? parseFloat(form.budget_allocated) : null,
-        start_date: form.start_date || null,
-        end_date: form.end_date || null,
-        status: 'pending_approval',
-        approval_status: 'pending',
-      }),
-    });
-    if (res.ok) { await loadProjects(); setCreateOpen(false); setForm(emptyForm); setFormError(''); }
-    else { const e = await res.json(); setFormError(e.error || 'Failed to create project'); }
   };
 
   const handleUpdate = async () => {
@@ -504,10 +566,21 @@ function ProjectsView({ program, departments, onBack }: {
 
   const confirmDeleteProject = async () => {
     if (!deleteProjectDialog) return;
+    setDeleteProjectError(null);
     const res = await fetch(`${API}/projects/${deleteProjectDialog.id}`, { method: 'DELETE', headers: authHeaders() });
-    if (res.ok) await loadProjects();
-    else { const e = await res.json(); setPageError(e.error || 'Failed to delete project'); }
-    setDeleteProjectDialog(null);
+    if (res.ok) {
+      await loadProjects();
+      setDeleteProjectDialog(null);
+    } else {
+      const e = await res.json();
+      const errorMsg = e.error || 'Failed to delete project';
+      if (res.status === 409) {
+        setDeleteProjectError(errorMsg);
+      } else {
+        setPageError(errorMsg);
+        setDeleteProjectDialog(null);
+      }
+    }
   };
 
   const handleProjectApproval = (project: Project, approvalStatus: 'approved' | 'rejected') => {
@@ -532,6 +605,8 @@ function ProjectsView({ program, departments, onBack }: {
 
     if (res.ok) {
       await loadProjects();
+      setPageSuccess(approvalStatus === 'approved' ? 'Project approved successfully.' : 'Project declined successfully.');
+      setProjectApprovalDialog(null);
       return;
     }
 
@@ -579,11 +654,54 @@ function ProjectsView({ program, departments, onBack }: {
     setEditOpen(true);
   };
 
+  const approvedBudgetByProject = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const req of budgetRequests) {
+      if (normalize(req?.status) !== 'approved') continue;
+      const prev = map.get(req.project_id) || 0;
+      map.set(req.project_id, prev + Number(req.amount || 0));
+    }
+    return map;
+  }, [budgetRequests]);
+
+  const approvedBudgetRequestCountByProject = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const req of budgetRequests) {
+      if (normalize(req?.status) !== 'approved') continue;
+      const prev = map.get(req.project_id) || 0;
+      map.set(req.project_id, prev + 1);
+    }
+    return map;
+  }, [budgetRequests]);
+
+  const hasApprovedBudgetRequest = React.useCallback((projectID?: string | null) => {
+    if (!projectID) return false;
+    return (approvedBudgetRequestCountByProject.get(projectID) || 0) > 0;
+  }, [approvedBudgetRequestCountByProject]);
+
+  const projectNeedsFunding = React.useCallback((project?: Project | null) => {
+    if (!project) return false;
+    return normalize(project.approval_status) === 'approved' && !hasApprovedBudgetRequest(project.id);
+  }, [hasApprovedBudgetRequest]);
+
+  const projectLifecycleLabel = React.useCallback((project: Project) => {
+    if (projectNeedsFunding(project)) return 'needs_funding';
+    return project.status;
+  }, [projectNeedsFunding]);
+
+  const projectBudgetDisplay = React.useCallback((project: Project) => {
+    if (projectNeedsFunding(project)) return 0;
+    return Number(approvedBudgetByProject.get(project.id) || project.budget_allocated || 0);
+  }, [approvedBudgetByProject, projectNeedsFunding]);
+
   const pendingProjects = projects.filter((p) => p.approval_status === 'pending');
   const scopedProjects = projectTab === 'pending' ? pendingProjects : projects;
-  const filtered = scopedProjects.filter((p) =>
-    p.project_name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = scopedProjects.filter((p) => {
+    const matchesSearch = p.project_name.toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+    if (filterProjectLifecycle === 'all') return true;
+    return projectLifecycleLabel(p) === filterProjectLifecycle;
+  });
   const programDepartment = departments.find((d) => d.id === program.department_id);
   const pendingVisible = filtered.filter((p) => p.approval_status === 'pending');
 
@@ -593,10 +711,10 @@ function ProjectsView({ program, departments, onBack }: {
       return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-emerald-100 text-emerald-800 border-emerald-200">FINAL APPROVED</span>;
     }
     if (p.approval_status === 'rejected') {
-      return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-red-100 text-red-800 border-red-200">FINAL REJECTED</span>;
+      return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-red-100 text-red-800 border-red-200">FINAL DECLINED</span>;
     }
     if (isForwarded) {
-      return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-indigo-100 text-indigo-800 border-indigo-200">PENDING FINAL APPROVAL</span>;
+      return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-indigo-100 text-indigo-800 border-indigo-200">PENDING CHAIR FINAL REVIEW</span>;
     }
     return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-amber-100 text-amber-800 border-amber-200">AWAITING HEAD REVIEW</span>;
   };
@@ -657,18 +775,61 @@ function ProjectsView({ program, departments, onBack }: {
     };
   };
 
+  useEffect(() => {
+    if (!viewProjectDialog?.id) {
+      setViewStaffIDs([]);
+      setViewStaffLoading(false);
+      return;
+    }
+
+    let active = true;
+    const loadViewStaffAssignments = async () => {
+      setViewStaffLoading(true);
+      try {
+        const res = await fetch(`${API}/projects/${viewProjectDialog.id}/staff-assignments`, { headers: authHeaders() });
+        if (!res.ok) {
+          if (active) setViewStaffIDs([]);
+          return;
+        }
+        const payload = await res.json();
+        const ids = Array.isArray(payload?.staff_ids)
+          ? payload.staff_ids.filter((id: unknown): id is string => typeof id === 'string')
+          : [];
+        if (active) setViewStaffIDs(ids);
+      } catch {
+        if (active) setViewStaffIDs([]);
+      } finally {
+        if (active) setViewStaffLoading(false);
+      }
+    };
+
+    void loadViewStaffAssignments();
+    return () => {
+      active = false;
+    };
+  }, [viewProjectDialog?.id]);
+
   const total = projects.length;
   const active = projects.filter(p => p.status === 'in_progress').length;
-  const approvedBudget = projects
-    .filter(p => p.approval_status === 'approved')
+  const committedBudget = projects
+    .filter(p => p.approval_status !== 'rejected' && p.status !== 'cancelled')
     .reduce((s, p) => s + (p.budget_allocated || 0), 0);
-  const programBudget = approvedBudget;
-  const usedBudget = projects.reduce((s, p) => s + (p.budget_used || 0), 0);
-  const remainingBudget = programBudget - usedBudget;
-  const usedPct = programBudget > 0 ? Math.min(100, Math.round((usedBudget / programBudget) * 100)) : 0;
+  const departmentBudget = departmentAllocationCap ?? 0;
+  const deductedBudget = Number(departmentAllocationSpent || 0);
+  const remainingBudget = departmentBudget - deductedBudget;
+  const usedPct = departmentBudget > 0 ? Math.min(100, Math.round((deductedBudget / departmentBudget) * 100)) : 0;
 
   return (
     <div className="space-y-6">
+      {pageSuccess && (
+        <div className="flex items-start justify-between gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          <div className="flex items-start gap-2">
+            <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{pageSuccess}</span>
+          </div>
+          <button onClick={() => setPageSuccess('')} className="text-green-500 hover:text-green-700">✕</button>
+        </div>
+      )}
       {pageError && (
         <div className="flex items-start justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <div className="flex items-start gap-2">
@@ -719,7 +880,7 @@ function ProjectsView({ program, departments, onBack }: {
 
         <div className="mt-5 pt-4 border-t border-slate-100">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-slate-700">Overall Project Budget</span>
+            <span className="text-sm font-medium text-slate-700">Department Allocation Budget</span>
             <span className="text-xs text-slate-500">{usedPct}% utilized</span>
           </div>
           <div className="w-full bg-slate-100 rounded-full h-2.5 mb-3">
@@ -728,14 +889,14 @@ function ProjectsView({ program, departments, onBack }: {
               style={{ width: `${usedPct}%` }}
             />
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-slate-50 rounded-lg p-3">
-              <div className="text-xs text-slate-500 mb-0.5">Approved Total</div>
-              <div className="text-sm font-bold text-slate-800">₱{programBudget.toLocaleString()}</div>
+              <div className="text-xs text-slate-500 mb-0.5">Department Allocation</div>
+              <div className="text-sm font-bold text-slate-800">₱{departmentBudget.toLocaleString()}</div>
             </div>
-            <div className="bg-orange-50 rounded-lg p-3">
-              <div className="text-xs text-slate-500 mb-0.5">Used</div>
-              <div className="text-sm font-bold text-orange-700">₱{usedBudget.toLocaleString()}</div>
+            <div className="bg-slate-50 rounded-lg p-3">
+              <div className="text-xs text-slate-500 mb-0.5">Deducted Total</div>
+              <div className="text-sm font-bold text-slate-800">₱{deductedBudget.toLocaleString()}</div>
             </div>
             <div className={`rounded-lg p-3 ${remainingBudget < 0 ? 'bg-red-50' : 'bg-green-50'}`}>
               <div className="text-xs text-slate-500 mb-0.5">Remaining</div>
@@ -761,7 +922,7 @@ function ProjectsView({ program, departments, onBack }: {
               <button
                 type="button"
                 onClick={() => { setProjectTab('pending'); }}
-                className={`px-3 py-1.5 text-sm border-l border-slate-200 ${projectTab === 'pending' ? 'bg-orange-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                className={`px-3 py-1.5 text-sm border-l border-slate-200 ${projectTab === 'pending' ? 'bg-[#BA0021] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
               >
                 Pending Projects ({pendingProjects.length})
               </button>
@@ -771,25 +932,21 @@ function ProjectsView({ program, departments, onBack }: {
               <Input placeholder={projectTab === 'pending' ? 'Search pending projects...' : 'Search projects...'} value={search}
                 onChange={e => setSearch(e.target.value)} className="pl-9" />
             </div>
+            <Select value={filterProjectLifecycle} onValueChange={(v: 'all' | 'needs_funding' | 'pending_approval' | 'in_progress' | 'completed' | 'cancelled') => setFilterProjectLifecycle(v)}>
+              <SelectTrigger className="w-[190px]">
+                <SelectValue placeholder="All Lifecycle" />
+              </SelectTrigger>
+              <SelectContent className="bg-white">
+                <SelectItem value="all">All Lifecycle</SelectItem>
+                <SelectItem value="needs_funding">Needs Funding</SelectItem>
+                <SelectItem value="pending_approval">Pending Approval</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <div className="flex items-center gap-2">
-
-            <Dialog open={createOpen} onOpenChange={v => { setCreateOpen(v); if (!v) setFormError(''); }}>
-              <DialogTrigger asChild>
-                <Button className="flex items-center gap-2" onClick={() => { setForm(emptyForm); setFormError(''); }}>
-                  <Plus className="w-4 h-4" /> Create Project
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="bg-white max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Create Project</DialogTitle>
-                  <DialogDescription>Add a project under <strong>{program.program_name}</strong></DialogDescription>
-                </DialogHeader>
-                <ProjectForm formData={form} setFormData={setForm}
-                  onSubmit={handleCreate} onCancel={() => { setCreateOpen(false); setFormError(''); }} submitLabel="Create Project" error={formError} />
-              </DialogContent>
-            </Dialog>
-          </div>
+          <div className="flex items-center gap-2" />
         </div>
 
         {loading ? (
@@ -802,6 +959,7 @@ function ProjectsView({ program, departments, onBack }: {
                 <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Requested By</TableHead>
                 <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Lifecycle</TableHead>
                 <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Verification</TableHead>
+                <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Budget</TableHead>
                 <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Created</TableHead>
                 <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Actions</TableHead>
               </TableRow>
@@ -809,7 +967,7 @@ function ProjectsView({ program, departments, onBack }: {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="px-4 py-12 text-center text-slate-400">
+                  <TableCell colSpan={7} className="px-4 py-12 text-center text-slate-400">
                     {projectTab === 'pending' ? 'No pending projects found under this program' : 'No projects found under this program'}
                   </TableCell>
                 </TableRow>
@@ -823,8 +981,9 @@ function ProjectsView({ program, departments, onBack }: {
                     </span>
                     <span className="block text-[11px] text-slate-500 mt-1 ml-8">{requesterRole(p)}</span>
                   </TableCell>
-                  <TableCell className="px-4 py-3"><StatusBadge status={p.status} /></TableCell>
+                  <TableCell className="px-4 py-3"><StatusBadge status={projectLifecycleLabel(p)} /></TableCell>
                   <TableCell className="px-4 py-3">{verificationBadge(p)}</TableCell>
+                  <TableCell className="px-4 py-3 font-medium text-slate-900">₱{projectBudgetDisplay(p).toLocaleString()}</TableCell>
                   <TableCell className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">{formatDisplayDate(p.created_at)}</TableCell>
                   <TableCell className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                     {(() => {
@@ -846,18 +1005,18 @@ function ProjectsView({ program, departments, onBack }: {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => handleProjectApproval(p, 'rejected')}
-                          className="text-orange-700"
+                          className="text-red-700"
                           disabled={!canFinalReview}
                         >
-                            <XCircle className="w-4 h-4 mr-2" /> Reject Project
+                            <XCircle className="w-4 h-4 mr-2" /> Decline Project
                         </DropdownMenuItem>
                         {staffAwaitingHeadReview && (
                           <DropdownMenuItem disabled className="text-xs text-slate-500">
                             Waiting for Project Head pre-review
                           </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem onClick={() => openEdit(p)}>
-                          <Edit className="w-4 h-4 mr-2" /> Edit
+                        <DropdownMenuItem onClick={() => setViewProjectDialog(p)}>
+                          <Eye className="w-4 h-4 mr-2" /> View Details
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openAssignHead(p)}>
                           <UserCog className="w-4 h-4 mr-2" /> Assign Project Head
@@ -877,7 +1036,7 @@ function ProjectsView({ program, departments, onBack }: {
         )}
       </div>
 
-      <Dialog open={!!deleteProjectDialog} onOpenChange={(open) => { if (!open) setDeleteProjectDialog(null); }}>
+      <Dialog open={!!deleteProjectDialog} onOpenChange={(open) => { if (!open) { setDeleteProjectDialog(null); setDeleteProjectError(null); } }}>
         <DialogContent className="bg-white max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Project</DialogTitle>
@@ -885,11 +1044,26 @@ function ProjectsView({ program, departments, onBack }: {
               Delete <strong>{deleteProjectDialog?.project_name}</strong>? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
+          {deleteProjectError && (
+            <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium">Cannot Delete Project</p>
+                <p className="mt-1">{deleteProjectError}</p>
+              </div>
+            </div>
+          )}
           <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
-            <Button variant="destructive" onClick={confirmDeleteProject}>Delete</Button>
+            {deleteProjectError ? (
+              <Button variant="outline" onClick={() => { setDeleteProjectDialog(null); setDeleteProjectError(null); }}>Close</Button>
+            ) : (
+              <>
+                <DialogClose asChild>
+                  <Button variant="outline">Cancel</Button>
+                </DialogClose>
+                <Button variant="destructive" onClick={confirmDeleteProject}>Delete</Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -898,11 +1072,11 @@ function ProjectsView({ program, departments, onBack }: {
         <DialogContent className="bg-white max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {projectApprovalDialog?.approvalStatus === 'approved' ? 'Approve Project' : 'Reject Project'}
+              {projectApprovalDialog?.approvalStatus === 'approved' ? 'Approve Project' : 'Decline Project'}
             </DialogTitle>
             <DialogDescription>
               {projectApprovalDialog
-                ? `Are you sure you want to ${projectApprovalDialog.approvalStatus === 'approved' ? 'approve' : 'reject'} ${projectApprovalDialog.project.project_name}?`
+                ? `Are you sure you want to ${projectApprovalDialog.approvalStatus === 'approved' ? 'approve' : 'decline'} ${projectApprovalDialog.project.project_name}?`
                 : ''}
             </DialogDescription>
           </DialogHeader>
@@ -923,7 +1097,7 @@ function ProjectsView({ program, departments, onBack }: {
               variant={projectApprovalDialog?.approvalStatus === 'rejected' ? 'destructive' : 'default'}
               onClick={submitProjectApproval}
             >
-              {projectApprovalDialog?.approvalStatus === 'approved' ? 'Approve' : 'Reject'}
+              {projectApprovalDialog?.approvalStatus === 'approved' ? 'Approve' : 'Decline'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -935,8 +1109,21 @@ function ProjectsView({ program, departments, onBack }: {
             <DialogTitle>Edit Project</DialogTitle>
             <DialogDescription>Update project details</DialogDescription>
           </DialogHeader>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+            <p className="text-slate-700 font-medium">Current Department Funds</p>
+            {departmentAllocationCap === null ? (
+              <p className="text-red-600 mt-1">No department allocation found. Set allocation first in Budget Management.</p>
+            ) : (
+              <p className="text-slate-600 mt-1">
+                Cap: <span className="font-semibold text-slate-900">₱{departmentBudget.toLocaleString()}</span>
+                {' · '}Planned: <span className="font-semibold text-slate-900">₱{committedBudget.toLocaleString()}</span>
+                {' · '}Deducted: <span className="font-semibold text-slate-900">₱{deductedBudget.toLocaleString()}</span>
+                {' · '}Remaining: <span className={`font-semibold ${remainingBudget < 0 ? 'text-red-600' : 'text-green-700'}`}>₱{Math.max(0, remainingBudget).toLocaleString()}</span>
+              </p>
+            )}
+          </div>
           <ProjectForm formData={form} setFormData={setForm}
-            onSubmit={handleUpdate} onCancel={() => { setEditOpen(false); setFormError(''); }} submitLabel="Update Project" error={formError} />
+            onSubmit={handleUpdate} onCancel={() => { setEditOpen(false); setFormError(''); }} submitLabel="Update Project" error={formError} showBudgetSection={false} />
         </DialogContent>
       </Dialog>
 
@@ -949,7 +1136,7 @@ function ProjectsView({ program, departments, onBack }: {
           {viewProjectDialog && (
             <div className="space-y-4 pt-2">
               <div className="flex flex-wrap gap-2">
-                <StatusBadge status={viewProjectDialog.status} />
+                <StatusBadge status={projectLifecycleLabel(viewProjectDialog)} />
                 {verificationBadge(viewProjectDialog)}
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -967,6 +1154,37 @@ function ProjectsView({ program, departments, onBack }: {
                   <label className="text-sm font-medium text-slate-700">Created</label>
                   <p className="mt-1 text-slate-600 text-sm">{formatDisplayDate(viewProjectDialog.created_at)}</p>
                 </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Start Date</label>
+                  <p className="mt-1 text-slate-600 text-sm">{formatDisplayDate(viewProjectDialog.start_date)}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">End Date</label>
+                  <p className="mt-1 text-slate-600 text-sm">{formatDisplayDate(viewProjectDialog.end_date)}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Project Head</label>
+                  {(() => {
+                    const head = heads.find(h => h.id === viewProjectDialog.project_head_id);
+                    if (!head) {
+                      return <p className="mt-1 text-slate-500 text-sm">Unassigned</p>;
+                    }
+                    return (
+                      <div className="mt-1 flex items-center gap-2">
+                        <UserAvatar user={head} size="sm" />
+                        <span className="text-slate-700 text-sm">{head.first_name} {head.last_name}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Budget Allocation</label>
+                  <p className="mt-1 text-slate-600 text-sm">₱{projectBudgetDisplay(viewProjectDialog).toLocaleString()}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Funding Status</label>
+                  <p className="mt-1 text-slate-600 text-sm">{projectNeedsFunding(viewProjectDialog) ? 'Needs Funding' : 'Funded / Not Required Yet'}</p>
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700">Description</label>
@@ -975,6 +1193,77 @@ function ProjectsView({ program, departments, onBack }: {
               <div>
                 <label className="text-sm font-medium text-slate-700">Objectives</label>
                 <p className="mt-1 text-slate-600 text-sm">{viewProjectDialog.objectives || 'Not defined'}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Assigned Staff</label>
+                {viewStaffLoading ? (
+                  <p className="mt-1 text-slate-500 text-sm">Loading assigned staff...</p>
+                ) : viewStaffIDs.length === 0 ? (
+                  <p className="mt-1 text-slate-500 text-sm">No staff assigned yet.</p>
+                ) : (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {viewStaffIDs.map((id) => {
+                      const staff = staffUsers.find((s) => s.id === id);
+                      const fullName = staff ? `${staff.first_name} ${staff.last_name}`.trim() : id;
+                      return (
+                        <span key={id} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700">
+                          {fullName}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+              {/* Funding History Section */}
+              <div>
+                <label className="text-sm font-bold text-slate-800 block mb-1 mt-4">Funding History</label>
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-50">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th className="px-4 py-2 text-left font-semibold text-slate-600">Date</th>
+                        <th className="px-4 py-2 text-left font-semibold text-slate-600">Amount</th>
+                        <th className="px-4 py-2 text-left font-semibold text-slate-600">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(budgetRequests?.filter?.(r => r.project_id === viewProjectDialog.id)?.length === 0) ? (
+                        <tr>
+                          <td colSpan={3} className="px-4 py-3 text-center text-slate-400">No budget requests found for this project.</td>
+                        </tr>
+                      ) : (
+                        budgetRequests
+                          ?.filter?.(r => r.project_id === viewProjectDialog.id)
+                          ?.sort?.((a, b) => (a.id > b.id ? 1 : -1))
+                          ?.map?.((r, idx) => (
+                            <tr key={r.id || idx} className="border-t border-slate-200">
+                              <td className="px-4 py-2">{r.created_at ? formatDisplayDate(r.created_at) : '-'}</td>
+                              <td className="px-4 py-2">₱{Number(r.amount || 0).toLocaleString()}</td>
+                              <td className="px-4 py-2">
+                                <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${normalize(r.status) === 'approved' ? 'bg-green-100 text-green-700' : normalize(r.status) === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                                  {String(r.status || '').charAt(0).toUpperCase() + String(r.status || '').slice(1)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <Button
+                  onClick={() => {
+                    const projectToEdit = viewProjectDialog;
+                    setViewProjectDialog(null);
+                    if (projectToEdit) {
+                      openEdit(projectToEdit);
+                    }
+                  }}
+                >
+                  <Edit className="w-4 h-4 mr-2" /> Edit Project
+                </Button>
               </div>
             </div>
           )}
@@ -1016,7 +1305,7 @@ function ProjectsView({ program, departments, onBack }: {
                     key={u.id}
                     type="button"
                     onClick={() => setSelectedHeadID(u.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors ${selectedHeadID === u.id ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors ${selectedHeadID === u.id ? 'bg-red-50' : 'hover:bg-slate-50'}`}
                   >
                     <div className="w-9 h-9 rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center shrink-0 text-sm">
                       {u.first_name[0]}{u.last_name[0]}
@@ -1025,14 +1314,14 @@ function ProjectsView({ program, departments, onBack }: {
                       <span className="text-sm font-medium text-slate-800 truncate">{u.first_name} {u.last_name}</span>
                       <span className="text-xs text-slate-400 truncate">{u.email}</span>
                     </div>
-                    {selectedHeadID === u.id && <span className="ml-auto text-indigo-500 text-xs font-medium">✓</span>}
+                    {selectedHeadID === u.id && <span className="ml-auto text-[#BA0021] text-xs font-medium">✓</span>}
                   </button>
                 ))}
               </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setAssignHeadOpen(false)}>Cancel</Button>
-              <Button onClick={handleAssignHead}>Save Assignment</Button>
+              <Button className="bg-[#BA0021] hover:bg-[#930018] text-white" onClick={handleAssignHead}>Save Assignment</Button>
             </div>
           </div>
         </DialogContent>
@@ -1254,11 +1543,11 @@ export default function ProgramChairProgramManagement() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+    <div className="min-h-screen bg-white p-6">
       <div className="max-w-[1920px] mx-auto space-y-6">
         <div className="flex items-center gap-4 mb-8">
-          <Button variant={activeTab === 'programs' ? 'default' : 'outline'} onClick={() => setActiveTab('programs')}>Programs</Button>
-          <Button variant={activeTab === 'requests' ? 'default' : 'outline'} onClick={() => setActiveTab('requests')}>Program Requests</Button>
+          <Button className={activeTab === 'programs' ? 'bg-[#BA0021] hover:bg-[#930018] text-white' : ''} variant={activeTab === 'programs' ? 'default' : 'outline'} onClick={() => setActiveTab('programs')}>Programs</Button>
+          <Button className={activeTab === 'requests' ? 'bg-[#BA0021] hover:bg-[#930018] text-white' : ''} variant={activeTab === 'requests' ? 'default' : 'outline'} onClick={() => setActiveTab('requests')}>Program Requests</Button>
         </div>
         {activeTab === 'programs' ? (
           <>
@@ -1278,7 +1567,7 @@ export default function ProgramChairProgramManagement() {
               </div>
               <Dialog open={createOpen} onOpenChange={v => { setCreateOpen(v); if (!v) setProgramFormError(''); }}>
                 <DialogTrigger asChild>
-                  <Button className="flex items-center gap-2" onClick={() => { setForm(emptyForm); setProgramFormError(''); }}>
+                  <Button className="flex items-center gap-2 bg-[#BA0021] hover:bg-[#930018] text-white" onClick={() => { setForm(emptyForm); setProgramFormError(''); }}>
                     <Plus className="w-4 h-4" /> Create Program
                   </Button>
                 </DialogTrigger>

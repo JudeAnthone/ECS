@@ -46,7 +46,7 @@ func SetupRoutes() *mux.Router {
 	requestHandler := handler.NewRequestHandler(requestUsecase)
 	// budget
 	budgetRepo := postgres.NewBudgetRepository(database.DB)
-	budgetUsecase := budget.NewBudgetUsecase(budgetRepo)
+	budgetUsecase := budget.NewBudgetUsecase(budgetRepo, projectRepo, programRepo)
 	budgetHandler := handler.NewBudgetHandler(budgetUsecase)
 
 	// Root endpoint
@@ -58,6 +58,7 @@ func SetupRoutes() *mux.Router {
 	// Auth routes (public)
 	r.HandleFunc("/api/v1/auth/login", authHandler.Login).Methods("POST")
 	r.HandleFunc("/api/v1/auth/register", authHandler.Register).Methods("POST")
+	r.PathPrefix("/uploads/").Handler(http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
 
 	// Protected routes (require authentication)
 	api := r.PathPrefix("/api/v1").Subrouter()
@@ -81,7 +82,7 @@ func SetupRoutes() *mux.Router {
 	api.Handle("/programs/{id}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(programHandler.DeleteProgram))).Methods("DELETE")
 
 	// Project routes
-	api.Handle("/projects", middleware.RequireRolesMiddleware(domain.RoleProjectHead, domain.RoleProgramChair, domain.RoleStaff)(http.HandlerFunc(projectHandler.CreateProject))).Methods("POST")
+	api.Handle("/projects", middleware.RequireRolesMiddleware(domain.RoleProjectHead)(http.HandlerFunc(projectHandler.CreateProject))).Methods("POST")
 	api.HandleFunc("/projects", projectHandler.GetProjects).Methods("GET")
 	api.Handle("/projects/{id}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(projectHandler.UpdateProject))).Methods("PUT")
 	api.Handle("/projects/{id}/head-review", middleware.RequireRolesMiddleware(domain.RoleProjectHead)(http.HandlerFunc(projectHandler.ProjectHeadPreReview))).Methods("PATCH")
@@ -132,10 +133,14 @@ func SetupRoutes() *mux.Router {
 
 	// Budget routes (admin only)
 	api.Handle("/budgets/summary", middleware.AdminOnlyMiddleware(http.HandlerFunc(budgetHandler.GetTotalBudget))).Methods("GET")
-	api.Handle("/budget-requests", middleware.AdminOnlyMiddleware(http.HandlerFunc(budgetHandler.GetBudgetRequests))).Methods("GET")
+	api.Handle("/budget-requests", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(budgetHandler.GetBudgetRequests))).Methods("GET")
+	api.Handle("/budget-requests", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(budgetHandler.CreateBudgetRequest))).Methods("POST")
+	api.Handle("/budget-requests/{id}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(budgetHandler.DeleteBudgetRequest))).Methods("DELETE")
+	api.Handle("/budget-requests/{id}/review", middleware.RequireRolesMiddleware(domain.RoleProgramChair)(http.HandlerFunc(budgetHandler.ReviewBudgetRequest))).Methods("PATCH")
+	api.Handle("/budget-reports/staff", middleware.RequireRolesMiddleware(domain.RoleProjectHead)(http.HandlerFunc(budgetHandler.GetProjectHeadStaffBudgetDocuments))).Methods("GET")
 	api.Handle("/budgets/chairs", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(budgetHandler.GetProgramChairBudgets))).Methods("GET")
 	api.Handle("/budgets/chairs/{chairId}", middleware.AdminOnlyMiddleware(http.HandlerFunc(budgetHandler.SetProgramChairBudget))).Methods("PATCH")
-	api.Handle("/budgets/chair-departments", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(budgetHandler.GetChairDepartmentBudgets))).Methods("GET")
+	api.Handle("/budgets/chair-departments", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead)(http.HandlerFunc(budgetHandler.GetChairDepartmentBudgets))).Methods("GET")
 	api.Handle("/budgets/chairs/{chairId}/departments/{departmentId}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(budgetHandler.SetChairDepartmentBudget))).Methods("PATCH")
 	api.Handle("/budgets/chairs/{chairId}/departments/{departmentId}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair)(http.HandlerFunc(budgetHandler.DeleteChairDepartmentBudget))).Methods("DELETE")
 

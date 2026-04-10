@@ -25,6 +25,7 @@ type CreateProjectTaskRequest struct {
 	Title       string   `json:"title"`
 	Description *string  `json:"description"`
 	AssigneeIDs []string `json:"assignee_ids"`
+	BudgetNeeded float64 `json:"budget_needed"`
 	Priority    string   `json:"priority"`
 	DueDate     *string  `json:"due_date"`
 }
@@ -36,6 +37,7 @@ type ProjectTask struct {
 	Title       string     `json:"title"`
 	Description *string    `json:"description"`
 	AssigneeIDs []string   `json:"assignee_ids"`
+	BudgetNeeded float64   `json:"budget_needed"`
 	Status      string     `json:"status"`
 	Priority    string     `json:"priority"`
 	DueDate     *time.Time `json:"due_date"`
@@ -54,6 +56,7 @@ type StaffTask struct {
 	Description *string    `json:"description"`
 	ProjectID   string     `json:"project_id"`
 	ProjectName string     `json:"project_name"`
+	BudgetNeeded float64   `json:"budget_needed"`
 	DateGiven   time.Time  `json:"date_given"`
 	Deadline    *time.Time `json:"deadline"`
 	Status      string     `json:"status"`

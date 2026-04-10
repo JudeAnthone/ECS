@@ -42,6 +42,7 @@ import {
   MoreVertical,
   Eye,
   FolderOpen,
+  XCircle,
 } from 'lucide-react'
 
 const API = 'http://localhost:8081/api/v1'
@@ -53,6 +54,7 @@ interface CurrentUser {
   first_name?: string
   last_name?: string
   department?: string
+  assigned_program_chair_id?: string | null
 }
 
 interface Program {
@@ -82,6 +84,7 @@ interface StaffUser {
   first_name: string
   last_name: string
   department?: string
+  assigned_program_chair_id?: string | null
   role: string
   avatar_url?: string | null
 }
@@ -95,6 +98,12 @@ interface ProgramChairUser {
   avatar_url?: string | null
 }
 
+interface ChairDepartmentBudget {
+  department_id?: string
+  allocated_budget?: number
+  spent_budget?: number
+}
+
 interface Project {
   id: string
   project_name: string
@@ -102,8 +111,12 @@ interface Project {
   program_id?: string | null
   department_id?: string | null
   created_by: string
+  created_by_role?: string | null
   project_head_id?: string | null
   budget_allocated?: number | null
+  budget_used?: number | null
+  start_date?: string | null
+  end_date?: string | null
   status: string
   approval_status: string
   created_at: string
@@ -114,11 +127,18 @@ interface ProjectStaffAssignment {
   staffIds: string[]
 }
 
+interface BudgetRequestRecord {
+  id: string
+  project_id: string
+  amount: number
+  status: string
+  created_at?: string
+}
+
 interface ProjectFormState {
   project_name: string
   project_description: string
   objectives: string
-  budget_allocated: string
   start_date: string
   end_date: string
 }
@@ -130,6 +150,7 @@ interface ProjectTask {
   project_id: string
   title: string
   description?: string
+  budget_needed: number
   assignee_ids: string[]
   assignee_id?: string
   status: TaskStatus
@@ -226,6 +247,9 @@ function ProgramStatusBadge({ status }: { status?: string | null }) {
 function LifecycleBadge({ status }: { status: string }) {
   const s = (status || '').toLowerCase()
   const style =
+    s === 'needs_funding'
+      ? 'bg-amber-100 text-amber-800 border-amber-200'
+      :
     s === 'in_progress'
       ? 'bg-green-100 text-green-800 border-green-200'
       : s === 'planning'
@@ -246,10 +270,10 @@ function VerificationBadge({ project }: { project: Project }) {
     return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-emerald-100 text-emerald-800 border-emerald-200">FINAL APPROVED</span>
   }
   if (project.approval_status === 'rejected') {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-red-100 text-red-800 border-red-200">FINAL REJECTED</span>
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-red-100 text-red-800 border-red-200">FINAL DECLINED</span>
   }
   if (isForwarded) {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-indigo-100 text-indigo-800 border-indigo-200">PENDING FINAL APPROVAL</span>
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-indigo-100 text-indigo-800 border-indigo-200">PENDING CHAIR FINAL REVIEW</span>
   }
   return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-amber-100 text-amber-800 border-amber-200">AWAITING HEAD REVIEW</span>
 }
@@ -258,7 +282,6 @@ const emptyForm: ProjectFormState = {
   project_name: '',
   project_description: '',
   objectives: '',
-  budget_allocated: '',
   start_date: '',
   end_date: '',
 }
@@ -287,6 +310,7 @@ export default function ProjectHeadRequestManagement() {
   const [searchProgramProjects, setSearchProgramProjects] = useState('')
   const [filterProjectOwner, setFilterProjectOwner] = useState<'all' | 'mine'>('all')
   const [filterProjectVerification, setFilterProjectVerification] = useState<'all' | 'accepted' | 'pending' | 'rejected'>('all')
+  const [filterProjectLifecycle, setFilterProjectLifecycle] = useState<'all' | 'needs_funding' | 'in_progress'>('all')
   const [programProjectsTab, setProgramProjectsTab] = useState<ProgramProjectsTab>('all')
   const [selectedAssignProjectID, setSelectedAssignProjectID] = useState<string | null>(null)
   const [assignStaffError, setAssignStaffError] = useState('')
@@ -306,6 +330,9 @@ export default function ProjectHeadRequestManagement() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [creatingProject, setCreatingProject] = useState(false)
+  const [createBudgetCap, setCreateBudgetCap] = useState<number | null>(null)
+  const [createBudgetSpent, setCreateBudgetSpent] = useState<number>(0)
+  const [createBudgetLoading, setCreateBudgetLoading] = useState(false)
   const [acceptingRequestID, setAcceptingRequestID] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState<ProjectFormState>(emptyForm)
   const [createError, setCreateError] = useState('')
@@ -315,16 +342,21 @@ export default function ProjectHeadRequestManagement() {
   const [deletingProject, setDeletingProject] = useState(false)
 
   const [staffAssignments, setStaffAssignments] = useState<ProjectStaffAssignment[]>([])
+  const [budgetRequests, setBudgetRequests] = useState<BudgetRequestRecord[]>([])
   const [taskProjectID, setTaskProjectID] = useState<string | null>(null)
   const [selectProjectDialog, setSelectProjectDialog] = useState(false)
   const [projectTasks, setProjectTasks] = useState<ProjectTask[]>([])
   const [taskFilterStatus, setTaskFilterStatus] = useState<'all' | TaskStatus>('all')
   const [taskError, setTaskError] = useState('')
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [toastVisible, setToastVisible] = useState(false)
+  const [deleteTaskDialog, setDeleteTaskDialog] = useState<ProjectTask | null>(null)
   const [didRestoreSession, setDidRestoreSession] = useState(false)
   const [taskForm, setTaskForm] = useState({
     title: '',
     description: '',
     assignee_ids: [] as string[],
+    budget_needed: '',
     priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
     due_date: '',
   })
@@ -339,6 +371,7 @@ export default function ProjectHeadRequestManagement() {
         first_name: u.first_name,
         last_name: u.last_name,
         department: u.department,
+        assigned_program_chair_id: u.assigned_program_chair_id || null,
       })
     } catch {
       setCurrentUser(null)
@@ -401,6 +434,17 @@ export default function ProjectHeadRequestManagement() {
     }
   }, [taskProjectID, didRestoreSession])
 
+  useEffect(() => {
+    if (!toast) return
+    setToastVisible(true)
+    const hideTimer = setTimeout(() => setToastVisible(false), 2700)
+    const clearTimer = setTimeout(() => setToast(null), 3000)
+    return () => {
+      clearTimeout(hideTimer)
+      clearTimeout(clearTimer)
+    }
+  }, [toast])
+
   const loadData = useCallback(async () => {
     if (!currentUser?.id) return
 
@@ -408,11 +452,12 @@ export default function ProjectHeadRequestManagement() {
     setError('')
 
     try {
-      const [programRes, deptRes, staffRes, chairRes] = await Promise.all([
+      const [programRes, deptRes, staffRes, chairRes, budgetReqRes] = await Promise.all([
         fetch(`${API}/programs`, { headers: authHeaders() }),
         fetch(`${API}/departments`, { headers: authHeaders() }),
         fetch(`${API}/users/by-role?role=staff`, { headers: authHeaders() }),
         fetch(`${API}/users/by-role?role=program_chair`, { headers: authHeaders() }),
+        fetch(`${API}/budget-requests`, { headers: authHeaders() }),
       ])
 
       if (!programRes.ok) throw new Error('Failed to load programs')
@@ -423,11 +468,30 @@ export default function ProjectHeadRequestManagement() {
       const deptData = await deptRes.json()
       const staffData = await staffRes.json()
       const chairData = chairRes.ok ? await chairRes.json() : { users: [] }
+      const budgetReqData = budgetReqRes.ok ? await budgetReqRes.json() : { requests: [] }
 
       const programs: Program[] = programData.programs || []
       const departments: Department[] = deptData.departments || []
       const staffs: StaffUser[] = staffData.users || []
       const chairs: ProgramChairUser[] = chairData.users || []
+      const reqsRaw: Array<Record<string, unknown>> = Array.isArray(budgetReqData?.requests)
+        ? (budgetReqData.requests as Array<Record<string, unknown>>)
+        : Array.isArray(budgetReqData?.budget_requests)
+        ? (budgetReqData.budget_requests as Array<Record<string, unknown>>)
+        : []
+      const parsedBudgetRequests: BudgetRequestRecord[] = reqsRaw
+        .map((r) => {
+          const amount = typeof r.amount === 'number' ? r.amount : Number(r.amount)
+          return {
+            id: String(r.id || ''),
+            project_id: String(r.project_id || ''),
+            amount: Number.isFinite(amount) ? amount : 0,
+            status: String(r.status || ''),
+            created_at: String(r.created_at || ''),
+          }
+        })
+        .filter((r) => r.id && r.project_id)
+      setBudgetRequests(parsedBudgetRequests)
 
       const meDept = normalize(currentUser.department)
       const mappedDept = departments.find(d => normalize(d.department_code) === meDept || normalize(d.department_name) === meDept)
@@ -438,6 +502,7 @@ export default function ProjectHeadRequestManagement() {
         setDepartmentStaff([])
         setAllProjects([])
         setStaffAssignments([])
+        setBudgetRequests([])
         setError('Your account department is not mapped to an active department record.')
         setLoading(false)
         return
@@ -456,6 +521,7 @@ export default function ProjectHeadRequestManagement() {
       if (scopedDeptPrograms.length === 0) {
         setAllProjects([])
         setStaffAssignments([])
+        setBudgetRequests([])
         setLoading(false)
         return
       }
@@ -504,6 +570,7 @@ export default function ProjectHeadRequestManagement() {
       setProgramChairs([])
       setAllProjects([])
       setStaffAssignments([])
+      setBudgetRequests([])
     } finally {
       setLoading(false)
     }
@@ -524,12 +591,13 @@ export default function ProjectHeadRequestManagement() {
   const userNameByID = useMemo(() => {
     const map = new Map<string, string>()
     departmentStaff.forEach(s => map.set(s.id, `${s.first_name} ${s.last_name}`.trim()))
+    programChairs.forEach(c => map.set(c.id, `${c.first_name} ${c.last_name}`.trim()))
     if (currentUser?.id) {
       const meName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim()
       if (meName) map.set(currentUser.id, meName)
     }
     return map
-  }, [departmentStaff, currentUser])
+  }, [departmentStaff, programChairs, currentUser])
 
   const staffByID = useMemo(() => {
     const map = new Map<string, StaffUser>()
@@ -597,8 +665,95 @@ export default function ProjectHeadRequestManagement() {
       filtered = filtered.filter(p => p.approval_status === 'rejected')
     }
 
+    if (filterProjectLifecycle === 'needs_funding') {
+      filtered = filtered.filter(p => {
+        if (normalize(p.approval_status) !== 'approved') return false
+        const hasApprovedRequest = budgetRequests.some(
+          req => req.project_id === p.id && normalize(req.status) === 'approved'
+        )
+        return !hasApprovedRequest
+      })
+    } else if (filterProjectLifecycle === 'in_progress') {
+      filtered = filtered.filter(p => normalize(p.status) === 'in_progress')
+    }
+
     return filtered
-  }, [selectedProgramProjects, currentUser, filterProjectOwner, filterProjectVerification])
+  }, [selectedProgramProjects, currentUser, filterProjectOwner, filterProjectVerification, filterProjectLifecycle, budgetRequests])
+
+  useEffect(() => {
+    const loadCreateBudgetCap = async () => {
+      if (!selectedProgram?.department_id) {
+        setCreateBudgetCap(null)
+        setCreateBudgetSpent(0)
+        return
+      }
+
+      const chairID = selectedProgram.program_chair_id || currentUser?.assigned_program_chair_id
+      if (!chairID) {
+        setCreateBudgetCap(null)
+        setCreateBudgetSpent(0)
+        return
+      }
+
+      setCreateBudgetLoading(true)
+      try {
+        const res = await fetch(
+          `${API}/budgets/chair-departments?chair_id=${chairID}&department_id=${selectedProgram.department_id}`,
+          { headers: authHeaders() }
+        )
+        if (!res.ok) {
+          setCreateBudgetCap(null)
+          setCreateBudgetSpent(0)
+          return
+        }
+        const data = await res.json()
+        const item: ChairDepartmentBudget | undefined = data?.chair_department_budgets?.[0]
+        const allocated = Number(item?.allocated_budget || 0)
+        const spent = Number(item?.spent_budget || 0)
+        setCreateBudgetCap(Number.isFinite(allocated) ? allocated : null)
+        setCreateBudgetSpent(Number.isFinite(spent) ? spent : 0)
+      } catch {
+        setCreateBudgetCap(null)
+        setCreateBudgetSpent(0)
+      } finally {
+        setCreateBudgetLoading(false)
+      }
+    }
+
+    void loadCreateBudgetCap()
+  }, [selectedProgram?.id, selectedProgram?.department_id, selectedProgram?.program_chair_id, currentUser?.assigned_program_chair_id])
+
+  const createBudgetConsumed = useMemo(() => {
+    return selectedProgramProjects.reduce((sum, project) => {
+      const status = normalize(project.status)
+      const approval = normalize(project.approval_status)
+      if (approval === 'rejected' || status === 'cancelled') {
+        return sum
+      }
+      return sum + Number(project.budget_allocated || 0)
+    }, 0)
+  }, [selectedProgramProjects])
+
+  const createBudgetRemaining = useMemo(() => {
+    if (createBudgetCap == null) return 0
+    return Math.max(createBudgetCap - createBudgetSpent, 0)
+  }, [createBudgetCap, createBudgetSpent])
+
+  const hasCurrentCreateBudget = createBudgetCap != null && createBudgetRemaining > 0
+
+  const selectedProgramDepartmentBudget = createBudgetCap ?? 0
+  const selectedProgramApprovedBudget = useMemo(() => {
+    return createBudgetSpent
+  }, [createBudgetSpent])
+
+  const selectedProgramUsedBudget = useMemo(() => {
+    return selectedProgramProjects.reduce((sum, project) => sum + Number(project.budget_used || 0), 0)
+  }, [selectedProgramProjects])
+
+  const selectedProgramRemainingBudget = selectedProgramDepartmentBudget - selectedProgramApprovedBudget
+  const selectedProgramUsedPct = selectedProgramDepartmentBudget > 0
+    ? Math.min(100, Math.round((selectedProgramApprovedBudget / selectedProgramDepartmentBudget) * 100))
+    : 0
 
   const selectedAssignProject = useMemo(
     () => selectedProgramProjects.find(p => p.id === selectedAssignProjectID) || null,
@@ -609,9 +764,66 @@ export default function ProjectHeadRequestManagement() {
     return normalize(project?.approval_status) === 'approved'
   }, [])
 
+  const approvedBudgetByProject = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const req of budgetRequests) {
+      if (normalize(req.status) !== 'approved') continue
+      const prev = map.get(req.project_id) || 0
+      map.set(req.project_id, prev + Number(req.amount || 0))
+    }
+    return map
+  }, [budgetRequests])
+
+  const approvedBudgetRequestCountByProject = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const req of budgetRequests) {
+      if (normalize(req.status) !== 'approved') continue
+      const prev = map.get(req.project_id) || 0
+      map.set(req.project_id, prev + 1)
+    }
+    return map
+  }, [budgetRequests])
+
+  const hasApprovedBudgetRequest = useCallback((projectID?: string | null) => {
+    if (!projectID) return false
+    return (approvedBudgetRequestCountByProject.get(projectID) || 0) > 0
+  }, [approvedBudgetRequestCountByProject])
+
+  const projectNeedsFunding = useCallback((project?: Project | null) => {
+    if (!project) return false
+    const isApproved = normalize(project.approval_status) === 'approved'
+    const hasBudgetAllocated = project.budget_allocated && project.budget_allocated > 0
+    const hasApprovedRequest = hasApprovedBudgetRequest(project.id)
+    return isApproved && !hasBudgetAllocated && !hasApprovedRequest
+  }, [hasApprovedBudgetRequest])
+
+  const projectLifecycleLabel = useCallback((project: Project) => {
+    if (projectNeedsFunding(project)) return 'needs_funding'
+    return project.status
+  }, [projectNeedsFunding])
+
+  const projectBudgetDisplay = useCallback((project: Project) => {
+    if (projectNeedsFunding(project)) return 0
+    return Number(approvedBudgetByProject.get(project.id) || project.budget_allocated || 0)
+  }, [approvedBudgetByProject, projectNeedsFunding])
+
+  const requesterRole = useCallback((project?: Project | null) => {
+    if (!project) return 'Unknown Role'
+    if (project.created_by_role) {
+      const role = (project.created_by_role || '').trim()
+      if (role) {
+        return role
+          .split('_')
+          .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+          .join(' ')
+      }
+    }
+    return 'Unknown Role'
+  }, [])
+
   const taskManageProjects = useMemo(
-    () => selectedProgramProjects.filter(p => isProjectApproved(p)),
-    [selectedProgramProjects, isProjectApproved]
+    () => selectedProgramProjects.filter(p => isProjectApproved(p) && hasApprovedBudgetRequest(p.id)),
+    [selectedProgramProjects, isProjectApproved, hasApprovedBudgetRequest]
   )
 
   const selectedTaskProject = useMemo(
@@ -621,11 +833,15 @@ export default function ProjectHeadRequestManagement() {
 
   const filteredDepartmentStaff = useMemo(() => {
     const q = staffSearch.toLowerCase()
+    const requiredChairID = selectedProgram?.program_chair_id || currentUser?.assigned_program_chair_id || null
     return departmentStaff.filter(staff => {
+      if (requiredChairID && staff.assigned_program_chair_id !== requiredChairID) {
+        return false
+      }
       const fullName = `${staff.first_name} ${staff.last_name}`.toLowerCase()
       return fullName.includes(q)
     })
-  }, [departmentStaff, staffSearch])
+  }, [departmentStaff, staffSearch, selectedProgram?.program_chair_id, currentUser?.assigned_program_chair_id])
 
   const getAssignedStaffIDs = (projectID: string) => {
     return staffAssignments.find(a => a.projectId === projectID)?.staffIds || []
@@ -643,6 +859,42 @@ export default function ProjectHeadRequestManagement() {
     if (taskFilterStatus === 'all') return tasks
     return tasks.filter(t => t.status === taskFilterStatus)
   }, [projectTasks, selectedTaskProject, taskFilterStatus])
+
+  const taskBudgetSummary = useMemo(() => {
+    if (!selectedTaskProject) {
+      return {
+        allocated: 0,
+        used: 0,
+        approvedRequestPool: 0,
+        committedTaskBudget: 0,
+        requestPoolRemaining: 0,
+        remaining: 0,
+      }
+    }
+
+    // Allocated budget should reflect the sum of all approved budget requests for this project
+    const allocated = Number(approvedBudgetByProject.get(selectedTaskProject.id) || 0)
+    const used = Number(selectedTaskProject.budget_used || 0)
+    const approvedRequestPool = allocated
+    const committedTaskBudget = projectTasks
+      .filter(task => task.project_id === selectedTaskProject.id && task.status !== 'cancelled')
+      .reduce((sum, task) => sum + Number(task.budget_needed || 0), 0)
+    const requestPoolRemaining = Math.max(approvedRequestPool - committedTaskBudget, 0)
+
+    return {
+      allocated,
+      used,
+      approvedRequestPool,
+      committedTaskBudget,
+      requestPoolRemaining,
+      remaining: Math.max(allocated - used, 0),
+    }
+  }, [selectedTaskProject, approvedBudgetByProject, projectTasks])
+
+  const canManageSpendForSelectedTaskProject = useMemo(() => {
+    if (!selectedTaskProject) return false
+    return hasApprovedBudgetRequest(selectedTaskProject.id)
+  }, [selectedTaskProject, hasApprovedBudgetRequest])
 
   const applyStaffAssignmentChange = async (projectID: string, staffID: string, applyUnassignTaskRules: boolean) => {
     const previousAssignments = staffAssignments
@@ -768,13 +1020,6 @@ export default function ProjectHeadRequestManagement() {
     setCreatingProject(true)
     setCreateError('')
 
-    const budget = createForm.budget_allocated.trim() === '' ? null : Number(createForm.budget_allocated)
-    if (budget !== null && Number.isNaN(budget)) {
-      setCreateError('Budget must be a valid number.')
-      setCreatingProject(false)
-      return
-    }
-
     try {
       const res = await fetch(`${API}/projects`, {
         method: 'POST',
@@ -783,7 +1028,7 @@ export default function ProjectHeadRequestManagement() {
           project_name: createForm.project_name.trim(),
           project_description: createForm.project_description.trim() || null,
           objectives: createForm.objectives.trim() || null,
-          budget_allocated: budget,
+          budget_allocated: null,
           start_date: createForm.start_date || null,
           end_date: createForm.end_date || null,
           program_id: selectedProgram.id,
@@ -807,6 +1052,7 @@ export default function ProjectHeadRequestManagement() {
       setCreateOpen(false)
       setCreateForm(emptyForm)
       await loadData()
+      showToast('Project request submitted successfully.', 'success')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to create project'
       setCreateError(msg)
@@ -820,6 +1066,7 @@ export default function ProjectHeadRequestManagement() {
     setSearchProgramProjects('')
     setFilterProjectOwner('all')
     setFilterProjectVerification('all')
+    setFilterProjectLifecycle('all')
     setProgramProjectsTab('all')
     setSelectedAssignProjectID(null)
     setTaskProjectID(null)
@@ -867,12 +1114,16 @@ export default function ProjectHeadRequestManagement() {
         const assigneeIDs = Array.isArray(task.assignee_ids)
           ? task.assignee_ids.filter((id: unknown): id is string => typeof id === 'string')
           : []
+        const parsedBudget = typeof task.budget_needed === 'number'
+          ? task.budget_needed
+          : Number(task.budget_needed)
 
         const normalized: ProjectTask = {
           id: String(task.id || ''),
           project_id: String(task.project_id || projectID),
           title: String(task.title || ''),
           description: typeof task.description === 'string' ? task.description : undefined,
+          budget_needed: Number.isFinite(parsedBudget) ? parsedBudget : 0,
           assignee_ids: assigneeIDs,
           assignee_id: assigneeIDs[0],
           status: toUiTaskStatus(typeof task.status === 'string' ? task.status : undefined),
@@ -912,6 +1163,23 @@ export default function ProjectHeadRequestManagement() {
       return
     }
 
+    const taskBudget = Number(taskForm.budget_needed)
+    if (!Number.isFinite(taskBudget) || taskBudget <= 0) {
+      setTaskError('Task funds needed must be greater than 0.')
+      return
+    }
+
+    if (!canManageSpendForSelectedTaskProject) {
+      setTaskError('This project has no approved budget request yet. Program Chair must approve at least one budget request first.')
+      return
+    }
+
+    const remainingBudget = taskBudgetSummary.requestPoolRemaining
+    if (taskBudget > remainingBudget) {
+      setTaskError(`Task funds needed exceed remaining approved request pool (${fmtBudget(remainingBudget)}).`)
+      return
+    }
+
     try {
       const res = await fetch(`${API}/projects/${selectedTaskProject.id}/tasks`, {
         method: 'POST',
@@ -920,6 +1188,7 @@ export default function ProjectHeadRequestManagement() {
           title: taskForm.title.trim(),
           description: taskForm.description.trim() || null,
           assignee_ids: selectedAssigneeIDs,
+          budget_needed: taskBudget,
           priority: toApiPriority(taskForm.priority),
           due_date: taskForm.due_date || null,
         }),
@@ -930,8 +1199,9 @@ export default function ProjectHeadRequestManagement() {
       }
 
       await loadProjectTasks(selectedTaskProject.id)
-      setTaskForm({ title: '', description: '', assignee_ids: [], priority: 'medium', due_date: '' })
+      setTaskForm({ title: '', description: '', assignee_ids: [], budget_needed: '', priority: 'medium', due_date: '' })
       setTaskError('')
+      await loadData()
     } catch (err) {
       setTaskError(err instanceof Error ? err.message : 'Failed to create task.')
     }
@@ -975,7 +1245,9 @@ export default function ProjectHeadRequestManagement() {
       if (selectedTaskProject?.id) {
         await loadProjectTasks(selectedTaskProject.id)
       }
+      await loadData()
       setTaskError('')
+      showToast('Task deleted successfully.', 'success')
     } catch (err) {
       setProjectTasks(prevTasks)
       setTaskError(err instanceof Error ? err.message : 'Failed to delete task.')
@@ -1022,6 +1294,10 @@ export default function ProjectHeadRequestManagement() {
   const openAssignStaffForProject = (project: Project) => {
     if (!isProjectApproved(project)) {
       setAssignStaffError('Only approved projects can have staff assigned.')
+      return
+    }
+    if (!hasApprovedBudgetRequest(project.id)) {
+      setAssignStaffError('This project has no approved budget request yet. Ask for approval first before assigning staff for spend-related work.')
       return
     }
     setAssignStaffError('')
@@ -1118,9 +1394,20 @@ export default function ProjectHeadRequestManagement() {
       .join(' ')
   }
 
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type })
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
       <div className="max-w-[1920px] mx-auto space-y-6">
+        {toast && (
+          <div className="fixed top-4 right-4 z-50">
+            <div className={`rounded-lg shadow-lg px-4 py-3 text-sm font-medium transition-all duration-300 ${toastVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'} ${toast.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border-red-200'}`}>
+              {toast.message}
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">{selectedProgram ? selectedProgram.program_name : 'Project Management'}</h1>
@@ -1134,21 +1421,6 @@ export default function ProjectHeadRequestManagement() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {selectedProgram && (
-              <Button
-                className="bg-slate-900 hover:bg-slate-800"
-                disabled={selectedProgramIsCancelled}
-                title={selectedProgramIsCancelled ? 'Cannot add projects to a cancelled program' : undefined}
-                onClick={() => {
-                  if (selectedProgramIsCancelled) return
-                  setCreateForm(emptyForm)
-                  setCreateError('')
-                  setCreateOpen(true)
-                }}
-              >
-                <Plus className="h-4 w-4 mr-1.5" /> Create Project
-              </Button>
-            )}
             <Button variant="outline" size="sm" onClick={loadData} disabled={loading || !currentUser?.id}>
               <RotateCcw className={`h-4 w-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -1248,6 +1520,7 @@ export default function ProjectHeadRequestManagement() {
                                   onClick={() => {
                                     setSelectedProgramID(p.id)
                                     setSearchProgramProjects('')
+                                    setFilterProjectLifecycle('all')
                                     setProgramProjectsTab('all')
                                     setSelectedAssignProjectID(null)
                                     setStaffSearch('')
@@ -1301,6 +1574,7 @@ export default function ProjectHeadRequestManagement() {
                           setSelectedProgramID(null)
                           setProgramProjectsTab('all')
                           setSelectedAssignProjectID(null)
+                          setFilterProjectLifecycle('all')
                           setStaffSearch('')
                         }}
                       >
@@ -1312,7 +1586,11 @@ export default function ProjectHeadRequestManagement() {
                     <Button
                       className="bg-slate-900 hover:bg-slate-800"
                       disabled={selectedProgramIsCancelled}
-                      title={selectedProgramIsCancelled ? 'Cannot add projects to a cancelled program' : undefined}
+                      title={
+                        selectedProgramIsCancelled
+                          ? 'Cannot add projects to a cancelled program'
+                          : undefined
+                      }
                       onClick={() => {
                         if (selectedProgramIsCancelled) return
                         setCreateForm(emptyForm)
@@ -1325,6 +1603,35 @@ export default function ProjectHeadRequestManagement() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium text-slate-700">Department Allocation Budget</span>
+                      <span className="text-xs text-slate-500">{selectedProgramUsedPct}% utilized</span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2.5 mb-3">
+                      <div
+                        className={`h-2.5 rounded-full transition-all ${selectedProgramUsedPct >= 100 ? 'bg-red-500' : selectedProgramUsedPct >= 75 ? 'bg-orange-400' : 'bg-green-500'}`}
+                        style={{ width: `${selectedProgramUsedPct}%` }}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="bg-slate-50 rounded-lg p-3">
+                        <div className="text-xs text-slate-500 mb-0.5">Department Allocation</div>
+                        <div className="text-sm font-bold text-slate-800">{fmtBudget(selectedProgramDepartmentBudget)}</div>
+                      </div>
+                      <div className="bg-slate-50 rounded-lg p-3">
+                        <div className="text-xs text-slate-500 mb-0.5">Approved Total</div>
+                        <div className="text-sm font-bold text-slate-800">{fmtBudget(selectedProgramApprovedBudget)}</div>
+                      </div>
+                      <div className={`rounded-lg p-3 ${selectedProgramRemainingBudget < 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+                        <div className="text-xs text-slate-500 mb-0.5">Remaining</div>
+                        <div className={`text-sm font-bold ${selectedProgramRemainingBudget < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                          {fmtBudget(selectedProgramRemainingBudget)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden">
                     <button
                       type="button"
@@ -1348,7 +1655,7 @@ export default function ProjectHeadRequestManagement() {
                           setTaskProjectID(taskManageProjects[0].id)
                         }
                       }}
-                      className={`px-3 py-1.5 text-sm border-l border-slate-200 ${programProjectsTab === 'task_management' ? 'bg-purple-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                      className={`px-3 py-1.5 text-sm border-l border-slate-200 ${programProjectsTab === 'task_management' ? 'bg-[#BA0021] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
                     >
                       Task Management
                     </button>
@@ -1382,7 +1689,17 @@ export default function ProjectHeadRequestManagement() {
                           <SelectItem value="all">All Verification</SelectItem>
                           <SelectItem value="accepted">Accepted</SelectItem>
                           <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="rejected">Rejected</SelectItem>
+                          <SelectItem value="rejected">Declined</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={filterProjectLifecycle} onValueChange={(v: 'all' | 'needs_funding' | 'in_progress') => setFilterProjectLifecycle(v)}>
+                        <SelectTrigger className="w-full md:w-[190px]">
+                          <SelectValue placeholder="All Lifecycle" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white">
+                          <SelectItem value="all">All Lifecycle</SelectItem>
+                          <SelectItem value="needs_funding">Needs Funding</SelectItem>
+                          <SelectItem value="in_progress">In Progress</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1404,7 +1721,7 @@ export default function ProjectHeadRequestManagement() {
                                           {/* If program is cancelled, show a warning for in-progress projects (rendered after the table/empty state) */}
                                           {selectedProgramIsCancelled && selectedProgramProjectsByTab.some(p => p.status === 'in_progress') && (
                                             <div className="text-center py-4 text-red-700 font-semibold">
-                                              Warning: This program is cancelled, but there are still projects marked as "in progress". Please review and close or reassign these projects as appropriate.
+                                              Warning: This program is cancelled, but there are still projects marked as &quot;in progress&quot;. Please review and close or reassign these projects as appropriate.
                                             </div>
                                           )}
                         <thead>
@@ -1413,6 +1730,7 @@ export default function ProjectHeadRequestManagement() {
                             <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Requested By</th>
                             <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Lifecycle</th>
                             <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Verification</th>
+                            <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Budget</th>
                             <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Created</th>
                             <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions</th>
                           </tr>
@@ -1438,12 +1756,15 @@ export default function ProjectHeadRequestManagement() {
                                       </span>
                                     )
                                   })()}
-                                  <span>{userNameByID.get(p.created_by) || p.created_by}</span>
+                                  <div>
+                                    <span className="block">{userNameByID.get(p.created_by) || p.created_by}</span>
+                                    <span className="block text-[11px] text-slate-500">{requesterRole(p)}</span>
+                                  </div>
                                 </span>
-                                <span className="block text-[11px] text-slate-500 mt-1 ml-8">{requesterRoleLabel(p.created_by)}</span>
                               </td>
-                              <td className="px-4 py-3"><LifecycleBadge status={p.status} /></td>
+                              <td className="px-4 py-3"><LifecycleBadge status={projectLifecycleLabel(p)} /></td>
                               <td className="px-4 py-3"><VerificationBadge project={p} /></td>
+                              <td className="px-4 py-3 font-medium text-slate-900">{fmtBudget(projectBudgetDisplay(p))}</td>
                               <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">{fmtDate(p.created_at)}</td>
                               <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                                 <DropdownMenu>
@@ -1466,13 +1787,13 @@ export default function ProjectHeadRequestManagement() {
                                       Accept Staff Request
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
-                                      disabled={!isProjectApproved(p)}
+                                      disabled={!isProjectApproved(p) || !hasApprovedBudgetRequest(p.id)}
                                       onClick={() => openAssignStaffForProject(p)}
                                     >
                                       <UserPlus className="w-4 h-4 mr-2" /> Assign Staff
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
-                                      disabled={!isProjectApproved(p)}
+                                      disabled={!isProjectApproved(p) || !hasApprovedBudgetRequest(p.id)}
                                       onClick={() => openTaskManagementForProject(p.id)}
                                     >
                                       <ClipboardList className="w-4 h-4 mr-2" /> Manage Tasks
@@ -1492,7 +1813,8 @@ export default function ProjectHeadRequestManagement() {
                     <div className="space-y-4">
                       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                         <p className="font-semibold text-slate-900">Staff Assignment Workspace</p>
-                        <p className="text-slate-600">Select a project to assign department staff. This mirrors the requested assign workflow tab.</p>
+                        <p className="text-slate-600">Select a project to assign department staff tied to this program chair.</p>
+                        <p className="text-amber-700 mt-1">Assignment is enabled only when the project has at least one approved budget request.</p>
                       </div>
                       {assignStaffError && (
                         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -1511,11 +1833,15 @@ export default function ProjectHeadRequestManagement() {
                             ) : selectedProgramProjects.map(project => (
                               <button
                                 key={project.id}
-                                disabled={!isProjectApproved(project)}
-                                className={`w-full text-left px-4 py-3 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed ${selectedAssignProjectID === project.id ? 'bg-teal-50' : ''}`}
+                                disabled={!isProjectApproved(project) || !hasApprovedBudgetRequest(project.id)}
+                                className={`w-full text-left px-4 py-3 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed ${selectedAssignProjectID === project.id ? 'bg-red-50' : ''}`}
                                 onClick={() => {
                                   if (!isProjectApproved(project)) {
                                     setAssignStaffError('Only approved projects can have staff assigned.')
+                                    return
+                                  }
+                                  if (!hasApprovedBudgetRequest(project.id)) {
+                                    setAssignStaffError('This project has no approved budget request yet.')
                                     return
                                   }
                                   setAssignStaffError('')
@@ -1524,14 +1850,17 @@ export default function ProjectHeadRequestManagement() {
                               >
                                 <p className="text-sm font-medium text-slate-900">{project.project_name}</p>
                                 <p className="text-xs text-slate-500 mt-0.5">
-                                  {project.approval_status === 'approved'
-                                    ? 'Final approved'
+                                  {projectNeedsFunding(project)
+                                    ? 'Final approved - Needs funding'
+                                    : project.approval_status === 'approved'
+                                      ? 'Final approved'
                                     : project.approval_status === 'rejected'
-                                      ? 'Final rejected'
+                                      ? 'Final declined'
                                       : project.project_head_id && project.status !== 'pending_approval'
-                                        ? 'Pending final approval'
+                                        ? 'Pending chair final review'
                                         : 'Awaiting head review'}
                                 </p>
+                                <p className="text-[11px] text-slate-500 mt-1">Approved requests: {approvedBudgetRequestCountByProject.get(project.id) || 0}</p>
                               </button>
                             ))}
                           </div>
@@ -1545,9 +1874,11 @@ export default function ProjectHeadRequestManagement() {
                             <p className="p-4 text-sm text-slate-500">Select a project first.</p>
                           ) : !isProjectApproved(selectedAssignProject) ? (
                             <p className="p-4 text-sm text-amber-700">This project is not approved. Staff assignment is only available for approved projects.</p>
+                          ) : !hasApprovedBudgetRequest(selectedAssignProject.id) ? (
+                            <p className="p-4 text-sm text-amber-700">No approved budget request found for this project yet. Program Chair must approve a budget request first.</p>
                           ) : (
                             <div className="p-3 space-y-3">
-                              <div className="rounded-md border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-800">
+                              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
                                 Assigning staff for: <span className="font-semibold">{selectedAssignProject.project_name}</span>
                               </div>
 
@@ -1563,7 +1894,7 @@ export default function ProjectHeadRequestManagement() {
 
                               <div className="max-h-[240px] overflow-y-auto divide-y divide-slate-100 border rounded-md">
                                 {filteredDepartmentStaff.length === 0 ? (
-                                  <p className="p-3 text-sm text-slate-500">No department staff found.</p>
+                                  <p className="p-3 text-sm text-slate-500">No eligible staff found for this program chair.</p>
                                 ) : filteredDepartmentStaff.map(staff => {
                                   const assigned = getAssignedStaffIDs(selectedAssignProject.id).includes(staff.id)
                                   return (
@@ -1604,11 +1935,11 @@ export default function ProjectHeadRequestManagement() {
                       ) : (
                         <>
                           {/* Project Overview Card */}
-                          <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+                          <Card className="bg-white border-slate-200 shadow-sm">
                             <CardContent className="p-6">
                               <div className="flex items-start justify-between mb-4">
                                 <div className="flex items-center gap-3">
-                                  <FolderKanban className="h-6 w-6 text-purple-600" />
+                                  <FolderKanban className="h-6 w-6 text-slate-500" />
                                   <div>
                                     <h3 className="text-lg font-semibold text-slate-900">{selectedTaskProject.project_name}</h3>
                                     <p className="text-sm text-slate-600">{departmentNameByID.get(selectedTaskProject.department_id || '') || '-'}</p>
@@ -1624,17 +1955,25 @@ export default function ProjectHeadRequestManagement() {
                                   <Button
                                     variant="outline"
                                     onClick={() => setSelectProjectDialog(true)}
-                                    className="border-purple-300 text-purple-700 hover:bg-purple-100"
+                                    className="border-red-300 text-red-700 hover:bg-red-50"
                                   >
                                     Change Project
                                   </Button>
                                 </div>
                               </div>
 
-                              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                              <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
                                 <div className="bg-white rounded-lg p-3 border border-slate-200">
-                                  <p className="text-xs text-slate-600 mb-1">Budget</p>
-                                  <p className="font-bold text-slate-900">{fmtBudget(selectedTaskProject.budget_allocated)}</p>
+                                  <p className="text-xs text-slate-600 mb-1">Allocated Budget</p>
+                                  <p className="font-bold text-slate-900">{fmtBudget(taskBudgetSummary.allocated)}</p>
+                                </div>
+                                <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                  <p className="text-xs text-slate-600 mb-1">Budget Used</p>
+                                  <p className="font-bold text-amber-700">{fmtBudget(taskBudgetSummary.used)}</p>
+                                </div>
+                                <div className="bg-white rounded-lg p-3 border border-slate-200">
+                                  <p className="text-xs text-slate-600 mb-1">Remaining Budget</p>
+                                  <p className="font-bold text-emerald-700">{fmtBudget(taskBudgetSummary.remaining)}</p>
                                 </div>
                                 <div className="bg-white rounded-lg p-3 border border-slate-200">
                                   <p className="text-xs text-slate-600 mb-1">Status</p>
@@ -1660,13 +1999,13 @@ export default function ProjectHeadRequestManagement() {
                               <div className="bg-white rounded-lg p-4 border border-slate-200">
                                 <div className="flex items-center justify-between mb-2">
                                   <h4 className="font-semibold text-slate-900 text-sm">Overall Progress</h4>
-                                  <span className="text-sm font-bold text-purple-600">
+                                  <span className="text-sm font-bold text-[#BA0021]">
                                     {visibleProjectTasks.length === 0 ? 0 : Math.round((visibleProjectTasks.filter(t => t.status === 'completed').length / visibleProjectTasks.length) * 100)}%
                                   </span>
                                 </div>
                                 <div className="w-full bg-slate-200 rounded-full h-2">
                                   <div 
-                                    className="bg-purple-600 h-2 rounded-full transition-all"
+                                    className="bg-[#BA0021] h-2 rounded-full transition-all"
                                     style={{ width: `${visibleProjectTasks.length === 0 ? 0 : Math.round((visibleProjectTasks.filter(t => t.status === 'completed').length / visibleProjectTasks.length) * 100)}%` }}
                                   />
                                 </div>
@@ -1691,9 +2030,24 @@ export default function ProjectHeadRequestManagement() {
                                 rows={2}
                                 value={taskForm.description}
                                 onChange={e => setTaskForm(prev => ({ ...prev, description: e.target.value }))}
-                                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#BA0021]"
                                 placeholder="Task description (optional)"
                               />
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Funds Needed (PHP)</p>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    step="0.01"
+                                    value={taskForm.budget_needed}
+                                    onChange={e => setTaskForm(prev => ({ ...prev, budget_needed: e.target.value }))}
+                                    className="bg-white"
+                                    placeholder="e.g. 5000"
+                                  />
+                                  <p className="text-[11px] text-slate-500">Remaining approved request pool: {fmtBudget(taskBudgetSummary.requestPoolRemaining)}</p>
+                                </div>
+                              </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="rounded-md border border-slate-200 bg-white p-2 max-h-[160px] overflow-y-auto">
                                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Assignees</p>
@@ -1758,14 +2112,19 @@ export default function ProjectHeadRequestManagement() {
                               )}
                               {assignedTaskStaff.length === 0 && (
                                 <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                                  No staff assigned yet. Use the "Assign Staff" tab to add department staff to this project first.
+                                  No staff assigned yet. Use the &quot;Assign Staff&quot; tab to add department staff to this project first.
+                                </div>
+                              )}
+                              {!canManageSpendForSelectedTaskProject && (
+                                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                                  No approved budget request found for this project yet. Program Chair approval is required before creating budgeted tasks.
                                 </div>
                               )}
                               <div className="flex justify-end">
                                 <Button
                                   onClick={createTaskForProject}
-                                  disabled={assignedTaskStaff.length === 0}
-                                  className="bg-purple-600 hover:bg-purple-700"
+                                  disabled={assignedTaskStaff.length === 0 || !canManageSpendForSelectedTaskProject}
+                                  className="bg-[#BA0021] hover:bg-[#930018] text-white"
                                 >
                                   <Plus className="h-4 w-4 mr-2" />
                                   Create Task
@@ -1846,7 +2205,7 @@ export default function ProjectHeadRequestManagement() {
                                             <Button
                                               variant="ghost"
                                               size="sm"
-                                              onClick={() => deleteTask(task.id)}
+                                              onClick={() => setDeleteTaskDialog(task)}
                                               className="text-red-600 hover:bg-red-50"
                                             >
                                               <Trash2 className="h-4 w-4" />
@@ -1861,8 +2220,11 @@ export default function ProjectHeadRequestManagement() {
                                                   ? 'Cancelled'
                                                   : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
                                             </span>
-                                            <span className="px-2 py-1 rounded-full border font-medium bg-purple-100 text-purple-700 border-purple-200">
+                                            <span className="px-2 py-1 rounded-full border font-medium bg-red-100 text-red-700 border-red-200">
                                               {(task.priority || 'medium').charAt(0).toUpperCase() + (task.priority || 'medium').slice(1)}
+                                            </span>
+                                            <span className="px-2 py-1 rounded-full border font-medium bg-amber-100 text-amber-800 border-amber-200">
+                                              Funds: {fmtBudget(task.budget_needed)}
                                             </span>
                                             <div className="flex flex-wrap items-center gap-2">
                                               <span className="text-slate-600">Assigned to:</span>
@@ -1926,11 +2288,11 @@ export default function ProjectHeadRequestManagement() {
                                 ) : taskManageProjects.map(project => (
                                   <button
                                     key={project.id}
-                                    className={`w-full text-left px-3 py-2 rounded-lg border transition-all ${taskProjectID === project.id ? 'bg-purple-100 border-purple-300' : 'border-slate-200 hover:bg-slate-50'}`}
+                                    className={`w-full text-left px-3 py-2 rounded-lg border transition-all ${taskProjectID === project.id ? 'bg-red-50 border-red-300' : 'border-slate-200 hover:bg-slate-50'}`}
                                     onClick={() => {
                                       setTaskProjectID(project.id)
                                       setTaskError('')
-                                      setTaskForm(prev => ({ ...prev, assignee_ids: [] }))
+                                      setTaskForm(prev => ({ ...prev, assignee_ids: [], budget_needed: '' }))
                                     }}
                                   >
                                     <p className="text-sm font-medium text-slate-900">{project.project_name}</p>
@@ -1962,18 +2324,18 @@ export default function ProjectHeadRequestManagement() {
               <Card
                 key={project.id}
                 className={`cursor-pointer hover:shadow-lg transition-all border-2 ${
-                  taskProjectID === project.id ? 'border-purple-500 bg-purple-50' : 'border-slate-200'
+                  taskProjectID === project.id ? 'border-red-400 bg-red-50' : 'border-slate-200'
                 }`}
                 onClick={() => {
                   setTaskProjectID(project.id)
                   setTaskError('')
-                  setTaskForm(prev => ({ ...prev, assignee_id: '' }))
+                  setTaskForm(prev => ({ ...prev, assignee_ids: [], budget_needed: '' }))
                   setSelectProjectDialog(false)
                 }}
               >
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3 mb-3">
-                    <FolderKanban className="h-5 w-5 text-purple-600 mt-1" />
+                    <FolderKanban className="h-5 w-5 text-slate-500 mt-1" />
                     <div className="flex-1">
                       <h3 className="font-semibold text-slate-900">{project.project_name}</h3>
                       <p className="text-xs text-slate-500 mt-0.5">{departmentNameByID.get(project.department_id || '') || '-'}</p>
@@ -1982,7 +2344,7 @@ export default function ProjectHeadRequestManagement() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-600">Budget:</span>
-                      <span className="font-medium text-slate-900">{fmtBudget(project.budget_allocated)}</span>
+                      <span className="font-medium text-slate-900">{fmtBudget(projectBudgetDisplay(project))}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-600">Status:</span>
@@ -2001,6 +2363,32 @@ export default function ProjectHeadRequestManagement() {
               </Card>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteTaskDialog} onOpenChange={open => { if (!open) setDeleteTaskDialog(null) }}>
+        <DialogContent className="bg-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Task</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{deleteTaskDialog?.title}</strong>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!deleteTaskDialog) return
+                void deleteTask(deleteTaskDialog.id)
+                setDeleteTaskDialog(null)
+              }}
+            >
+              Delete Task
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -2113,7 +2501,7 @@ export default function ProjectHeadRequestManagement() {
           {viewProjectDetails && (
             <div className="space-y-4 pt-2">
               <div className="flex flex-wrap gap-2">
-                <LifecycleBadge status={viewProjectDetails.status} />
+                <LifecycleBadge status={projectLifecycleLabel(viewProjectDetails)} />
                 <VerificationBadge project={viewProjectDetails} />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -2135,7 +2523,10 @@ export default function ProjectHeadRequestManagement() {
                         </span>
                       )
                     })()}
-                    <span>{userNameByID.get(viewProjectDetails.created_by) || viewProjectDetails.created_by}</span>
+                    <div className="flex flex-col">
+                      <span>{userNameByID.get(viewProjectDetails.created_by) || viewProjectDetails.created_by}</span>
+                      <span className="text-xs text-slate-500">{requesterRole(viewProjectDetails)}</span>
+                    </div>
                   </span>
                 </div>
               </div>
@@ -2149,11 +2540,125 @@ export default function ProjectHeadRequestManagement() {
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700">Budget</label>
-                <p className="mt-1 text-slate-600 text-sm">{fmtBudget(viewProjectDetails.budget_allocated)}</p>
+                <p className="mt-1 text-slate-600 text-sm">{fmtBudget(projectBudgetDisplay(viewProjectDetails))}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Start Date</label>
+                  <p className="mt-1 text-slate-600 text-sm">{fmtDate(viewProjectDetails.start_date)}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">End Date</label>
+                  <p className="mt-1 text-slate-600 text-sm">{fmtDate(viewProjectDetails.end_date)}</p>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Project Head</label>
+                {(() => {
+                  const headID = viewProjectDetails.project_head_id
+                  const headStaff = headID ? staffByID.get(headID) : undefined
+                  const isCurrentUserHead = headID && headID === currentUser?.id
+                  const headName =
+                    (headID ? userNameByID.get(headID) : '')
+                    || (isCurrentUserHead ? `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() : '')
+                    || headID
+                    || 'Not assigned'
+
+                  if (!headID) {
+                    return <p className="mt-1 text-slate-600 text-sm">Not assigned</p>
+                  }
+
+                  if (headStaff) {
+                    return (
+                      <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                        <StaffAvatar staff={headStaff} size="sm" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{headName}</p>
+                          <p className="text-xs text-slate-500">Project Head</p>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="h-6 w-6 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold flex items-center justify-center border border-slate-300">
+                        {(headName.split(' ').map(n => n[0]).join('').slice(0, 2) || 'PH').toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{headName}</p>
+                        <p className="text-xs text-slate-500">Project Head</p>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Funding Status</label>
+                <p className="mt-1 text-slate-600 text-sm">{projectNeedsFunding(viewProjectDetails) ? 'Needs Funding' : 'Funded / Not Required Yet'}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Assigned Staff</label>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {(() => {
+                    const staffIDs = getAssignedStaffIDs(viewProjectDetails.id)
+                    if (staffIDs.length === 0) {
+                      return <span className="text-slate-500 text-sm">No assigned staff yet</span>
+                    }
+                    return staffIDs.map((id) => {
+                      const staff = staffByID.get(id)
+                      const fallback = userNameByID.get(id) || id
+                      return (
+                        <span key={`view-project-staff-${id}`} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700">
+                          {staff ? <StaffAvatar staff={staff} size="sm" /> : null}
+                          <span>{staff ? `${staff.first_name} ${staff.last_name}` : fallback}</span>
+                        </span>
+                      )
+                    })
+                  })()}
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700">Created</label>
                 <p className="mt-1 text-slate-600 text-sm">{fmtDate(viewProjectDetails.created_at)}</p>
+              </div>
+
+              {/* Funding History Section */}
+              <div>
+                <label className="text-sm font-bold text-slate-800 block mb-1 mt-4">Funding History</label>
+                <div className="overflow-x-auto rounded-lg border border-slate-200 bg-slate-50">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th className="px-4 py-2 text-left font-semibold text-slate-600">Date</th>
+                        <th className="px-4 py-2 text-left font-semibold text-slate-600">Amount</th>
+                        <th className="px-4 py-2 text-left font-semibold text-slate-600">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {budgetRequests.filter(r => r.project_id === viewProjectDetails.id).length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="px-4 py-3 text-center text-slate-400">No budget requests found for this project.</td>
+                        </tr>
+                      ) : (
+                        budgetRequests
+                          .filter(r => r.project_id === viewProjectDetails.id)
+                          .sort((a, b) => (a.id > b.id ? 1 : -1))
+                          .map((r, idx) => (
+                            <tr key={r.id || idx} className="border-t border-slate-200">
+                              <td className="px-4 py-2">{r.created_at ? fmtDate(r.created_at) : '-'}</td>
+                              <td className="px-4 py-2">{fmtBudget(r.amount)}</td>
+                              <td className="px-4 py-2">
+                                <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${normalize(r.status) === 'approved' ? 'bg-green-100 text-green-700' : normalize(r.status) === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                                  {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -2222,6 +2727,28 @@ export default function ProjectHeadRequestManagement() {
               <p className="font-semibold text-slate-900">Program: {selectedProgram?.program_name}</p>
               <p className="text-slate-600">Department: {departmentNameByID.get(selectedProgram?.department_id || '') || '-'}</p>
               <p className="text-slate-500">New project requests are routed for admin/program-chair final verification.</p>
+              <p className="text-slate-500 mt-1">Project budget will be requested later through Budget Management after this project request is created.</p>
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
+                <div className="rounded border border-slate-200 bg-white px-2 py-1.5">
+                  <span className="text-slate-500">Allocated</span>
+                  <p className="font-semibold text-slate-900">{createBudgetLoading ? 'Loading...' : fmtBudget(createBudgetCap)}</p>
+                </div>
+                <div className="rounded border border-slate-200 bg-white px-2 py-1.5">
+                  <span className="text-slate-500">Deducted</span>
+                  <p className="font-semibold text-amber-700">{fmtBudget(createBudgetSpent)}</p>
+                </div>
+                <div className="rounded border border-slate-200 bg-white px-2 py-1.5">
+                  <span className="text-slate-500">Planned</span>
+                  <p className="font-semibold text-slate-700">{fmtBudget(createBudgetConsumed)}</p>
+                </div>
+                <div className="rounded border border-slate-200 bg-white px-2 py-1.5">
+                  <span className="text-slate-500">Remaining</span>
+                  <p className={`font-semibold ${hasCurrentCreateBudget ? 'text-emerald-700' : 'text-red-700'}`}>{fmtBudget(createBudgetRemaining)}</p>
+                </div>
+              </div>
+              {!createBudgetLoading && !hasCurrentCreateBudget && (
+                <p className="mt-2 text-red-700 font-semibold">No current budget.</p>
+              )}
             </div>
 
             <div>
@@ -2239,7 +2766,7 @@ export default function ProjectHeadRequestManagement() {
                 rows={3}
                 value={createForm.project_description}
                 onChange={e => setCreateForm(prev => ({ ...prev, project_description: e.target.value }))}
-                className="w-full mt-1 rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full mt-1 rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#BA0021]"
                 placeholder="Short project description"
               />
             </div>
@@ -2250,20 +2777,12 @@ export default function ProjectHeadRequestManagement() {
                 rows={3}
                 value={createForm.objectives}
                 onChange={e => setCreateForm(prev => ({ ...prev, objectives: e.target.value }))}
-                className="w-full mt-1 rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full mt-1 rounded-md border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#BA0021]"
                 placeholder="Project objectives"
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Budget</label>
-                <Input
-                  value={createForm.budget_allocated}
-                  onChange={e => setCreateForm(prev => ({ ...prev, budget_allocated: e.target.value }))}
-                  placeholder="0"
-                />
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Start Date</label>
                 <Input

@@ -5,6 +5,8 @@ import { Button } from '@/shared/components/ui/Button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/shared/components/ui/Table';
+import { Label } from '@/shared/components/ui/Label';
+import { Textarea } from '@/shared/components/ui/TextArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/Select';
 import {
   Dialog,
@@ -21,7 +23,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/shared/components/ui/DropdownMenu';
-import { Printer, MoreVertical } from 'lucide-react';
+import { Printer, MoreVertical, CheckCircle, XCircle, Loader2, Eye, FileText } from 'lucide-react';
 import { API_URL } from '@/shared/lib/api-config';
 
 const API = `${API_URL}/api/v1`;
@@ -76,8 +78,33 @@ type BudgetRequest = {
   requested_by?: string;
   amount?: number;
   status?: string;
+  workflow_stage?: string;
+  reason?: string;
+  document_name?: string;
+  document_url?: string;
+  reviewed_by_name?: string;
+  review_notes?: string;
+  chair_slip_number?: string;
+  chair_slip_generated_at?: string;
   created_at?: string;
 };
+
+function budgetStageLabel(stage?: string) {
+  const normalized = String(stage || '').toLowerCase();
+  if (normalized === 'pending') return 'Pending';
+  if (normalized === 'approved') return 'Approved';
+  if (normalized === 'declined') return 'Declined';
+  return 'Pending';
+}
+
+function getBudgetRequestDocumentUrl(documentUrl?: string) {
+  const raw = String(documentUrl || '').trim()
+  if (!raw) return ''
+  if (/^https?:\/\//i.test(raw)) return raw
+  const normalized = raw.replace(/\\/g, '/').replace(/^\/+/, '')
+  if (normalized.startsWith('uploads/')) return `${API_URL}/${normalized}`
+  return `${API_URL}/uploads/${normalized.replace(/^uploads\//, '')}`
+}
 
 function ChairAvatar({ chair, size = 'md' }: { chair?: ChairUser | null; size?: 'sm' | 'md' | 'lg' }) {
   const sz = size === 'sm' ? 'h-7 w-7 text-xs' : size === 'lg' ? 'h-12 w-12 text-base' : 'h-9 w-9 text-sm';
@@ -113,6 +140,8 @@ export default function AdminBudgetManagementPage() {
   const [allocBlockDetails, setAllocBlockDetails] = useState<{ minRequired: number; deptSum: number; spent: number } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [toastVisible, setToastVisible] = useState(false);
+  const [budgetReviewReq, setBudgetReviewReq] = useState<BudgetRequest | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'declined'>('all');
 
   const [isAllocConfirmOpen, setIsAllocConfirmOpen] = useState(false);
 
@@ -301,11 +330,42 @@ export default function AdminBudgetManagementPage() {
     window.print();
   };
 
+  const filteredRequests = requests.filter((request) => {
+    if (statusFilter === 'all') return true;
+    return String(request.workflow_stage || '').toLowerCase() === statusFilter;
+  });
+
+  const exportRequestsCsv = () => {
+    const header = ['Request ID', 'Project', 'Requested By', 'Amount', 'Status', 'Stage', 'Slip Number', 'Created At'];
+    const rows = filteredRequests.map((request) => [
+      request.id,
+      request.project_name || request.project_id || '',
+      request.requested_by_name || request.requested_by || '',
+      String(Number(request.amount || 0).toFixed(2)),
+      String(request.status || '').toUpperCase(),
+      budgetStageLabel(request.workflow_stage),
+      request.chair_slip_number || '',
+      request.created_at || '',
+    ]);
+    const csv = [header, ...rows]
+      .map((line) => line.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `budget-requests-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+    <div className="min-h-screen bg-white p-6">
       <div className="max-w-[1920px] mx-auto space-y-6">
         {toast && (
-          <div className="fixed z-50 left-1/2 top-1/2" style={{ transform: 'translate(-50%, -50%)' }}>
+          <div className="fixed z-50 right-6 top-6">
             <div className={`rounded-lg shadow-lg px-4 py-3 text-sm font-medium transition-all duration-300 ${toastVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'} ${toast.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
               {toast.message}
             </div>
@@ -318,7 +378,8 @@ export default function AdminBudgetManagementPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button onClick={loadAll} variant="outline">Refresh</Button>
-            <Button onClick={handlePrintRequests} className="flex items-center gap-2"><Printer className="w-4 h-4" /> Print Requests</Button>
+            <Button onClick={exportRequestsCsv} variant="outline">Export CSV</Button>
+            <Button onClick={handlePrintRequests} className="flex items-center gap-2 bg-[#BA0021] hover:bg-[#930018] text-white"><Printer className="w-4 h-4" /> Print Requests</Button>
           </div>
         </div>
 
@@ -402,14 +463,14 @@ export default function AdminBudgetManagementPage() {
           <div>
             <div className="flex items-center justify-between">
               <div className="text-xs text-slate-500">Amount (₱)</div>
-              <div className="text-xs text-blue-600 font-medium">= {formatNumberLabel(allocAmount)}</div>
+              <div className="text-xs text-[#BA0021] font-medium">= {formatNumberLabel(allocAmount)}</div>
             </div>
             <div className="mt-1">
               <Input type="number" value={allocAmount} onChange={e => setAllocAmount(e.target.value)} placeholder="0.00" className="border-slate-300 w-full" />
             </div>
           </div>
           <div>
-            <Button onClick={handleAllocate} className="w-full">Allocate</Button>
+            <Button onClick={handleAllocate} className="w-full bg-[#BA0021] hover:bg-[#930018] text-white">Allocate</Button>
           </div>
         </div>
         {allocError && <div className="mt-3 text-sm text-red-600">{allocError}</div>}
@@ -451,9 +512,22 @@ export default function AdminBudgetManagementPage() {
 
       {/* Budget requests table */}
       <div ref={printRef} className="bg-white border border-slate-200 rounded-xl p-5">
-        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium">Budget Requests</h3>
-          <div className="text-xs text-slate-500">Read-only for Admin (printable)</div>
+            <div className="flex items-center gap-2">
+              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as 'all' | 'pending' | 'approved' | 'declined')}>
+                <SelectTrigger className="w-[180px] border-slate-300">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="declined">Declined</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="text-xs text-slate-500">Read-only surveillance and reporting</div>
+            </div>
         </div>
         <Table>
           <TableHeader>
@@ -463,23 +537,41 @@ export default function AdminBudgetManagementPage() {
               <TableHead>Requested By</TableHead>
               <TableHead>Amount</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Stage</TableHead>
               <TableHead>Date</TableHead>
+              <TableHead>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {requests.length === 0 && (
+            {filteredRequests.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-slate-500 py-6">No budget requests yet.</TableCell>
+                <TableCell colSpan={8} className="text-center text-slate-500 py-6">No budget requests yet.</TableCell>
               </TableRow>
             )}
-            {requests.map(r => (
+            {filteredRequests.map(r => (
               <TableRow key={r.id}>
                 <TableCell>{r.id}</TableCell>
                 <TableCell>{r.project_name || r.project_id}</TableCell>
                 <TableCell>{r.requested_by_name || r.requested_by}</TableCell>
                 <TableCell>{formatCurrency(r.amount)}</TableCell>
                 <TableCell>{(r.status || '').toUpperCase()}</TableCell>
+                <TableCell>{budgetStageLabel(r.workflow_stage)}</TableCell>
                 <TableCell>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</TableCell>
+                <TableCell>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Budget request actions">
+                        <MoreVertical className="h-4 w-4 text-slate-600" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-white border-slate-200">
+                      <DropdownMenuItem onClick={() => {
+                        setBudgetReviewReq(r)
+                      
+                      }}>View details</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -540,6 +632,51 @@ export default function AdminBudgetManagementPage() {
             <DialogClose asChild>
               <Button variant="outline">Close</Button>
             </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={!!budgetReviewReq}
+        onOpenChange={() => {
+          setBudgetReviewReq(null)
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Budget Request Details</DialogTitle>
+            <DialogDescription>Read-only surveillance view for monitoring and reporting.</DialogDescription>
+          </DialogHeader>
+          {budgetReviewReq && (
+            <div className="space-y-4 mt-1">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 space-y-1">
+                <p className="font-semibold text-slate-900">{budgetReviewReq.project_name || budgetReviewReq.project_id}</p>
+                <p>Amount: {formatCurrency(budgetReviewReq.amount)}</p>
+                <p>Stage: {budgetStageLabel(budgetReviewReq.workflow_stage)}</p>
+                <p>Status: {(budgetReviewReq.status || '').toUpperCase()}</p>
+                <p>Document: {budgetReviewReq.document_name || budgetReviewReq.document_url || '—'}</p>
+                {budgetReviewReq.reviewed_by_name && <p>Reviewed by: {budgetReviewReq.reviewed_by_name}</p>}
+                {budgetReviewReq.review_notes && <p>Review notes: {budgetReviewReq.review_notes}</p>}
+                {budgetReviewReq.chair_slip_number && <p>Slip No: {budgetReviewReq.chair_slip_number}</p>}
+                <div className="pt-2 flex flex-wrap gap-2">
+                  {budgetReviewReq.document_url && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-slate-300"
+                      onClick={() => window.open(getBudgetRequestDocumentUrl(budgetReviewReq.document_url), '_blank', 'noopener,noreferrer')}
+                    >
+                      <FileText className="h-4 w-4 mr-1.5" /> View file
+                    </Button>
+                  )}
+                  <Button type="button" variant="outline" className="border-slate-300" onClick={handlePrintRequests}>
+                    <Printer className="h-4 w-4 mr-1.5" /> Print
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBudgetReviewReq(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

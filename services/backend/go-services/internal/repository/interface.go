@@ -48,6 +48,7 @@ type ProjectRepository interface {
 	Create(ctx context.Context, project *domain.Project, createdBy string) error
 	GetByProgramID(ctx context.Context, programID string) ([]*domain.Project, error)
 	GetByCreatedBy(ctx context.Context, createdBy string) ([]*domain.Project, error)
+	GetByProjectHeadID(ctx context.Context, headID string) ([]*domain.Project, error)
 	GetByID(ctx context.Context, id string) (*domain.Project, error)
 	Update(ctx context.Context, id string, req *domain.UpdateProjectRequest) error
 	ProjectHeadPreReview(ctx context.Context, id string, headID string, reviewNotes *string, approved bool) error
@@ -69,10 +70,15 @@ type ProjectRepository interface {
 // BudgetRepository defines operations for budget-related queries
 type BudgetRepository interface {
 	GetTotalBudget(ctx context.Context) (float64, error)
-	GetAllBudgetRequests(ctx context.Context) ([]*domain.BudgetRequest, error)
+	GetAllBudgetRequests(ctx context.Context, role string, userID string) ([]*domain.BudgetRequest, error)
+	GetBudgetRequestByID(ctx context.Context, id string) (*domain.BudgetRequest, error)
+	CreateBudgetRequest(ctx context.Context, req *domain.BudgetRequest) (*domain.BudgetRequest, error)
+	ReviewBudgetRequest(ctx context.Context, id string, reviewerID string, notes *string, approved bool) (*domain.BudgetRequest, error)
+	DeleteBudgetRequest(ctx context.Context, id string) error
+	GetProjectHeadStaffBudgetDocuments(ctx context.Context, projectHeadID string) ([]*domain.BudgetSupportDocument, error)
 	GetProgramChairBudgets(ctx context.Context, chairID *string) ([]*domain.ProgramChairBudget, error)
 	SetProgramChairBudget(ctx context.Context, chairID string, allocatedBudget float64) (*domain.ProgramChairBudget, error)
-	GetChairDepartmentBudgets(ctx context.Context, chairID *string) ([]*domain.ChairDepartmentBudget, error)
+	GetChairDepartmentBudgets(ctx context.Context, chairID *string, departmentID *string) ([]*domain.ChairDepartmentBudget, error)
 	SetChairDepartmentBudget(ctx context.Context, chairID string, departmentID string, allocatedBudget float64) (*domain.ChairDepartmentBudget, error)
 	DeleteChairDepartmentBudget(ctx context.Context, chairID string, departmentID string) error
 }

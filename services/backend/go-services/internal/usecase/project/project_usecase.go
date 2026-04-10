@@ -52,6 +52,20 @@ func (uc *projectUseCase) GetMyProjects(ctx context.Context, userID string) ([]*
 	return projects, nil
 }
 
+// GetProjectsAssignedToHead retrieves projects currently assigned to the given project head.
+func (uc *projectUseCase) GetProjectsAssignedToHead(ctx context.Context, headID string) ([]*domain.Project, error) {
+	if strings.TrimSpace(headID) == "" {
+		return nil, fmt.Errorf("forbidden: user id is required")
+	}
+
+	projects, err := uc.projectRepo.GetByProjectHeadID(ctx, headID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get assigned projects: %w", err)
+	}
+
+	return projects, nil
+}
+
 // CreateProject creates a new project under a program
 func (uc *projectUseCase) CreateProject(ctx context.Context, req *domain.CreateProjectRequest, createdBy string, creatorRole string) (*domain.Project, error) {
 	var startDate, endDate *time.Time
@@ -79,25 +93,16 @@ func (uc *projectUseCase) CreateProject(ctx context.Context, req *domain.CreateP
 		approvalStatus = req.ApprovalStatus
 	}
 
-	// Auto-approval logic for program chairs
-	if creatorRole == domain.RoleProgramChair {
-		if req.ProgramID == nil || *req.ProgramID == "" {
-			return nil, fmt.Errorf("program_id is required for program chair project creation")
-		}
-		program, err := uc.programRepo.GetByID(ctx, *req.ProgramID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get program: %w", err)
-		}
-		if program.ProgramChairID == nil || *program.ProgramChairID != createdBy {
-			return nil, fmt.Errorf("forbidden: you can only create projects under your assigned program")
-		}
-		status = "in_progress"
-		approvalStatus = "approved"
+	if creatorRole != domain.RoleProjectHead {
+		return nil, fmt.Errorf("forbidden: only project heads can create projects")
 	}
 
 	if creatorRole == domain.RoleProjectHead {
 		if req.ProgramID == nil || *req.ProgramID == "" {
 			return nil, fmt.Errorf("program_id is required for project head project creation")
+		}
+		if req.BudgetAllocated != nil {
+			return nil, fmt.Errorf("forbidden: project heads cannot set budget at creation; submit a budget request after project creation")
 		}
 		visiblePrograms, err := uc.programRepo.GetVisibleForUser(ctx, createdBy, creatorRole)
 		if err != nil {
@@ -116,31 +121,8 @@ func (uc *projectUseCase) CreateProject(ctx context.Context, req *domain.CreateP
 		if !allowed {
 			return nil, fmt.Errorf("forbidden: you can only create projects under assigned programs")
 		}
-	}
-
-	if creatorRole == domain.RoleStaff {
-		if req.ProgramID == nil || *req.ProgramID == "" {
-			return nil, fmt.Errorf("program_id is required for staff project request")
-		}
-		visiblePrograms, err := uc.programRepo.GetVisibleForUser(ctx, createdBy, creatorRole)
-		if err != nil {
-			return nil, fmt.Errorf("failed to validate staff scope: %w", err)
-		}
-		allowed := false
-		for _, p := range visiblePrograms {
-			if p != nil && p.ID == *req.ProgramID {
-				allowed = true
-				if req.DepartmentID == nil || *req.DepartmentID == "" {
-					req.DepartmentID = p.DepartmentID
-				}
-				break
-			}
-		}
-		if !allowed {
-			return nil, fmt.Errorf("forbidden: you can only request projects under assigned programs")
-		}
-		status = "pending_approval"
-		approvalStatus = "pending"
+		// Project heads creating a project become the default assigned project head.
+		req.ProjectHeadID = &createdBy
 	}
 
 	project := &domain.Project{
@@ -148,6 +130,7 @@ func (uc *projectUseCase) CreateProject(ctx context.Context, req *domain.CreateP
 		ProjectDescription: req.ProjectDescription,
 		ProgramID:          req.ProgramID,
 		DepartmentID:       req.DepartmentID,
+		ProjectHeadID:      req.ProjectHeadID,
 		Objectives:         req.Objectives,
 		BudgetAllocated:    req.BudgetAllocated,
 		StartDate:          startDate,
@@ -354,6 +337,33 @@ func (uc *projectUseCase) BulkUpdateProjectApproval(ctx context.Context, req *do
 
 // DeleteProject removes a project by ID
 func (uc *projectUseCase) DeleteProject(ctx context.Context, id string) error {
+	// Check if project exists
+	project, err := uc.projectRepo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get project: %w", err)
+	}
+	if project == nil {
+		return fmt.Errorf("project not found")
+	}
+
+	// Check for active tasks (pending or in_progress)
+	tasks, err := uc.projectRepo.GetProjectTasks(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to check project tasks: %w", err)
+	}
+
+	var activeTasks []*domain.ProjectTask
+	for _, task := range tasks {
+		if task.Status == "pending" || task.Status == "in_progress" {
+			activeTasks = append(activeTasks, task)
+		}
+	}
+
+	if len(activeTasks) > 0 {
+		return fmt.Errorf("cannot delete project: %d active task(s) must be completed or cancelled first", len(activeTasks))
+	}
+
+	// Delete the project (triggers will handle budget reversion)
 	return uc.projectRepo.Delete(ctx, id)
 }
 
@@ -501,6 +511,17 @@ func (uc *projectUseCase) ReplaceProjectStaffAssignments(ctx context.Context, pr
 		return fmt.Errorf("forbidden: only approved projects can have staff assigned")
 	}
 
+	var requiredChairID string
+	if project.ProgramID != nil && strings.TrimSpace(*project.ProgramID) != "" {
+		program, err := uc.programRepo.GetByID(ctx, *project.ProgramID)
+		if err != nil {
+			return fmt.Errorf("failed to resolve project program: %w", err)
+		}
+		if program.ProgramChairID != nil {
+			requiredChairID = strings.TrimSpace(*program.ProgramChairID)
+		}
+	}
+
 	seen := make(map[string]struct{}, len(staffIDs))
 	validated := make([]string, 0, len(staffIDs))
 	for _, staffID := range staffIDs {
@@ -519,6 +540,12 @@ func (uc *projectUseCase) ReplaceProjectStaffAssignments(ctx context.Context, pr
 		}
 		if staffUser.Role != domain.RoleStaff {
 			return fmt.Errorf("user %s is not a staff account", staffID)
+		}
+
+		if requiredChairID != "" {
+			if staffUser.AssignedProgramChairID == nil || strings.TrimSpace(*staffUser.AssignedProgramChairID) != requiredChairID {
+				return fmt.Errorf("staff user %s is not tied to this program chair", staffID)
+			}
 		}
 
 		if project.DepartmentID != nil {
@@ -570,6 +597,10 @@ func (uc *projectUseCase) CreateProjectTask(ctx context.Context, projectID strin
 	if len(req.AssigneeIDs) == 0 {
 		return nil, fmt.Errorf("at least one assignee is required")
 	}
+
+	if req.BudgetNeeded < 0 {
+		return nil, fmt.Errorf("budget_needed cannot be negative")
+	}
 	uniqueAssignees := make([]string, 0, len(req.AssigneeIDs))
 	seen := make(map[string]struct{}, len(req.AssigneeIDs))
 	for _, assigneeID := range req.AssigneeIDs {
@@ -617,6 +648,7 @@ func (uc *projectUseCase) CreateProjectTask(ctx context.Context, projectID strin
 		Title:       strings.TrimSpace(req.Title),
 		Description: description,
 		AssigneeIDs: uniqueAssignees,
+		BudgetNeeded: req.BudgetNeeded,
 		Priority:    priority,
 		DueDate:     dueDate,
 	}

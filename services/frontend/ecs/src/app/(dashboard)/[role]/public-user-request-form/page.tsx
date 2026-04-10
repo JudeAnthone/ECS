@@ -317,33 +317,37 @@ export default function PublicUserRequestFormPage() {
   const isFormValid = formData.request_title.trim() && formData.request_description.trim();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+    <div className="min-h-screen bg-white p-6">
       <div className="max-w-5xl mx-auto space-y-6">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Program Request</h1>
-            <p className="text-slate-500 mt-1">Request a new extension program for review by the program chair</p>
+        <div className="rounded-3xl border border-slate-200 bg-white px-6 py-7 shadow-sm">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-600 mb-3">
+                Public Request Form
+              </div>
+              <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Program Request</h1>
+              <p className="text-slate-500 mt-1">Request a new extension program for review by the program chair</p>
+            </div>
+            <Badge className="bg-slate-100 text-slate-700 border border-slate-200 px-4 py-2 text-sm">
+              <Lightbulb className="h-4 w-4 mr-2 text-slate-500" />
+              Request a Program
+            </Badge>
           </div>
-          <Badge className="bg-purple-600 text-white px-4 py-2 text-sm">
-            <Lightbulb className="h-4 w-4 mr-2" />
-            Request a Program
-          </Badge>
         </div>
 
         {/* Success banner */}
         {submitSuccess && (
-          <div className="flex items-start gap-3 rounded-lg border border-green-200 bg-green-50 px-5 py-4">
-            <CheckCircle2 className="w-5 h-5 text-green-600 mt-0.5 shrink-0" />
+          <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
             <div>
-              <p className="font-semibold text-green-900">Program Request Submitted Successfully!</p>
-              <p className="text-sm text-green-700 mt-0.5">
+              <p className="font-semibold text-emerald-900">Program Request Submitted Successfully!</p>
+              <p className="text-sm text-emerald-700 mt-0.5">
                 Your request <span className="font-mono font-medium">#{submitSuccess.id.slice(0, 8)}</span> is now under review by the program chair.
                 Track its progress in the <span className="font-medium">My Requests</span> section below.
               </p>
             </div>
-            <button onClick={() => setSubmitSuccess(null)} className="ml-auto text-green-500 hover:text-green-700">✕</button>
+            <button onClick={() => setSubmitSuccess(null)} className="ml-auto text-emerald-500 hover:text-emerald-700">✕</button>
           </div>
         )}
 
@@ -357,7 +361,7 @@ export default function PublicUserRequestFormPage() {
           <div className="p-6 space-y-5">
 
             {/* ── Project Details ── */}
-            <div className="rounded-lg border border-slate-200 overflow-hidden">
+            <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
               <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
                 <FileText className="w-4 h-4 text-slate-500" />
                 <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Program Details</span>
@@ -401,7 +405,7 @@ export default function PublicUserRequestFormPage() {
             </div>
 
             {/* ── Goals & Beneficiaries ── */}
-            <div className="rounded-lg border border-slate-200 overflow-hidden">
+            <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
               <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200">
                 <Target className="w-4 h-4 text-slate-500" />
                 <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Goals & Beneficiaries</span>
@@ -466,11 +470,11 @@ export default function PublicUserRequestFormPage() {
 
             {/* Actions */}
             <div className="flex justify-end gap-3 pt-1">
-              <Button variant="outline" onClick={handleClear} className="px-5">Clear Form</Button>
+              <Button variant="outline" onClick={handleClear} className="px-5 border-slate-300 text-slate-700 hover:bg-slate-50">Clear Form</Button>
               <Button
                 onClick={handleSubmit}
                 disabled={submitting || !isFormValid}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-6"
+                className="bg-[#BA0021] hover:bg-[#930018] text-white px-6"
               >
                 {submitting ? (
                   <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Submitting...</>
@@ -492,10 +496,10 @@ export default function PublicUserRequestFormPage() {
             className="w-full flex items-center justify-between px-6 py-4 border-b border-slate-100 hover:bg-slate-50 transition-colors rounded-t-xl cursor-pointer select-none"
           >
             <div className="flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-purple-600" />
+              <ClipboardList className="w-5 h-5 text-slate-500" />
               <span className="font-semibold text-slate-800">My Submitted Requests</span>
               {myRequests.length > 0 && (
-                <span className="bg-purple-100 text-purple-700 text-xs font-medium px-2 py-0.5 rounded-full">{myRequests.length}</span>
+                <span className="bg-slate-100 text-slate-700 text-xs font-medium px-2 py-0.5 rounded-full">{myRequests.length}</span>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -552,7 +556,7 @@ export default function PublicUserRequestFormPage() {
                             <button
                               type="button"
                               onClick={() => setSelectedRequest(req)}
-                              className="flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
+                              className="flex items-center gap-1 text-xs text-slate-700 hover:text-slate-900 font-medium opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap"
                             >
                               <Eye className="w-3.5 h-3.5" /> View Details
                             </button>

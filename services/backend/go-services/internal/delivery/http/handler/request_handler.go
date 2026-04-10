@@ -62,19 +62,8 @@ func (h *RequestHandler) GetRequests(w http.ResponseWriter, r *http.Request) {
 		respondWithJSON(w, http.StatusOK, map[string]interface{}{"requests": reqs})
 
 	case "program_chair":
-		// Program chairs are in Administration and oversee ALL incoming requests,
-		// not limited to a specific department.
-		programID := r.URL.Query().Get("program_id")
-		if programID != "" {
-			reqs, err := h.requestUsecase.GetRequestsByProgram(r.Context(), programID)
-			if err != nil {
-				respondWithError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			respondWithJSON(w, http.StatusOK, map[string]interface{}{"requests": reqs})
-			return
-		}
-		reqs, err := h.requestUsecase.GetAllRequests(r.Context())
+		// Program chairs are strictly scoped to requests under departments they manage.
+		reqs, err := h.requestUsecase.GetRequestsByDepartmentChair(r.Context(), userID)
 		if err != nil {
 			respondWithError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -113,8 +102,20 @@ func (h *RequestHandler) GetRequestByID(w http.ResponseWriter, r *http.Request) 
 
 	if role != domain.RoleAdmin {
 		if role == domain.RoleProgramChair {
-			if req.ReviewedBy != nil && *req.ReviewedBy != "" && *req.ReviewedBy != userID {
-				respondWithError(w, http.StatusForbidden, "you cannot access requests owned by another program chair")
+			chairReqs, err := h.requestUsecase.GetRequestsByDepartmentChair(r.Context(), userID)
+			if err != nil {
+				respondWithError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			allowed := false
+			for _, item := range chairReqs {
+				if item != nil && item.ID == id {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				respondWithError(w, http.StatusForbidden, "you can only access requests within your assigned chair departments")
 				return
 			}
 		} else if role == domain.RoleProjectHead {
@@ -144,8 +145,20 @@ func (h *RequestHandler) DeleteRequest(w http.ResponseWriter, r *http.Request) {
 
 	if role != domain.RoleAdmin {
 		if role == domain.RoleProgramChair {
-			if req.ReviewedBy == nil || *req.ReviewedBy != userID {
-				respondWithError(w, http.StatusForbidden, "you can only delete requests owned by your program chair account")
+			chairReqs, err := h.requestUsecase.GetRequestsByDepartmentChair(r.Context(), userID)
+			if err != nil {
+				respondWithError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			allowed := false
+			for _, item := range chairReqs {
+				if item != nil && item.ID == id {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				respondWithError(w, http.StatusForbidden, "you can only delete requests within your assigned chair departments")
 				return
 			}
 		} else if req.RequestedBy != userID {

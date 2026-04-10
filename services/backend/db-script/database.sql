@@ -142,7 +142,7 @@ CREATE TYPE document_type AS ENUM (
 CREATE TYPE budget_request_status AS ENUM (
     'pending',
     'approved',
-    'rejected'
+    'declined'
 );
 
 CREATE TYPE notification_type AS ENUM (
@@ -455,6 +455,7 @@ CREATE TABLE tasks (
     project_id      UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     title           VARCHAR(255) NOT NULL,
     description     TEXT,
+    budget_needed   DECIMAL(12, 2) NOT NULL DEFAULT 0 CHECK (budget_needed >= 0),
     status          task_status NOT NULL DEFAULT 'pending',
     priority        task_priority NOT NULL DEFAULT 'medium',
     -- assigned_to: staff member assigned by project head
@@ -518,7 +519,7 @@ CREATE INDEX idx_documents_status ON documents(status);
 
 -- ==========================================
 -- Budget Requests Table
--- (project_head requests more funding from admin/program_chair)
+-- (project_head requests spend approval from program chair)
 -- ==========================================
 CREATE TABLE budget_requests (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -526,10 +527,17 @@ CREATE TABLE budget_requests (
     requested_by    UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     amount          DECIMAL(12, 2) NOT NULL CHECK (amount > 0),
     reason          TEXT NOT NULL,
+    needed_by_date  DATE,
     status          budget_request_status NOT NULL DEFAULT 'pending',
+    workflow_stage  VARCHAR(60) NOT NULL DEFAULT 'pending',
+    document_url    VARCHAR(500),
+    document_name   VARCHAR(255),
     reviewed_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+    approved_against_chair_department_budget_id UUID REFERENCES chair_department_budgets(id) ON DELETE RESTRICT,
     review_notes    TEXT,
     reviewed_at     TIMESTAMPTZ,
+    chair_slip_number VARCHAR(80),
+    chair_slip_generated_at TIMESTAMPTZ,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
     updated_at      TIMESTAMPTZ DEFAULT NOW()
 );
@@ -537,6 +545,9 @@ CREATE TABLE budget_requests (
 CREATE INDEX idx_budget_requests_project ON budget_requests(project_id);
 CREATE INDEX idx_budget_requests_requested_by ON budget_requests(requested_by);
 CREATE INDEX idx_budget_requests_status ON budget_requests(status);
+CREATE INDEX idx_budget_requests_stage ON budget_requests(workflow_stage);
+CREATE INDEX idx_budget_requests_slip_generated_at ON budget_requests(chair_slip_generated_at);
+CREATE INDEX idx_budget_requests_approved_against_cdb ON budget_requests(approved_against_chair_department_budget_id);
 
 -- ==========================================
 -- KPI Reports Table
@@ -765,14 +776,14 @@ CREATE TRIGGER trg_check_project_dates
 BEFORE INSERT OR UPDATE OF start_date, end_date, program_id ON projects
 FOR EACH ROW EXECUTE FUNCTION check_project_dates();
 
--- 4. Auto update program spent_budget when project approved
+-- 4. Auto update program spent_budget when project spend changes
 CREATE OR REPLACE FUNCTION sync_program_spent_budget()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- recalculate spent_budget for the affected program
+    -- Recalculate from project budget_used to reflect approved spending.
     UPDATE programs
     SET spent_budget = (
-        SELECT COALESCE(SUM(budget_allocated), 0)
+        SELECT COALESCE(SUM(budget_used), 0)
         FROM projects
         WHERE program_id = COALESCE(NEW.program_id, OLD.program_id)
           AND approval_status = 'approved'
@@ -784,8 +795,89 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_sync_program_budget
-AFTER INSERT OR UPDATE OF budget_allocated, approval_status OR DELETE ON projects
+AFTER INSERT OR UPDATE OF budget_allocated, budget_used, approval_status OR DELETE ON projects
 FOR EACH ROW EXECUTE FUNCTION sync_program_spent_budget();
+
+-- 4b. Auto update chair_department_budgets spent_budget when approved projects or their budget requests change
+CREATE OR REPLACE FUNCTION sync_chair_department_spent_budget()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Update chair_department_budgets.spent_budget based on sum of approved budget requests
+    -- (actual spending) for projects in that department
+    UPDATE chair_department_budgets cdb
+    SET spent_budget = (
+        SELECT COALESCE(SUM(br.amount), 0)
+        FROM budget_requests br
+        JOIN projects p ON p.id = br.project_id
+        JOIN programs pg ON pg.id = p.program_id
+        WHERE pg.program_chair_id = cdb.chair_id
+          AND p.department_id = cdb.department_id
+          AND br.status = 'approved'
+    )
+    WHERE cdb.chair_id = (
+        SELECT program_chair_id FROM programs WHERE id = COALESCE(NEW.program_id, OLD.program_id)
+    )
+    AND cdb.department_id = COALESCE(NEW.department_id, OLD.department_id);
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_chair_department_budget
+AFTER INSERT OR UPDATE OF budget_allocated, approval_status ON projects
+FOR EACH ROW EXECUTE FUNCTION sync_chair_department_spent_budget();
+
+-- 4c. Also sync when project is deleted
+CREATE TRIGGER trg_sync_chair_department_budget_on_delete
+AFTER DELETE ON projects
+FOR EACH ROW EXECUTE FUNCTION sync_chair_department_spent_budget();
+
+-- 4d. Sync when budget requests are created/updated/deleted
+CREATE OR REPLACE FUNCTION sync_chair_department_spent_budget_on_request_change()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_program_id UUID;
+    v_department_id UUID;
+    v_program_chair_id UUID;
+BEGIN
+    -- Get program and department info from the project
+    SELECT p.program_id, p.department_id INTO v_program_id, v_department_id
+    FROM projects p
+    WHERE p.id = COALESCE(NEW.project_id, OLD.project_id);
+
+    IF v_program_id IS NULL THEN
+        RETURN COALESCE(NEW, OLD);
+    END IF;
+
+    -- Get program chair for this program
+    SELECT program_chair_id INTO v_program_chair_id
+    FROM programs
+    WHERE id = v_program_id;
+
+    -- Sync chair_department_budgets for this allocation
+    UPDATE chair_department_budgets cdb
+    SET spent_budget = (
+        SELECT COALESCE(SUM(br.amount), 0)
+        FROM budget_requests br
+        JOIN projects p ON p.id = br.project_id
+        WHERE p.program_id = v_program_id
+          AND p.department_id = v_department_id
+          AND br.status = 'approved'
+    )
+    WHERE cdb.chair_id = v_program_chair_id
+      AND cdb.department_id = v_department_id;
+
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_on_budget_request_change
+AFTER INSERT OR UPDATE OF amount, status ON budget_requests
+FOR EACH ROW EXECUTE FUNCTION sync_chair_department_spent_budget_on_request_change();
+
+CREATE TRIGGER trg_sync_on_budget_request_delete
+AFTER DELETE ON budget_requests
+FOR EACH ROW EXECUTE FUNCTION sync_chair_department_spent_budget_on_request_change();
 
 -- 5. Program chair must have role = 'program_chair'
 CREATE OR REPLACE FUNCTION check_program_chair_role()

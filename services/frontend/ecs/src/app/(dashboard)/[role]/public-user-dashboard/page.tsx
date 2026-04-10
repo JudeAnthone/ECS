@@ -301,92 +301,95 @@ export default function PublicUserDashboard() {
     new Date(d).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+    <div className="min-h-screen bg-white p-6">
       <div className="mx-auto max-w-7xl space-y-6">
-
-        {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              {userName ? `Welcome back, ${userName}!` : 'My Dashboard'}
-            </h1>
-            <p className="text-slate-500 mt-1">
-              Overview of your project requests and available programs.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button asChild className="bg-purple-600 hover:bg-purple-700 text-white">
-              <Link href={`/${role}/public-user-request-form`}>
-                <Send className="mr-2 h-4 w-4" />
-                Submit Request
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href={`/${role}/public-user-project-list`}>
-                <FolderOpen className="mr-2 h-4 w-4" />
-                Browse Programs
-              </Link>
-            </Button>
-            <button
-              type="button"
-              onClick={fetchData}
-              className="p-2 text-slate-400 hover:text-slate-600 rounded-md border border-slate-200 hover:bg-slate-50 transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
+        <div className="rounded-3xl border border-slate-200 bg-white px-6 py-7 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-600 mb-3">
+                Public User Workspace
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+                {userName ? `Welcome back, ${userName}!` : 'Welcome back!'}
+              </h1>
+              <p className="text-slate-500 mt-1">
+                Overview of your project requests and available programs.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button asChild className="bg-[#BA0021] hover:bg-[#930018] text-white">
+                <Link href={`/${role}/public-user-request-form`}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Submit Request
+                </Link>
+              </Button>
+              <Button variant="outline" asChild className="border-slate-300 text-slate-700 hover:bg-slate-50">
+                <Link href={`/${role}/public-user-project-list`}>
+                  <FolderOpen className="mr-2 h-4 w-4" />
+                  Browse Programs
+                </Link>
+              </Button>
+              <button
+                type="button"
+                onClick={fetchData}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-md border border-slate-200 hover:bg-slate-50 transition-colors"
+                title="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card className="border-l-4 border-l-blue-500">
+          <Card className="border border-slate-200 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-slate-600">My Requests</CardTitle>
-              <FileText className="h-4 w-4 text-blue-500" />
+              <FileText className="h-4 w-4 text-slate-500" />
             </CardHeader>
             <CardContent>
               {loading ? <div className="h-8 w-10 bg-slate-100 animate-pulse rounded" /> : (
-                <div className="text-3xl font-bold text-blue-600">{total}</div>
+                <div className="text-3xl font-bold text-slate-900">{total}</div>
               )}
               <p className="text-xs text-slate-500 mt-1">Total submitted</p>
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-green-500">
+          <Card className="border border-slate-200 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-slate-600">Approved</CardTitle>
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
             </CardHeader>
             <CardContent>
               {loading ? <div className="h-8 w-10 bg-slate-100 animate-pulse rounded" /> : (
-                <div className="text-3xl font-bold text-green-600">{approved}</div>
+                <div className="text-3xl font-bold text-slate-900">{approved}</div>
               )}
               <p className="text-xs text-slate-500 mt-1">Requests approved</p>
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-yellow-500">
+          <Card className="border border-slate-200 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-slate-600">Pending</CardTitle>
-              <Clock className="h-4 w-4 text-yellow-500" />
+              <Clock className="h-4 w-4 text-amber-600" />
             </CardHeader>
             <CardContent>
               {loading ? <div className="h-8 w-10 bg-slate-100 animate-pulse rounded" /> : (
-                <div className="text-3xl font-bold text-yellow-600">{pending}</div>
+                <div className="text-3xl font-bold text-slate-900">{pending}</div>
               )}
               <p className="text-xs text-slate-500 mt-1">Under review</p>
             </CardContent>
           </Card>
 
-          <Card className="border-l-4 border-l-red-400">
+          <Card className="border border-slate-200 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-slate-600">Rejected</CardTitle>
-              <XCircle className="h-4 w-4 text-red-400" />
+              <XCircle className="h-4 w-4 text-rose-500" />
             </CardHeader>
             <CardContent>
               {loading ? <div className="h-8 w-10 bg-slate-100 animate-pulse rounded" /> : (
-                <div className="text-3xl font-bold text-red-500">{rejected}</div>
+                <div className="text-3xl font-bold text-slate-900">{rejected}</div>
               )}
               <p className="text-xs text-slate-500 mt-1">Not approved</p>
             </CardContent>
@@ -405,7 +408,7 @@ export default function PublicUserDashboard() {
         <div className="grid gap-6 lg:grid-cols-3">
 
           {/* Recent Requests */}
-          <Card className="lg:col-span-2">
+          <Card className="lg:col-span-2 border border-slate-200 shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
@@ -416,7 +419,7 @@ export default function PublicUserDashboard() {
                   {total > 0 ? `${total} total request${total !== 1 ? 's' : ''}` : 'Your latest submitted requests and their status'}
                 </CardDescription>
               </div>
-              <Button variant="outline" size="sm" asChild>
+              <Button variant="outline" size="sm" asChild className="border-slate-300 text-slate-700 hover:bg-slate-50">
                 <Link href={`/${role}/public-user-request-form`}>View All</Link>
               </Button>
             </CardHeader>
@@ -429,7 +432,7 @@ export default function PublicUserDashboard() {
                 <div className="flex flex-col items-center justify-center py-10 text-slate-400">
                   <FileText className="w-10 h-10 mb-3 opacity-30" />
                   <p className="text-sm">No requests yet.</p>
-                  <Button asChild className="mt-3 bg-purple-600 hover:bg-purple-700 text-white" size="sm">
+                  <Button asChild className="mt-3 bg-[#BA0021] hover:bg-[#930018] text-white" size="sm">
                     <Link href={`/${role}/public-user-request-form`}>
                       <Send className="w-3.5 h-3.5 mr-1.5" /> Submit your first request
                     </Link>
@@ -439,8 +442,8 @@ export default function PublicUserDashboard() {
                 <div className="space-y-3">
                   {recent.map(req => (
                     <div key={req.id} className="flex items-start gap-3 rounded-lg border border-slate-200 p-4 hover:bg-slate-50 transition-colors group">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-100">
-                        <FileText className="h-4 w-4 text-purple-600" />
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100">
+                        <FileText className="h-4 w-4 text-slate-500" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-slate-800 truncate">{req.request_title}</p>
@@ -455,7 +458,7 @@ export default function PublicUserDashboard() {
                         <button
                           type="button"
                           onClick={() => setSelectedRequest(req)}
-                          className="mt-0.5 flex items-center gap-1 text-xs text-purple-600 hover:text-purple-800 font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="mt-0.5 flex items-center gap-1 text-xs text-slate-700 hover:text-slate-900 font-medium opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <Eye className="w-3 h-3" /> View Details
                         </button>
@@ -486,7 +489,7 @@ export default function PublicUserDashboard() {
           <div className="space-y-4">
 
             {/* Quick Actions */}
-            <Card>
+            <Card className="border border-slate-200 shadow-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Target className="h-4 w-4 text-slate-500" />
@@ -494,7 +497,7 @@ export default function PublicUserDashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button className="w-full justify-start bg-purple-600 hover:bg-purple-700 text-white" asChild>
+                <Button className="w-full justify-start bg-[#BA0021] hover:bg-[#930018] text-white" asChild>
                   <Link href={`/${role}/public-user-request-form`}>
                     <Send className="mr-2 h-4 w-4" /> Submit New Request
                   </Link>
@@ -513,7 +516,7 @@ export default function PublicUserDashboard() {
             </Card>
 
             {/* Active Programs */}
-            <Card>
+            <Card className="border border-slate-200 shadow-sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <FolderOpen className="h-4 w-4 text-slate-500" />
@@ -554,10 +557,10 @@ export default function PublicUserDashboard() {
         </div>
 
         {/* How it works banner */}
-        <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+        <Card className="bg-white border border-slate-200 shadow-sm">
           <CardContent className="pt-6 pb-6">
-            <h3 className="text-base font-bold text-blue-900 mb-4 flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-200 text-blue-800 text-xs font-bold">?</span>
+            <h3 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-100 text-slate-700 text-xs font-bold">?</span>
               How it works
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
@@ -569,7 +572,7 @@ export default function PublicUserDashboard() {
               ].map((item, i, arr) => (
                 <div key={item.step} className="flex items-start gap-3">
                   <div className="flex flex-col items-center">
-                    <div className="w-8 h-8 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-slate-900 text-white text-sm font-bold flex items-center justify-center shrink-0">
                       {item.step}
                     </div>
                     {i < arr.length - 1 && (
@@ -577,8 +580,8 @@ export default function PublicUserDashboard() {
                     )}
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-blue-900">{item.title}</p>
-                    <p className="text-xs text-blue-700 mt-0.5 leading-relaxed">{item.desc}</p>
+                    <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{item.desc}</p>
                   </div>
                 </div>
               ))}

@@ -147,6 +147,7 @@ function Section({ title, children, color = 'slate' }: { title: string; children
     green: 'bg-green-50 border-green-200',
     yellow: 'bg-yellow-50 border-yellow-200',
     purple: 'bg-purple-50 border-purple-200',
+    red: 'bg-red-50 border-red-200',
   }
   return (
     <div className={`rounded-lg border p-4 ${colors[color] ?? colors.slate}`}>
@@ -167,6 +168,8 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [toastVisible, setToastVisible] = useState(false)
 
   // Dialog states
   const [detailReq, setDetailReq] = useState<Request | null>(null)
@@ -184,6 +187,17 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
 
   // Assign form removed — assignment moved to Program Management
 
+  useEffect(() => {
+    if (!toast) return
+    setToastVisible(true)
+    const hideTimer = setTimeout(() => setToastVisible(false), 2700)
+    const clearTimer = setTimeout(() => setToast(null), 3000)
+    return () => {
+      clearTimeout(hideTimer)
+      clearTimeout(clearTimer)
+    }
+  }, [toast])
+
   // Stats
   const total = requests.length
   const pending = requests.filter(r => r.workflow_stage === 'submitted').length
@@ -196,6 +210,10 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
     const fullName = `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim()
     if (fullName && user.email) return `${fullName} (${user.email})`
     return fullName || user.email || requestedBy
+  }
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type })
   }
 
   const fetchData = useCallback(async () => {
@@ -212,7 +230,6 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
         setPrograms(d.programs ?? [])
       }
 
-      // Fetch ALL requests — backend now returns all for program_chair role
       const reqRes = await fetch(`${API}/requests`, { headers: authHeaders() })
       if (!reqRes.ok) throw new Error('Failed to fetch requests')
       const reqData = await reqRes.json()
@@ -284,6 +301,10 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
       setReviewDepartmentID('')
       setReviewStatus('approved')
       await fetchData()
+      showToast(
+        reviewStatus === 'approved' ? 'Request approved successfully.' : 'Request rejected successfully.',
+        'success',
+      )
       if (reviewStatus === 'approved') {
         onRequestApproved?.()
       }
@@ -312,14 +333,21 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
-      <div className="max-w-[1920px] mx-auto space-y-6">
+    <div className="space-y-6">
+      <div className="space-y-6">
+        {toast && (
+          <div className="fixed top-4 right-4 z-50">
+            <div className={`rounded-lg shadow-lg px-4 py-3 text-sm font-medium transition-all duration-300 ${toastVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'} ${toast.type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'}`}>
+              {toast.message}
+            </div>
+          </div>
+        )}
 
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-              <ClipboardList className="h-7 w-7 text-indigo-600" />
+              <ClipboardList className="h-7 w-7 text-[#BA0021]" />
               Request Management
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">Review and assign incoming service requests for your programs.</p>
@@ -339,7 +367,7 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Total Requests', value: total, icon: ClipboardList, color: 'text-indigo-700', bg: 'bg-indigo-50' },
+            { label: 'Total Requests', value: total, icon: ClipboardList, color: 'text-slate-700', bg: 'bg-slate-50' },
             { label: 'Awaiting Review', value: pending, icon: AlertCircle, color: 'text-amber-700', bg: 'bg-amber-50' },
             { label: 'Approved', value: reviewed, icon: CheckCircle, color: 'text-green-700', bg: 'bg-green-50' },
             { label: 'Rejected', value: rejected, icon: XCircle, color: 'text-red-700', bg: 'bg-red-50' },
@@ -428,7 +456,7 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-slate-600 hover:text-indigo-600" onClick={() => setDetailReq(req)}>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-slate-600 hover:text-[#BA0021]" onClick={() => setDetailReq(req)}>
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
                           <Button variant="ghost" size="sm" className="h-7 px-2 text-slate-400 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteReq(req)} title="Delete">
@@ -443,6 +471,7 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
             </div>
           )}
         </div>
+
       </div>
 
       {/* ── View Detail Dialog ─────────────────────────────────────────────── */}
@@ -521,7 +550,7 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
                       href={detailReq.proposal_document_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-sm text-indigo-600 underline break-all"
+                      className="text-sm text-[#BA0021] underline break-all"
                     >
                       {detailReq.proposal_document_url}
                     </a>
@@ -535,7 +564,7 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
             <Button variant="outline" onClick={() => setDetailReq(null)}>Close</Button>
             {detailReq?.workflow_stage === 'submitted' && (
               <Button
-                className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                className="bg-[#BA0021] hover:bg-[#930018] text-white"
                 onClick={() => {
                   setDetailReq(null)
                   setReviewReq(detailReq)
@@ -716,6 +745,7 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }

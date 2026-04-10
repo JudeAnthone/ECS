@@ -2,7 +2,6 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Badge } from '@/shared/components/ui/Badge'
 import { ScrollArea } from '@/shared/components/ui/ScrollArea'
-import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { 
   Clock, 
   Calendar, 
@@ -16,7 +15,6 @@ import {
 import ClientNow from '@/shared/components/ui/ClientNow'
 
 export default function Dashboard() {
-  // Sample data - replace with your actual data source
   const metrics = [
     {
       title: 'Pending Requests',
@@ -155,37 +153,35 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-white p-6">
+      <div className="max-w-[1920px] mx-auto space-y-6">
+        <div className="rounded-3xl border border-slate-200 bg-white px-6 py-7 shadow-sm">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-500 mt-1">Monitor your organization&apos;s key metrics and activities</p>
+            <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-600 mb-3">
+              Administrator Workspace
+            </div>
+            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
+            <p className="text-slate-500 mt-1">Monitor organization-wide operations, risk, and service health.</p>
           </div>
-          <div className="text-sm text-gray-500">
-            Last updated: {/* client-only to avoid hydration mismatch */}
-            <ClientNow />
+          <div className="text-sm text-slate-500">
+            Last updated: <ClientNow />
           </div>
         </div>
+        </div>
 
-        {/* Upper Half - Metrics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {metrics.map((metric, index) => {
             const Icon = metric.icon;
             return (
-              <Card key={index}>
+              <Card key={index} className="border border-slate-200 shadow-sm">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    {metric.title}
-                  </CardTitle>
-                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm font-medium text-slate-600">{metric.title}</CardTitle>
+                  <Icon className={`h-4 w-4 ${metric.variant === 'destructive' ? 'text-red-600' : metric.variant === 'warning' ? 'text-amber-600' : 'text-slate-500'}`} />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{metric.value}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {metric.trend}
-                  </p>
+                  <div className="text-3xl font-bold text-slate-900">{metric.value}</div>
+                  <p className="text-xs text-slate-500 mt-1">{metric.trend}</p>
                 </CardContent>
               </Card>
             );
@@ -193,11 +189,10 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          <Card className="lg:col-span-1">
+          <Card className="lg:col-span-1 border border-slate-200 shadow-sm">
             <CardHeader>
               <div className="flex items-center gap-2">
-                <Bell className="h-5 w-5" />
+                <Bell className="h-5 w-5 text-[#BA0021]" />
                 <CardTitle>Urgent Issues & Reports</CardTitle>
               </div>
               <CardDescription>
@@ -208,32 +203,27 @@ export default function Dashboard() {
               <ScrollArea className="h-[400px] pr-4">
                 <div className="space-y-3">
                   {urgentIssues.map((issue) => (
-                    <Alert key={issue.id}>
-                      <AlertDescription>
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900 mb-1">
-                              {issue.content}
-                            </p>
-                            <p className="text-xs text-gray-500">{issue.date}</p>
-                          </div>
-                          <Badge variant="destructive">
-                            {issue.severity}
-                          </Badge>
+                    <div key={issue.id} className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-slate-900 mb-1">{issue.content}</p>
+                          <p className="text-xs text-slate-500">{issue.date}</p>
                         </div>
-                      </AlertDescription>
-                    </Alert>
+                        <Badge className={issue.severity === 'critical' ? 'bg-red-100 text-red-700 border border-red-200' : issue.severity === 'high' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-700 border border-slate-200'}>
+                          {issue.severity}
+                        </Badge>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </ScrollArea>
             </CardContent>
           </Card>
 
-          {/* Recent Activity */}
-          <Card className="lg:col-span-1">
+          <Card className="lg:col-span-1 border border-slate-200 shadow-sm">
             <CardHeader>
               <div className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
+                <Activity className="h-5 w-5 text-slate-600" />
                 <CardTitle>Recent Activity</CardTitle>
               </div>
               <CardDescription>
@@ -244,23 +234,15 @@ export default function Dashboard() {
               <ScrollArea className="h-[400px] pr-4">
                 <div className="space-y-4">
                   {recentActivity.map((activity) => (
-                    <div key={activity.id} className="flex items-start gap-3 pb-3 border-b last:border-0">
-                      <div className="h-8 w-8 rounded-full bg-linear-to-br from-yellow-300 to-purple-500 flex items-center justify-center text-white font-semibold text-sm shrink-0">
+                    <div key={activity.id} className="flex items-start gap-3 pb-3 border-b border-slate-100 last:border-0">
+                      <div className="h-8 w-8 rounded-full bg-[#BA0021] flex items-center justify-center text-white font-semibold text-sm shrink-0">
                         {activity.user.split(' ').map(n => n[0]).join('')}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">
-                          {activity.user}
-                        </p>
-                        <p className="text-xs text-gray-500 mb-1">
-                          {activity.department}
-                        </p>
-                        <p className="text-sm text-gray-700">
-                          {activity.action}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {activity.timestamp}
-                        </p>
+                        <p className="text-sm font-medium text-slate-900">{activity.user}</p>
+                        <p className="text-xs text-slate-500 mb-1">{activity.department}</p>
+                        <p className="text-sm text-slate-700">{activity.action}</p>
+                        <p className="text-xs text-slate-400 mt-1">{activity.timestamp}</p>
                       </div>
                     </div>
                   ))}

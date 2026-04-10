@@ -16,7 +16,6 @@ const iconMap: { [key: string]: React.ComponentType<any> } = {
   Dashboard: Home,
   "User Management": Users,
   "Program Management": BookOpen,
-  "Project List": BookOpen,
   "Project Recommendation": BookOpen,
   "Funds and Budget": FileText,
   "Analytics": BarChart2,
@@ -72,7 +71,6 @@ const roleNavigation: RoleNavigation = {
       { title: "Dashboard", href: "/program-chair-dashboard" },
       { title: "Program Management", href: "/program-chair-program-management" },
         { title: "Budget Management", href: "/program-chair-budget-management" },
-        { title: "Project List", href: "/program-chair-project-list" },
       { title: "Analytics", href: "/program-chair-analytics" },
       { title: "Reports", href: "/program-chair-report" },
     ],
@@ -85,7 +83,6 @@ const roleNavigation: RoleNavigation = {
       { title: "Budget Management", href: "/project-head-budget-management" },
 
       { title: "Report Submission", href: "/project-head-report-submission" },
-      { title: "Task Management", href: "/project-head-task-management" },
       { title: "Analytics", href: "/project-head-analytics" },
       { title: "Reports", href: "/project-head-report" },
     ],

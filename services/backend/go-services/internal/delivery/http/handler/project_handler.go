@@ -75,6 +75,23 @@ func (h *ProjectHandler) GetProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.URL.Query().Get("assigned_to_me") == "1" {
+		projects, err := h.projectUsecase.GetProjectsAssignedToHead(r.Context(), userID)
+		if err != nil {
+			if strings.HasPrefix(err.Error(), "forbidden:") {
+				respondWithError(w, http.StatusForbidden, strings.TrimPrefix(err.Error(), "forbidden: "))
+				return
+			}
+			respondWithError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		respondWithJSON(w, http.StatusOK, map[string]interface{}{
+			"projects": projects,
+		})
+		return
+	}
+
 	programID := r.URL.Query().Get("program_id")
 	if programID == "" {
 		respondWithError(w, http.StatusBadRequest, "program_id query parameter is required")
@@ -219,6 +236,11 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.projectUsecase.DeleteProject(r.Context(), id); err != nil {
+		// Check if error is due to active tasks
+		if strings.Contains(err.Error(), "active task") {
+			respondWithError(w, http.StatusConflict, err.Error())
+			return
+		}
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

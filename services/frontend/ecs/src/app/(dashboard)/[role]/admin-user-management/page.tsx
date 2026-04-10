@@ -481,7 +481,7 @@ export default function UserManagement() {
     });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+    <div className="min-h-screen bg-white p-6">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
         
@@ -494,7 +494,7 @@ export default function UserManagement() {
         }
         
         .table-row-hover:hover {
-          background-color: rgba(59, 130, 246, 0.10);
+          background-color: rgba(15, 23, 42, 0.04);
           transition: all 0.2s ease;
         }
       `}</style>
@@ -519,7 +519,7 @@ export default function UserManagement() {
               Refresh
             </Button>
             {pendingUsers.length > 0 && (
-              <Badge className="bg-orange-600 text-white px-4 py-2 text-sm">
+              <Badge className="bg-[#BA0021] text-white px-4 py-2 text-sm">
                 <UserCheck className="h-4 w-4 mr-2" />
                 {pendingUsers.length} Pending
               </Badge>
@@ -545,14 +545,14 @@ export default function UserManagement() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-slate-900 text-2xl mb-2 flex items-center gap-2">
-                    <UserCheck className="h-6 w-6 text-orange-600" />
+                    <UserCheck className="h-6 w-6 text-[#BA0021]" />
                     Pending Approvals
                   </CardTitle>
                   <CardDescription className="text-slate-600">
                     Users waiting for approval to access the system
                   </CardDescription>
                 </div>
-                <Badge className="bg-orange-600 text-white px-4 py-2 text-sm">
+                <Badge className="bg-[#BA0021] text-white px-4 py-2 text-sm">
                   {pendingUsers.length} Pending
                 </Badge>
               </div>
@@ -724,8 +724,7 @@ export default function UserManagement() {
             ) : (
               <>
                 {toast && (
-                  <div className={`fixed top-1/2 left-1/2 z-50 rounded-lg shadow-lg px-4 py-3 text-sm font-medium ${toast.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
-                    style={{ transform: 'translate(-50%, -50%)' }}>
+                  <div className={`fixed top-6 right-6 z-50 rounded-lg shadow-lg px-4 py-3 text-sm font-medium ${toast.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                     {toast.message}
                   </div>
                 )}
@@ -834,7 +833,7 @@ export default function UserManagement() {
                                       onClick={() => handleEdit(user.id)}
                                       className="cursor-pointer text-slate-900 hover:bg-slate-100"
                                     >
-                                      <Edit className="mr-2 h-4 w-4 text-blue-600" />
+                                      <Edit className="mr-2 h-4 w-4 text-[#BA0021]" />
                                       <span>Edit User</span>
                                     </DropdownMenuItem>
                                     {(user.account_status === 'inactive' || user.account_status === 'suspended') && (
@@ -849,9 +848,9 @@ export default function UserManagement() {
                                     {(user.account_status === 'inactive' || user.account_status === 'suspended') && (
                                       <DropdownMenuItem 
                                         onClick={() => handleReject(user.id)}
-                                        className="cursor-pointer text-slate-900 hover:bg-orange-50"
+                                        className="cursor-pointer text-slate-900 hover:bg-red-50"
                                       >
-                                        <UserX className="mr-2 h-4 w-4 text-orange-600" />
+                                        <UserX className="mr-2 h-4 w-4 text-red-600" />
                                         <span>Reject User</span>
                                       </DropdownMenuItem>
                                     )}
@@ -925,7 +924,7 @@ export default function UserManagement() {
                       variant="ghost"
                       size="sm"
                       onClick={() => { navigator.clipboard.writeText(editingUser.id); }}
-                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 shrink-0"
+                      className="text-[#BA0021] hover:text-[#930018] hover:bg-red-50 shrink-0"
                     >
                       Copy ID
                     </Button>

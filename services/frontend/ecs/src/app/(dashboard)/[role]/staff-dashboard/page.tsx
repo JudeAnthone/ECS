@@ -1,384 +1,340 @@
 "use client"
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Badge } from '@/shared/components/ui/Badge'
 import { ScrollArea } from '@/shared/components/ui/ScrollArea'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/shared/components/ui/DropdownMenu'
-import { Button } from '@/shared/components/ui/Button'
-import { 
-  CheckCircle2, 
-  Bell,
-  Folder,
-  MoreVertical,
-  Check,
-  Trash2
-} from 'lucide-react';
+import { CheckCircle2, Bell, Folder, Loader2 } from 'lucide-react'
 import ClientNow from '@/shared/components/ui/ClientNow'
+import { AuthService } from '@/shared/lib/auth-service'
+
+const API = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081'}/api/v1`
+
+type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
+
+interface StaffProjectSummary {
+  project_id: string
+  project_name: string
+  department_name: string
+  status: string
+  date_assigned: string
+  deadline?: string | null
+  budget_allocated?: number | null
+  progress: number
+  description?: string | null
+  total_tasks: number
+  completed_tasks: number
+  ongoing_tasks: number
+  not_started_tasks: number
+  cancelled_tasks: number
+}
+
+interface StaffTask {
+  id: string
+  title: string
+  description?: string | null
+  project_id: string
+  project_name: string
+  date_given: string
+  deadline?: string | null
+  status: TaskStatus
+  priority: string
+}
+
+function authHeaders() {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : ''
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+}
+
+function formatStatus(status: string) {
+  const value = (status || '').toLowerCase()
+  if (value === 'in_progress') return 'In Progress'
+  if (value === 'pending') return 'Not Started'
+  if (value === 'completed') return 'Completed'
+  if (value === 'cancelled') return 'Cancelled'
+  return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || '-'
+}
+
+function formatCurrency(amount?: number | null) {
+  if (amount == null) return '—'
+  return new Intl.NumberFormat('en-PH', {
+    style: 'currency',
+    currency: 'PHP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
+
+function getPriorityBadge(priority: string) {
+  const value = (priority || '').toLowerCase()
+  if (value === 'critical' || value === 'urgent') return 'bg-red-100 text-red-700 border-red-200'
+  if (value === 'high') return 'bg-orange-100 text-orange-700 border-orange-200'
+  if (value === 'medium') return 'bg-amber-100 text-amber-700 border-amber-200'
+  return 'bg-slate-100 text-slate-700 border-slate-200'
+}
 
 export default function PersonnelDashboard() {
-  const [projects, setProjects] = useState([
-    {
-      id: 1,
-      name: 'Customer Portal Redesign',
-      department: 'UI/UX Design',
-      status: 'In Progress',
-      progress: 75,
-      deadline: '2026-02-15',
-      assignees: ['Sarah Chen', 'Marcus Rodriguez']
-    },
-    {
-      id: 2,
-      name: 'API Integration v3.0',
-      department: 'Engineering',
-      status: 'In Progress',
-      progress: 60,
-      deadline: '2026-02-28',
-      assignees: ['David Kim', 'Emily Watson']
-    },
-    {
-      id: 3,
-      name: 'Q1 Marketing Campaign',
-      department: 'Marketing',
-      status: 'Planning',
-      progress: 30,
-      deadline: '2026-03-01',
-      assignees: ['Lisa Anderson', 'James Foster']
-    },
-    {
-      id: 4,
-      name: 'Security Audit 2026',
-      department: 'IT Security',
-      status: 'Review',
-      progress: 90,
-      deadline: '2026-01-31',
-      assignees: ['Robert Taylor', 'Patricia Martinez']
-    },
-    {
-      id: 5,
-      name: 'Mobile App Enhancement',
-      department: 'Development',
-      status: 'In Progress',
-      progress: 45,
-      deadline: '2026-03-15',
-      assignees: ['John Smith', 'Sarah Chen']
-    },
-    {
-      id: 6,
-      name: 'Data Migration Project',
-      department: 'IT Operations',
-      status: 'Planning',
-      progress: 20,
-      deadline: '2026-04-01',
-      assignees: ['Marcus Rodriguez', 'David Kim']
+  const [projects, setProjects] = useState<StaffProjectSummary[]>([])
+  const [tasks, setTasks] = useState<StaffTask[]>([])
+  const [userName, setUserName] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const [projectRes, taskRes] = await Promise.all([
+        fetch(`${API}/staff/projects-with-task-summary`, { headers: authHeaders() }),
+        fetch(`${API}/staff/tasks`, { headers: authHeaders() }),
+      ])
+
+      if (!projectRes.ok) throw new Error(await projectRes.text() || 'Failed to load assigned projects.')
+      if (!taskRes.ok) throw new Error(await taskRes.text() || 'Failed to load assigned tasks.')
+
+      const projectPayload = await projectRes.json()
+      const taskPayload = await taskRes.json()
+
+      setProjects(Array.isArray(projectPayload.projects) ? projectPayload.projects : [])
+      setTasks(Array.isArray(taskPayload.tasks) ? taskPayload.tasks : [])
+    } catch (err) {
+      setProjects([])
+      setTasks([])
+      setError(err instanceof Error ? err.message : 'Failed to load staff dashboard.')
+    } finally {
+      setLoading(false)
     }
-  ]);
+  }, [])
 
-  // Top 6 Priority Tasks
-  const priorityTasks = [
-    {
-      title: 'Task #1',
-      count: 'Update the client onboarding documents to reflect new compliance requirements.',
-      icon: CheckCircle2,
-      priority: 'high',
-      dueToday: true
-    },
-    {
-      title: 'Task #2',
-      count: 'Submit the quarterly financial report to the finance department for review.',
-      icon: CheckCircle2,
-      priority: 'critical',
-      dueToday: true
-    },
-    {
-      title: 'Task #3',
-      count: 'Finalize the design mockups for the upcoming mobile app update.',
-      icon: CheckCircle2,
-      priority: 'medium',
-      dueToday: false
-    },
-    {
-      title: 'Task #4',
-      count: 'Prepare presentation slides for the annual stakeholder meeting.',
-      icon: CheckCircle2,
-      priority: 'high',
-      dueToday: true
-    },
-    {
-      title: 'Task #5',
-      count: 'Conduct user testing sessions for the new feature rollout.',
-      icon: CheckCircle2,
-      priority: 'high',
-      dueToday: false
-    },
-    {
-      title: 'Task #6',
-      count: 'Analyze clients feedback data to identify areas for improvement.',
-      icon: CheckCircle2,
-      priority: 'medium',
-      dueToday: false
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    const user = AuthService.getUser()
+    const fullName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
+    setUserName(fullName || user?.username || '')
+  }, [])
+
+  const tasksByProject = useMemo(() => {
+    const map = new Map<string, StaffTask[]>()
+    for (const task of tasks) {
+      const list = map.get(task.project_id) || []
+      list.push(task)
+      map.set(task.project_id, list)
     }
-  ];
+    return map
+  }, [tasks])
 
-  const newChanges = [
-    {
-      id: 1,
-      content: 'Updated deployment pipeline to include automated security scans',
-      date: '2026-01-27',
-      author: 'DevOps Team',
-      type: ''
-    },
-    {
-      id: 2,
-      content: 'New API endpoints added for user preference management',
-      date: '2026-01-27',
-      author: 'Backend Team',
-      type: 'Feature'
-    },
-    {
-      id: 3,
-      content: 'Database indexing optimized for faster query performance',
-      date: '2026-01-27',
-      author: 'Database Team',
-      type: 'Optimization'
-    },
-    {
-      id: 4,
-      content: 'UI components updated to match new design system guidelines',
-      date: '2026-01-26',
-      author: 'Frontend Team',
-      type: 'Design'
-    },
-    {
-      id: 5,
-      content: 'Authentication flow enhanced with two-factor authentication',
-      date: '2026-01-26',
-      author: 'Security Team',
-      type: 'Security'
-    }
-  ];
+  const totalProjects = projects.length
+  const activeProjects = projects.filter(project => (project.status || '').toLowerCase() === 'in_progress').length
+  const completedTasks = tasks.filter(task => task.status === 'completed').length
+  const pendingTasks = tasks.filter(task => task.status === 'pending' || task.status === 'in_progress').length
 
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'In Progress':
-        return 'bg-blue-100 text-blue-700';
-      case 'Planning':
-        return 'bg-purple-100 text-purple-700';
-      case 'Review':
-        return 'bg-amber-100 text-amber-700';
-      case 'Completed':
-        return 'bg-green-100 text-green-700';
-      default:
-        return 'bg-gray-100 text-gray-700';
-    }
-  };
-
-/** Add the accept logic here */
-  const handleAccept = (projectId: number) => {
-    console.log('Accepted project:', projectId);
-
-  };
-
-/** Add the delete logic here */
-  const handleDelete = (projectId: number) => {
-    setProjects(projects.filter(p => p.id !== projectId));
-    console.log('Deleted project:', projectId);
-  };
+  const upcomingTasks = [...tasks]
+    .filter(task => task.status !== 'completed' && task.status !== 'cancelled')
+    .sort((a, b) => {
+      const aDate = a.deadline ? new Date(a.deadline).getTime() : Number.POSITIVE_INFINITY
+      const bDate = b.deadline ? new Date(b.deadline).getTime() : Number.POSITIVE_INFINITY
+      return aDate - bDate
+    })
+    .slice(0, 5)
 
   return (
-    <div className="min-h-screen">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Workspace</h1>
-            <p className="text-gray-500 mt-1">Manage your tasks, changes, and projects</p>
-          </div>
-          <div className="text-sm text-gray-500">
-            Last updated: <ClientNow />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {priorityTasks.map((task, index) => {
-            const Icon = task.icon;
-            return (
-              <Card key={index}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    {task.title}
-                  </CardTitle>
-                  <Icon className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-lg font-semibold">{task.count}</div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant={task.priority === 'critical' ? 'destructive' : 'outline'} className="text-xs">
-                      {task.priority}
-                    </Badge>
-                    {task.dueToday && (
-                      <span className="text-xs text-gray-500">Due today</span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        {/* Lower Half - Two Column Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* New Changes List */}
-          <Card className="lg:col-span-1">
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Bell className="h-5 w-5 text-blue-500" />
-                <CardTitle>New Changes</CardTitle>
+    <div className="min-h-screen bg-white p-6">
+      <div className="max-w-[1920px] mx-auto space-y-6">
+        <div className="rounded-3xl border border-slate-200 bg-white px-6 py-7 shadow-sm text-slate-900">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-3xl space-y-3">
+              <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-slate-600">
+                Staff Workspace
               </div>
-              <CardDescription>
-                Recent updates and modifications across projects
-              </CardDescription>
+              <div>
+                <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+                  {userName ? `Welcome back, ${userName}` : 'Welcome back'}
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm md:text-base text-slate-500">
+                  Track the projects you own, review task progress, and stay aligned with your assigned work in one place.
+                </p>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Last updated: <span className="font-semibold text-slate-900"><ClientNow /></span>
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <Alert className="border-red-200 bg-red-50 text-red-700">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-slate-100 flex items-center justify-center">
+              <Folder className="h-5 w-5 text-slate-600" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900 leading-none">{totalProjects}</div>
+              <div className="text-xs font-medium text-slate-500 mt-1">Assigned Projects</div>
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-emerald-50 flex items-center justify-center">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900 leading-none">{activeProjects}</div>
+              <div className="text-xs font-medium text-slate-500 mt-1">Active Projects</div>
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-amber-50 flex items-center justify-center">
+              <CheckCircle2 className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900 leading-none">{completedTasks}</div>
+              <div className="text-xs font-medium text-slate-500 mt-1">Completed Tasks</div>
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-rose-50 flex items-center justify-center">
+              <Bell className="h-5 w-5 text-rose-600" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900 leading-none">{pendingTasks}</div>
+              <div className="text-xs font-medium text-slate-500 mt-1">Pending Tasks</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <Card className="xl:col-span-2 bg-white border border-slate-200 rounded-3xl shadow-sm">
+            <CardHeader className="border-b border-slate-100">
+              <CardTitle className="text-xl font-semibold text-slate-900">Assigned Projects</CardTitle>
+              <CardDescription className="text-slate-500">Current project workload and task completion status.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[400px] pr-4">
-                <div className="space-y-3">
-                  {newChanges.map((change) => (
-                    <Alert key={change.id} className="border-l-4 border-l-blue-500">
-                      <AlertDescription>
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900 mb-1">
-                              {change.content}
-                            </p>
-                            <div className="flex items-center gap-2 mt-2">
-                              <p className="text-xs text-gray-500">{change.date}</p>
-                              <span className="text-xs text-gray-400">•</span>
-                              <p className="text-xs text-gray-500">{change.author}</p>
-                            </div>
-                          </div>
-                          <Badge variant="default">
-                            {change.type}
-                          </Badge>
-                        </div>
-                      </AlertDescription>
-                    </Alert>
-                  ))}
+            <CardContent className="p-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-12 text-slate-500 gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Loading assigned projects...
                 </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-
-          {/* Project List */}
-          <Card className="lg:col-span-1">
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Folder className="h-5 w-5 text-purple-500" />
-                <CardTitle>Project List</CardTitle>
-              </div>
-              <CardDescription>
-                All active projects and their current status
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[400px] pr-4">
+              ) : projects.length === 0 ? (
+                <div className="py-10 text-center text-slate-400">No assigned projects found yet.</div>
+              ) : (
                 <div className="space-y-4">
-                  {projects.map((project) => (
-                    <div key={project.id} className="p-4 border rounded-lg bg-white hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className="text-sm font-semibold text-gray-900">
-                              {project.name}
-                            </h3>
-                            <Badge className={getStatusColor(project.status)}>
-                              {project.status}
-                            </Badge>
-                          </div>
-                          
-                          <p className="text-xs text-gray-500 mb-3">
-                            {project.department}
-                          </p>
-                          
-                          {/* Progress Bar */}
-                          <div className="mb-3">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs text-gray-600">Progress</span>
-                              <span className="text-xs font-medium text-gray-900">{project.progress}%</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-blue-600 h-2 rounded-full transition-all"
-                                style={{ width: `${project.progress}%` }}
-                              />
-                            </div>
-                          </div>
+                  {projects.map(project => {
+                    const projectTasks = tasksByProject.get(project.project_id) || []
+                    const completedCount = projectTasks.filter(task => task.status === 'completed').length
+                    const taskProgress = projectTasks.length > 0 ? Math.round((completedCount / projectTasks.length) * 100) : project.progress
 
-                          {/* Assignees */}
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xs text-gray-500">Team:</span>
-                            <div className="flex -space-x-2">
-                              {project.assignees.map((assignee, idx) => (
-                                <div
-                                  key={idx}
-                                  className="h-6 w-6 rounded-full  flex items-center justify-center text-white font-semibold text-xs border-2 border-white"
-                                  title={assignee}
-                                >
-                                  {assignee.split(' ').map(n => n[0]).join('')}
-                                </div>
-                              ))}
+                    return (
+                      <div key={project.project_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="text-base font-semibold text-slate-900">{project.project_name}</h3>
+                              <Badge className="bg-slate-100 text-slate-700 border-slate-200">{formatStatus(project.status)}</Badge>
                             </div>
+                            <p className="text-sm text-slate-500 mt-1">{project.department_name}</p>
                           </div>
-
-                          <p className="text-xs text-gray-500">
-                            Deadline: {new Date(project.deadline).toLocaleDateString()}
-                          </p>
+                          <div className="text-right text-sm text-slate-600">
+                            <div className="font-medium text-slate-900">{formatCurrency(project.budget_allocated)}</div>
+                            <div className="text-xs text-slate-500">Budget</div>
+                          </div>
                         </div>
 
-                        {/* Action Menu */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem 
-                              onClick={() => handleAccept(project.id)}
-                              className="cursor-pointer"
-                            >
-                            {/**Why is report here? for reporting if ever the project is finished or any other reason incase 
-                             * of needed updates for the project by higher ups this report will be included for the 
-                             * higher ups report that the staff is part with. When the staff reports it will be cited 
-                             * including the date and time of the report for future reference.
-                             */}
-                              <Check className="mr-2 h-4 w-4 text-green-600" />
-                              <span>Report</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => handleDelete(project.id)}
-                              className="cursor-pointer text-red-600"
-                            >
-                            {/**Remove is use when the project is already not included to the staff*/}
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              <span>Remove</span>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <div className="mt-4">
+                          <div className="flex items-center justify-between mb-2 text-sm">
+                            <span className="text-slate-600">Task Progress</span>
+                            <span className="font-semibold text-slate-900">{taskProgress}%</span>
+                          </div>
+                          <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                            <div className="bg-slate-900 h-2.5 rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(taskProgress, 100))}%` }} />
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                          <div className="rounded-lg bg-white border border-slate-200 p-3">
+                            <div className="text-xs text-slate-500">Total Tasks</div>
+                            <div className="font-semibold text-slate-900">{project.total_tasks}</div>
+                          </div>
+                          <div className="rounded-lg bg-white border border-slate-200 p-3">
+                            <div className="text-xs text-slate-500">Completed</div>
+                            <div className="font-semibold text-emerald-600">{project.completed_tasks}</div>
+                          </div>
+                          <div className="rounded-lg bg-white border border-slate-200 p-3">
+                            <div className="text-xs text-slate-500">Ongoing</div>
+                            <div className="font-semibold text-blue-600">{project.ongoing_tasks}</div>
+                          </div>
+                          <div className="rounded-lg bg-white border border-slate-200 p-3">
+                            <div className="text-xs text-slate-500">Pending</div>
+                            <div className="font-semibold text-amber-600">{project.not_started_tasks}</div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 text-xs text-slate-500">
+                          Deadline: {project.deadline ? new Date(project.deadline).toLocaleDateString() : '—'}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
-              </ScrollArea>
+              )}
             </CardContent>
           </Card>
+
+          <div className="space-y-6">
+            <Card className="bg-white border border-slate-200 rounded-3xl shadow-sm">
+              <CardHeader className="border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-slate-600" />
+                  <CardTitle className="text-lg font-semibold text-slate-900">Notifications</CardTitle>
+                </div>
+                <CardDescription className="text-slate-500">To be developed</CardDescription>
+              </CardHeader>
+              <CardContent className="p-6 text-sm text-slate-500 bg-white rounded-b-3xl">
+                Notifications are not available yet.
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white border border-slate-200 rounded-3xl shadow-sm">
+              <CardHeader className="border-b border-slate-100">
+                <CardTitle className="text-lg font-semibold text-slate-900">Upcoming Tasks</CardTitle>
+                <CardDescription className="text-slate-500">Nearest deadlines from your assigned work.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[420px]">
+                  <div className="p-4 space-y-3">
+                    {upcomingTasks.length === 0 ? (
+                      <div className="py-8 text-center text-slate-400">No upcoming tasks.</div>
+                    ) : upcomingTasks.map(task => (
+                      <div key={task.id} className="rounded-2xl border border-slate-200 p-4 bg-white">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium text-slate-900">{task.title}</p>
+                            <p className="text-xs text-slate-500 mt-1">{task.project_name}</p>
+                          </div>
+                          <Badge className={`text-xs border ${getPriorityBadge(task.priority)}`}>{task.priority}</Badge>
+                        </div>
+                        <div className="mt-3 text-xs text-slate-600">
+                          Status: <span className="font-medium text-slate-900">{formatStatus(task.status)}</span>
+                        </div>
+                        <div className="text-xs text-slate-600 mt-1">
+                          Deadline: {task.deadline ? new Date(task.deadline).toLocaleDateString() : '—'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>
-  );
+  )
 }
