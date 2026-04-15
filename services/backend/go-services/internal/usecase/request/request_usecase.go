@@ -10,10 +10,10 @@ import (
 )
 
 type requestUseCase struct {
-	requestRepo repository.RequestRepository
-	programRepo repository.ProgramRepository
-	userRepo    repository.UserRepository
-	deptRepo    repository.DepartmentRepository
+	requestRepo      repository.RequestRepository
+	programRepo      repository.ProgramRepository
+	userRepo         repository.UserRepository
+	deptRepo         repository.DepartmentRepository
 	notificationRepo repository.NotificationRepository
 }
 
@@ -30,10 +30,10 @@ func NewRequestUseCase(
 		notifRepo = notificationRepo[0]
 	}
 	return &requestUseCase{
-		requestRepo: requestRepo,
-		programRepo: programRepo,
-		userRepo:    userRepo,
-		deptRepo:    deptRepo,
+		requestRepo:      requestRepo,
+		programRepo:      programRepo,
+		userRepo:         userRepo,
+		deptRepo:         deptRepo,
 		notificationRepo: notifRepo,
 	}
 }

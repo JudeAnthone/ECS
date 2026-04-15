@@ -1,9 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
-	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"

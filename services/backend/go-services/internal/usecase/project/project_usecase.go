@@ -11,10 +11,10 @@ import (
 )
 
 type projectUseCase struct {
-	projectRepo repository.ProjectRepository
-	userRepo    repository.UserRepository
-	deptRepo    repository.DepartmentRepository
-	programRepo repository.ProgramRepository
+	projectRepo      repository.ProjectRepository
+	userRepo         repository.UserRepository
+	deptRepo         repository.DepartmentRepository
+	programRepo      repository.ProgramRepository
 	notificationRepo repository.NotificationRepository
 }
 

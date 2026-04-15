@@ -13,9 +13,9 @@ import (
 )
 
 type budgetUsecase struct {
-	budgetRepo  repository.BudgetRepository
-	projectRepo repository.ProjectRepository
-	programRepo repository.ProgramRepository
+	budgetRepo       repository.BudgetRepository
+	projectRepo      repository.ProjectRepository
+	programRepo      repository.ProgramRepository
 	notificationRepo repository.NotificationRepository
 }
 
