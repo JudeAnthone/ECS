@@ -15,6 +15,7 @@ type projectUseCase struct {
 	userRepo    repository.UserRepository
 	deptRepo    repository.DepartmentRepository
 	programRepo repository.ProgramRepository
+	notificationRepo repository.NotificationRepository
 }
 
 func normalizeOptionalString(input *string) *string {
@@ -34,8 +35,13 @@ func NewProjectUseCase(
 	userRepo repository.UserRepository,
 	deptRepo repository.DepartmentRepository,
 	programRepo repository.ProgramRepository,
+	notificationRepo ...repository.NotificationRepository,
 ) UseCase {
-	return &projectUseCase{projectRepo: projectRepo, userRepo: userRepo, deptRepo: deptRepo, programRepo: programRepo}
+	var notifRepo repository.NotificationRepository
+	if len(notificationRepo) > 0 {
+		notifRepo = notificationRepo[0]
+	}
+	return &projectUseCase{projectRepo: projectRepo, userRepo: userRepo, deptRepo: deptRepo, programRepo: programRepo, notificationRepo: notifRepo}
 }
 
 // GetMyProjects retrieves all projects created by the current user.
@@ -151,6 +157,43 @@ func (uc *projectUseCase) CreateProject(ctx context.Context, req *domain.CreateP
 	if err := uc.projectRepo.Create(ctx, project, createdBy); err != nil {
 		return nil, fmt.Errorf("failed to create project: %w", err)
 	}
+
+	if uc.notificationRepo != nil && creatorRole == domain.RoleProjectHead && project.ProgramID != nil && strings.TrimSpace(*project.ProgramID) != "" {
+		requesterName := "A project head"
+		if creator != nil {
+			fullName := strings.TrimSpace(strings.TrimSpace(creator.FirstName) + " " + strings.TrimSpace(creator.LastName))
+			if fullName != "" {
+				requesterName = fullName
+			}
+		}
+
+		recipients := map[string]struct{}{}
+		if creator != nil && creator.AssignedProgramChairID != nil {
+			chairID := strings.TrimSpace(*creator.AssignedProgramChairID)
+			if chairID != "" && chairID != createdBy {
+				recipients[chairID] = struct{}{}
+			}
+		}
+		if program, programErr := uc.programRepo.GetByID(ctx, *project.ProgramID); programErr == nil && program != nil && program.ProgramChairID != nil {
+			chairID := strings.TrimSpace(*program.ProgramChairID)
+			if chairID != "" && chairID != createdBy {
+				recipients[chairID] = struct{}{}
+			}
+		}
+
+		entityType := "program"
+		entityID := *project.ProgramID
+		for chairID := range recipients {
+			_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+				UserID:     chairID,
+				Title:      "New Project Request",
+				Message:    fmt.Sprintf("%s submitted project request \"%s\" for review.", requesterName, project.ProjectName),
+				Type:       "request_submitted",
+				EntityType: &entityType,
+				EntityID:   &entityID,
+			})
+		}
+	}
 	return project, nil
 }
 
@@ -250,6 +293,45 @@ func (uc *projectUseCase) UpdateProjectApproval(ctx context.Context, id string, 
 
 	if err := uc.projectRepo.UpdateApproval(ctx, id, req.ApprovalStatus, status, actorID, reviewNotes); err != nil {
 		return fmt.Errorf("failed to persist project approval: %w", err)
+	}
+
+	if uc.notificationRepo != nil {
+		recipients := map[string]struct{}{}
+		if strings.TrimSpace(project.CreatedBy) != "" {
+			recipients[strings.TrimSpace(project.CreatedBy)] = struct{}{}
+		}
+		if project.ProjectHeadID != nil && strings.TrimSpace(*project.ProjectHeadID) != "" {
+			recipients[strings.TrimSpace(*project.ProjectHeadID)] = struct{}{}
+		}
+
+		typeValue := "request_rejected"
+		title := "Project Request Rejected"
+		message := fmt.Sprintf("Your project request \"%s\" was rejected.", project.ProjectName)
+		if req.ApprovalStatus == "approved" {
+			typeValue = "request_approved"
+			title = "Project Request Approved"
+			message = fmt.Sprintf("Your project request \"%s\" was approved.", project.ProjectName)
+		}
+		if reviewNotes != nil && strings.TrimSpace(*reviewNotes) != "" {
+			typeValue = "feedback_received"
+			message = fmt.Sprintf("%s Review notes: %s", message, strings.TrimSpace(*reviewNotes))
+		}
+
+		entityType := "project"
+		entityID := project.ID
+		for recipientID := range recipients {
+			if recipientID == "" || recipientID == actorID {
+				continue
+			}
+			_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+				UserID:     recipientID,
+				Title:      title,
+				Message:    message,
+				Type:       typeValue,
+				EntityType: &entityType,
+				EntityID:   &entityID,
+			})
+		}
 	}
 	return nil
 }
@@ -428,6 +510,21 @@ func (uc *projectUseCase) AssignProjectHead(ctx context.Context, projectID strin
 	if err := uc.projectRepo.AssignProjectHead(ctx, projectID, headID); err != nil {
 		return fmt.Errorf("failed to assign project head: %w", err)
 	}
+
+	if uc.notificationRepo != nil && headID != nil && strings.TrimSpace(*headID) != "" {
+		entityType := "project"
+		entityID := projectID
+		message := fmt.Sprintf("You were assigned as Project Head for project \"%s\".", project.ProjectName)
+		_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+			UserID:     *headID,
+			Title:      "Project Assignment",
+			Message:    message,
+			Type:       "project_assigned",
+			EntityType: &entityType,
+			EntityID:   &entityID,
+		})
+	}
+
 	return nil
 }
 
@@ -658,6 +755,25 @@ func (uc *projectUseCase) CreateProjectTask(ctx context.Context, projectID strin
 		return nil, fmt.Errorf("failed to create project task: %w", err)
 	}
 
+	if uc.notificationRepo != nil {
+		entityType := "task"
+		entityID := task.ID
+		for _, assigneeID := range uniqueAssignees {
+			if strings.TrimSpace(assigneeID) == "" {
+				continue
+			}
+			message := fmt.Sprintf("New task assigned: %s", task.Title)
+			_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+				UserID:     assigneeID,
+				Title:      "Task Assigned",
+				Message:    message,
+				Type:       "task_assigned",
+				EntityType: &entityType,
+				EntityID:   &entityID,
+			})
+		}
+	}
+
 	return task, nil
 }
 
@@ -708,6 +824,31 @@ func (uc *projectUseCase) UpdateProjectTaskStatus(ctx context.Context, taskID st
 
 	if err := uc.projectRepo.UpdateProjectTaskStatus(ctx, taskID, normalizedStatus); err != nil {
 		return fmt.Errorf("failed to update project task status: %w", err)
+	}
+
+	if uc.notificationRepo != nil && (normalizedStatus == "completed" || normalizedStatus == "cancelled") {
+		entityType := "task"
+		entityID := task.ID
+		for _, assigneeID := range task.AssigneeIDs {
+			if strings.TrimSpace(assigneeID) == "" {
+				continue
+			}
+			title := "Task Update"
+			typeValue := "request_updated"
+			message := fmt.Sprintf("Task \"%s\" was marked %s.", task.Title, normalizedStatus)
+			if normalizedStatus == "completed" {
+				title = "Task Completed"
+				typeValue = "task_completed"
+			}
+			_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+				UserID:     assigneeID,
+				Title:      title,
+				Message:    message,
+				Type:       typeValue,
+				EntityType: &entityType,
+				EntityID:   &entityID,
+			})
+		}
 	}
 
 	return nil
@@ -780,8 +921,36 @@ func (uc *projectUseCase) UpdateStaffTaskStatus(ctx context.Context, taskID stri
 		return fmt.Errorf("invalid status: %s", status)
 	}
 
+	task, err := uc.projectRepo.GetProjectTaskByID(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("failed to get task: %w", err)
+	}
+
 	if err := uc.projectRepo.UpdateStaffTaskStatus(ctx, taskID, actorID, normalizedStatus); err != nil {
 		return fmt.Errorf("failed to update staff task status: %w", err)
+	}
+
+	if uc.notificationRepo != nil && (normalizedStatus == "completed" || normalizedStatus == "cancelled") {
+		project, projectErr := uc.projectRepo.GetByID(ctx, task.ProjectID)
+		if projectErr == nil && project != nil && project.ProjectHeadID != nil && strings.TrimSpace(*project.ProjectHeadID) != "" {
+			entityType := "task"
+			entityID := task.ID
+			title := "Staff Task Update"
+			typeValue := "request_updated"
+			if normalizedStatus == "completed" {
+				title = "Task Completed"
+				typeValue = "task_completed"
+			}
+			message := fmt.Sprintf("Task \"%s\" was marked %s by staff.", task.Title, normalizedStatus)
+			_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+				UserID:     *project.ProjectHeadID,
+				Title:      title,
+				Message:    message,
+				Type:       typeValue,
+				EntityType: &entityType,
+				EntityID:   &entityID,
+			})
+		}
 	}
 
 	return nil

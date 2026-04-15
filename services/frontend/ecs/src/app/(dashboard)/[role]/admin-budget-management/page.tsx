@@ -8,6 +8,7 @@ import {
 import { Label } from '@/shared/components/ui/Label';
 import { Textarea } from '@/shared/components/ui/TextArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/Select';
+import ProfileAvatar from '@/shared/components/ui/ProfileAvatar';
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,8 @@ import {
 } from '@/shared/components/ui/DropdownMenu';
 import { Printer, MoreVertical, CheckCircle, XCircle, Loader2, Eye, FileText } from 'lucide-react';
 import { API_URL } from '@/shared/lib/api-config';
+import ActivityLogService from '@/shared/lib/activity-log-service';
+import { AuthService } from '@/shared/lib/auth-service';
 
 const API = `${API_URL}/api/v1`;
 function getToken() { return localStorage.getItem('auth_token'); }
@@ -108,15 +111,15 @@ function getBudgetRequestDocumentUrl(documentUrl?: string) {
 
 function ChairAvatar({ chair, size = 'md' }: { chair?: ChairUser | null; size?: 'sm' | 'md' | 'lg' }) {
   const sz = size === 'sm' ? 'h-7 w-7 text-xs' : size === 'lg' ? 'h-12 w-12 text-base' : 'h-9 w-9 text-sm';
-  const initials = `${chair?.first_name?.[0] || ''}${chair?.last_name?.[0] || ''}`.toUpperCase();
-  if (chair?.avatar_url) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={chair.avatar_url} alt={`${chair.first_name} ${chair.last_name}`} className={`${sz} rounded-full object-cover shrink-0 border border-slate-200`} />
-    );
-  }
   return (
-    <div className={`${sz} rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center shrink-0 border border-slate-300`}>{initials || 'PC'}</div>
+    <ProfileAvatar
+      imageUrl={chair?.avatar_url}
+      firstName={chair?.first_name}
+      lastName={chair?.last_name}
+      alt={`${chair?.first_name || ''} ${chair?.last_name || ''}`.trim() || 'Program Chair'}
+      className={`${sz} border border-slate-200`}
+      textClassName={size === 'sm' ? 'text-[10px]' : size === 'lg' ? 'text-base' : 'text-sm'}
+    />
   );
 }
 
@@ -296,6 +299,19 @@ export default function AdminBudgetManagementPage() {
         method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ allocated_budget: amt })
       });
       if (res.ok) {
+        const currentUser = AuthService.getUser();
+        const selectedChair = chairs.find((chair) => chair.id === allocChairId);
+        if (currentUser) {
+          await ActivityLogService.logActivity(
+            currentUser.id,
+            `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+            currentUser.role || 'admin',
+            currentUser.department || 'Budget Management',
+            `Allocated budget ${formatCurrency(amt)} to ${selectedChair ? `${selectedChair.first_name} ${selectedChair.last_name}`.trim() : 'program chair'}`,
+            'other',
+            { chairId: allocChairId, amount: amt }
+          );
+        }
         setIsAllocConfirmOpen(false);
         await loadAll(); setAllocAmount(''); setAllocChairId('');
         setToast({ message: 'Budget allocated successfully!', type: 'success' });

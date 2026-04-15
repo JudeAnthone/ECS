@@ -27,6 +27,8 @@ import {
   CheckCircle,
   Loader2,
 } from 'lucide-react';
+import ActivityLogService from '@/shared/lib/activity-log-service';
+import { AuthService } from '@/shared/lib/auth-service';
 
 const API = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081'}/api/v1`;
 
@@ -230,6 +232,26 @@ export default function StaffProjectTaskPage() {
       if (!res.ok) {
         const text = await res.text();
         throw new Error(text || 'Failed to update task status.');
+      }
+
+      const updatedTask = previousTasks.find(task => task.id === taskID);
+      const currentUser = AuthService.getUser();
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'staff',
+          currentUser.department || 'Operations',
+          `Updated task status to ${formatStatus(newStatus)}${updatedTask ? ` for ${updatedTask.title}` : ''}`,
+          'other',
+          {
+            taskId: taskID,
+            taskTitle: updatedTask?.title,
+            projectId: updatedTask?.project_id,
+            projectName: updatedTask?.project_name,
+            status: newStatus,
+          }
+        );
       }
 
       setError('');

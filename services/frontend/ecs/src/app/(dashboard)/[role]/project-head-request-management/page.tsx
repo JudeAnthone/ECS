@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
@@ -44,6 +45,9 @@ import {
   FolderOpen,
   XCircle,
 } from 'lucide-react'
+import ProfileAvatar from '@/shared/components/ui/ProfileAvatar'
+import ActivityLogService from '@/shared/lib/activity-log-service'
+import { AuthService } from '@/shared/lib/auth-service'
 
 const API = 'http://localhost:8081/api/v1'
 
@@ -53,6 +57,7 @@ interface CurrentUser {
   id: string
   first_name?: string
   last_name?: string
+  avatar_url?: string | null
   department?: string
   assigned_program_chair_id?: string | null
 }
@@ -210,23 +215,17 @@ function toApiPriority(priority?: string | null): 'low' | 'medium' | 'high' | 'u
 }
 
 function StaffAvatar({ staff, size = 'md' }: { staff: StaffUser; size?: 'sm' | 'md' }) {
-  const initials = `${staff.first_name?.[0] || ''}${staff.last_name?.[0] || ''}`.toUpperCase() || 'ST'
-  const sizeClass = size === 'sm' ? 'h-6 w-6 text-[10px]' : 'h-9 w-9 text-xs'
-
-  if (staff.avatar_url) {
-    return (
-      <img
-        src={staff.avatar_url}
-        alt={`${staff.first_name} ${staff.last_name}`}
-        className={`${sizeClass} rounded-full object-cover border border-slate-200`}
-      />
-    )
-  }
-
+  const sizeClass = size === 'sm' ? 'h-6 w-6' : 'h-9 w-9'
+  const textClass = size === 'sm' ? 'text-[10px]' : 'text-xs'
   return (
-    <div className={`${sizeClass} rounded-full bg-slate-200 text-slate-700 font-semibold flex items-center justify-center border border-slate-300`}>
-      {initials}
-    </div>
+    <ProfileAvatar
+      imageUrl={staff.avatar_url}
+      firstName={staff.first_name}
+      lastName={staff.last_name}
+      alt={`${staff.first_name} ${staff.last_name}`.trim() || 'Staff'}
+      className={`${sizeClass} border border-slate-300`}
+      textClassName={textClass}
+    />
   )
 }
 
@@ -293,6 +292,8 @@ const PHRM_STORAGE_KEYS = {
 } as const
 
 export default function ProjectHeadRequestManagement() {
+  const searchParams = useSearchParams()
+  const projectIDFromQuery = searchParams.get('projectId')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -352,6 +353,7 @@ export default function ProjectHeadRequestManagement() {
   const [toastVisible, setToastVisible] = useState(false)
   const [deleteTaskDialog, setDeleteTaskDialog] = useState<ProjectTask | null>(null)
   const [didRestoreSession, setDidRestoreSession] = useState(false)
+  const [projectQueryHandled, setProjectQueryHandled] = useState(false)
   const [taskForm, setTaskForm] = useState({
     title: '',
     description: '',
@@ -370,6 +372,7 @@ export default function ProjectHeadRequestManagement() {
         id: u.id,
         first_name: u.first_name,
         last_name: u.last_name,
+        avatar_url: u.avatar_url || null,
         department: u.department,
         assigned_program_chair_id: u.assigned_program_chair_id || null,
       })
@@ -580,6 +583,22 @@ export default function ProjectHeadRequestManagement() {
     loadData()
   }, [loadData])
 
+  useEffect(() => {
+    if (projectQueryHandled || !projectIDFromQuery || allProjects.length === 0) return
+
+    const target = allProjects.find((p) => p.id === projectIDFromQuery)
+    if (!target) {
+      setProjectQueryHandled(true)
+      return
+    }
+
+    if (target.program_id) {
+      setSelectedProgramID(target.program_id)
+    }
+    setViewProjectDetails(target)
+    setProjectQueryHandled(true)
+  }, [projectQueryHandled, projectIDFromQuery, allProjects])
+
   const departmentNameByID = useMemo(() => {
     const map = new Map<string, string>()
     if (myDepartment) {
@@ -604,6 +623,24 @@ export default function ProjectHeadRequestManagement() {
     departmentStaff.forEach(s => map.set(s.id, s))
     return map
   }, [departmentStaff])
+
+  // Create comprehensive user map including program chairs with avatar data
+  const userAvatarMapByID = useMemo(() => {
+    const map = new Map<string, { name: string; avatarUrl: string | null; role: string }>()
+    departmentStaff.forEach(s => {
+      map.set(s.id, { name: `${s.first_name} ${s.last_name}`.trim(), avatarUrl: s.avatar_url || null, role: 'Staff' })
+    })
+    programChairs.forEach(c => {
+      map.set(c.id, { name: `${c.first_name} ${c.last_name}`.trim(), avatarUrl: c.avatar_url || null, role: 'Program Chair' })
+    })
+    if (currentUser?.id) {
+      const meName = `${currentUser.first_name || ''} ${currentUser.last_name || ''}`.trim()
+      if (meName) {
+        map.set(currentUser.id, { name: meName, avatarUrl: currentUser.avatar_url || null, role: 'Project Head' })
+      }
+    }
+    return map
+  }, [departmentStaff, programChairs, currentUser])
 
   const programNameByID = useMemo(() => {
     const map = new Map<string, string>()
@@ -954,6 +991,19 @@ export default function ProjectHeadRequestManagement() {
         throw new Error(msg)
       }
 
+      const projectName = allProjects.find(project => project.id === projectID)?.project_name || projectID
+      await logProjectHeadActivity(
+        exists ? `Unassigned staff from project ${projectName}` : `Assigned staff to project ${projectName}`,
+        'other',
+        {
+          projectId: projectID,
+          projectName,
+          staffId: staffID,
+          assignedStaffIds: nextStaffIDs,
+          unassignedTriggeredTaskRules: applyUnassignTaskRules,
+        }
+      )
+
       setAssignStaffError('')
     } catch (err) {
       setStaffAssignments(previousAssignments)
@@ -1048,6 +1098,18 @@ export default function ProjectHeadRequestManagement() {
         }
         throw new Error(msg)
       }
+
+      await logProjectHeadActivity(
+        `Submitted project request: ${createForm.project_name.trim()}`,
+        'submission',
+        {
+          projectName: createForm.project_name.trim(),
+          programId: selectedProgram.id,
+          departmentId: selectedProgram.department_id,
+          requestedStartDate: createForm.start_date || null,
+          requestedEndDate: createForm.end_date || null,
+        }
+      )
 
       setCreateOpen(false)
       setCreateForm(emptyForm)
@@ -1199,6 +1261,17 @@ export default function ProjectHeadRequestManagement() {
       }
 
       await loadProjectTasks(selectedTaskProject.id)
+      await logProjectHeadActivity(
+        `Created task "${taskForm.title.trim()}" in project ${selectedTaskProject.project_name}`,
+        'submission',
+        {
+          projectId: selectedTaskProject.id,
+          projectName: selectedTaskProject.project_name,
+          assigneeIds: selectedAssigneeIDs,
+          budgetNeeded: taskBudget,
+          priority: taskForm.priority,
+        }
+      )
       setTaskForm({ title: '', description: '', assignee_ids: [], budget_needed: '', priority: 'medium', due_date: '' })
       setTaskError('')
       await loadData()
@@ -1223,6 +1296,19 @@ export default function ProjectHeadRequestManagement() {
       if (selectedTaskProject?.id) {
         await loadProjectTasks(selectedTaskProject.id)
       }
+
+      const updatedTask = prevTasks.find(t => t.id === taskID)
+      await logProjectHeadActivity(
+        `Updated task status to ${status.replace('_', ' ')}${updatedTask ? ` for ${updatedTask.title}` : ''}`,
+        'other',
+        {
+          taskId: taskID,
+          taskTitle: updatedTask?.title,
+          newStatus: status,
+          projectId: updatedTask?.project_id || selectedTaskProject?.id,
+        }
+      )
+
       setTaskError('')
     } catch (err) {
       setProjectTasks(prevTasks)
@@ -1232,6 +1318,7 @@ export default function ProjectHeadRequestManagement() {
 
   const deleteTask = async (taskID: string) => {
     const prevTasks = projectTasks
+    const deletedTask = prevTasks.find(t => t.id === taskID)
     setProjectTasks(prev => prev.filter(t => t.id !== taskID))
 
     try {
@@ -1246,6 +1333,15 @@ export default function ProjectHeadRequestManagement() {
         await loadProjectTasks(selectedTaskProject.id)
       }
       await loadData()
+      await logProjectHeadActivity(
+        `Deleted task${deletedTask ? `: ${deletedTask.title}` : ''}`,
+        'other',
+        {
+          taskId: taskID,
+          taskTitle: deletedTask?.title,
+          projectId: deletedTask?.project_id || selectedTaskProject?.id,
+        }
+      )
       setTaskError('')
       showToast('Task deleted successfully.', 'success')
     } catch (err) {
@@ -1281,6 +1377,15 @@ export default function ProjectHeadRequestManagement() {
         setSelectedAssignProjectID(null)
         setStaffSearch('')
       }
+
+      await logProjectHeadActivity(
+        `Deleted program: ${deleteProgramDialog.program_name}`,
+        'other',
+        {
+          programId: deleteProgramDialog.id,
+          programName: deleteProgramDialog.program_name,
+        }
+      )
 
       setDeleteProgramDialog(null)
       await loadData()
@@ -1331,6 +1436,16 @@ export default function ProjectHeadRequestManagement() {
         setSelectedAssignProjectID(null)
       }
 
+      await logProjectHeadActivity(
+        `Deleted project: ${deleteProjectDialog.project_name}`,
+        'other',
+        {
+          projectId: deleteProjectDialog.id,
+          projectName: deleteProjectDialog.project_name,
+          programId: deleteProjectDialog.program_id,
+        }
+      )
+
       setDeleteProjectDialog(null)
       setViewProjectDetails(null)
       await loadData()
@@ -1377,6 +1492,15 @@ export default function ProjectHeadRequestManagement() {
       }
 
       await loadData()
+      await logProjectHeadActivity(
+        `Accepted staff project request: ${project.project_name}`,
+        'approval',
+        {
+          projectId: project.id,
+          projectName: project.project_name,
+          requestedBy: project.created_by,
+        }
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to accept staff request.')
     } finally {
@@ -1392,6 +1516,25 @@ export default function ProjectHeadRequestManagement() {
       .split('_')
       .map(part => part.charAt(0).toUpperCase() + part.slice(1))
       .join(' ')
+  }
+
+  const logProjectHeadActivity = async (
+    action: string,
+    actionType: 'submission' | 'approval' | 'upload' | 'other',
+    metadata?: Record<string, unknown>
+  ) => {
+    const actor = AuthService.getUser()
+    if (!actor) return
+
+    await ActivityLogService.logActivity(
+      actor.id,
+      `${actor.first_name} ${actor.last_name}`.trim(),
+      actor.role || 'project_head',
+      actor.department || 'Project Management',
+      action,
+      actionType,
+      metadata
+    )
   }
 
   const showToast = (message: string, type: 'success' | 'error') => {
@@ -1747,13 +1890,25 @@ export default function ProjectHeadRequestManagement() {
                                 <span className="flex items-center gap-2">
                                   {(() => {
                                     const staff = departmentStaff.find(s => s.id === p.created_by)
+                                    const userAvatarData = userAvatarMapByID.get(p.created_by)
                                     const fallback = (userNameByID.get(p.created_by) || p.created_by)
-                                    return staff ? (
-                                      <StaffAvatar staff={staff} size="sm" />
-                                    ) : (
-                                      <span className="h-6 w-6 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold flex items-center justify-center border border-slate-300">
-                                        {(fallback.split(' ').map(n => n[0]).join('').slice(0, 2) || 'ST').toUpperCase()}
-                                      </span>
+                                    const fallbackStaffName = fallback.trim() || 'User'
+                                    
+                                    // Use staff avatar if available
+                                    if (staff) {
+                                      return <StaffAvatar staff={staff} size="sm" />
+                                    }
+                                    
+                                    // Use real avatar URL from userAvatarData if available
+                                    const avatarUrl = userAvatarData?.avatarUrl || (p.created_by === currentUser?.id ? currentUser?.avatar_url : undefined)
+                                    return (
+                                      <ProfileAvatar
+                                        imageUrl={avatarUrl}
+                                        fullName={fallbackStaffName}
+                                        alt={fallbackStaffName}
+                                        className="h-6 w-6 border border-slate-300"
+                                        textClassName="text-[10px]"
+                                      />
                                     )
                                   })()}
                                   <div>
@@ -2239,9 +2394,12 @@ export default function ProjectHeadRequestManagement() {
                                                       {staff ? (
                                                         <StaffAvatar staff={staff} size="sm" />
                                                       ) : (
-                                                        <span className="h-6 w-6 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold flex items-center justify-center border border-slate-300">
-                                                          {(fallbackName.split(' ').map(n => n[0]).join('').slice(0, 2) || 'ST').toUpperCase()}
-                                                        </span>
+                                                        <ProfileAvatar
+                                                          fullName={fallbackName}
+                                                          alt={fallbackName}
+                                                          className="h-6 w-6 border border-slate-300"
+                                                          textClassName="text-[10px]"
+                                                        />
                                                       )}
                                                       <span className="font-medium text-slate-900">{fallbackName}</span>
                                                     </span>
@@ -2514,10 +2672,29 @@ export default function ProjectHeadRequestManagement() {
                   <span className="mt-1 flex items-center gap-2 text-slate-600 text-sm">
                     {(() => {
                       const staff = departmentStaff.find(s => s.id === viewProjectDetails.created_by)
+                      const userAvatarData = userAvatarMapByID.get(viewProjectDetails.created_by)
                       const fallback = (userNameByID.get(viewProjectDetails.created_by) || viewProjectDetails.created_by)
-                      return staff ? (
-                        <StaffAvatar staff={staff} size="sm" />
-                      ) : (
+                      
+                      // Use staff avatar if available
+                      if (staff) {
+                        return <StaffAvatar staff={staff} size="sm" />
+                      }
+                      
+                      // Use real avatar URL if available in userAvatarMapByID
+                      if (userAvatarData?.avatarUrl) {
+                        return (
+                          <ProfileAvatar
+                            imageUrl={userAvatarData.avatarUrl}
+                            fullName={userAvatarData.name}
+                            alt={userAvatarData.name}
+                            className="h-6 w-6 border border-slate-300"
+                            textClassName="text-[10px]"
+                          />
+                        )
+                      }
+                      
+                      // Fallback to initials
+                      return (
                         <span className="h-6 w-6 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold flex items-center justify-center border border-slate-300">
                           {(fallback.split(' ').map(n => n[0]).join('').slice(0, 2) || 'ST').toUpperCase()}
                         </span>
@@ -2539,6 +2716,10 @@ export default function ProjectHeadRequestManagement() {
                 <p className="mt-1 text-slate-600 text-sm">{viewProjectDetails.project_description || 'No description'}</p>
               </div>
               <div>
+                <label className="text-sm font-medium text-slate-700">Review Notes</label>
+                <p className="mt-1 text-slate-600 text-sm">{viewProjectDetails.feedback || 'No review notes provided.'}</p>
+              </div>
+              <div>
                 <label className="text-sm font-medium text-slate-700">Budget</label>
                 <p className="mt-1 text-slate-600 text-sm">{fmtBudget(projectBudgetDisplay(viewProjectDetails))}</p>
               </div>
@@ -2557,17 +2738,14 @@ export default function ProjectHeadRequestManagement() {
                 {(() => {
                   const headID = viewProjectDetails.project_head_id
                   const headStaff = headID ? staffByID.get(headID) : undefined
-                  const isCurrentUserHead = headID && headID === currentUser?.id
-                  const headName =
-                    (headID ? userNameByID.get(headID) : '')
-                    || (isCurrentUserHead ? `${currentUser?.first_name || ''} ${currentUser?.last_name || ''}`.trim() : '')
-                    || headID
-                    || 'Not assigned'
+                  const headUserData = headID ? userAvatarMapByID.get(headID) : undefined
+                  const headName = headUserData?.name || userNameByID.get(headID || '') || 'Not assigned'
 
                   if (!headID) {
                     return <p className="mt-1 text-slate-600 text-sm">Not assigned</p>
                   }
 
+                  // Use staff avatar if available (has full staff data)
                   if (headStaff) {
                     return (
                       <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
@@ -2580,6 +2758,26 @@ export default function ProjectHeadRequestManagement() {
                     )
                   }
 
+                  // Use real avatar URL if available from userAvatarMapByID
+                  if (headUserData?.avatarUrl) {
+                    return (
+                      <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                        <ProfileAvatar
+                          imageUrl={headUserData.avatarUrl}
+                          fullName={headName}
+                          alt={headName}
+                          className="h-6 w-6 border border-slate-300"
+                          textClassName="text-[10px]"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-800 truncate">{headName}</p>
+                          <p className="text-xs text-slate-500">Project Head</p>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  // Fallback to initials if no avatar URL is available
                   return (
                     <div className="mt-2 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
                       <span className="h-6 w-6 rounded-full bg-slate-200 text-slate-700 text-[10px] font-semibold flex items-center justify-center border border-slate-300">

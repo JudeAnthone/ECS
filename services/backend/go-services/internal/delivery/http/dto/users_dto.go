@@ -12,3 +12,11 @@ type UpdateUserDTO struct {
 	ContactNumber          *string `json:"contact_number,omitempty"`
 	AccountStatus          *string `json:"account_status,omitempty"`
 }
+
+// UpdateOwnProfileDTO restricts updates for authenticated self-service profile edits.
+type UpdateOwnProfileDTO struct {
+	FirstName     *string `json:"first_name,omitempty"`
+	LastName      *string `json:"last_name,omitempty"`
+	Email         *string `json:"email,omitempty"`
+	ContactNumber *string `json:"contact_number,omitempty"`
+}

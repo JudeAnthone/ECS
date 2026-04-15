@@ -24,6 +24,8 @@ const Navbar = () => {
 
 	useEffect(() => {
 		setUser(AuthService.getUser());
+		const handleUserUpdated = () => setUser(AuthService.getUser());
+		window.addEventListener("ecs:user-updated", handleUserUpdated);
 		const nav = navRef.current;
 		if (!nav) return;
 
@@ -40,6 +42,7 @@ const Navbar = () => {
 		syncPadding();
 
 		return () => {
+			window.removeEventListener("ecs:user-updated", handleUserUpdated);
 			observer.disconnect();
 			(nav as HTMLElement).style.paddingRight = "";
 		};
@@ -149,7 +152,7 @@ const Navbar = () => {
 							user={{
 								name: `${user.first_name} ${user.last_name}`,
 								email: user.email,
-								avatar: user.avatar_url || "",
+								avatar: AuthService.resolveAvatarUrl(user.avatar_url),
 								role: user.role,
 							}}
 						/>

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/sha
 import { Badge } from '@/shared/components/ui/Badge'
 import { ScrollArea } from '@/shared/components/ui/ScrollArea'
 import { Button } from '@/shared/components/ui/Button';
+import ProfileAvatar from '@/shared/components/ui/ProfileAvatar'
 import { 
   TrendingUp,
   Clock,
@@ -28,6 +29,7 @@ type CurrentUser = {
   username?: string
   department?: string
   assigned_program_chair_id?: string | null
+  avatar_url?: string
 }
 
 type Department = {
@@ -119,6 +121,7 @@ export default function PerformanceDashboard() {
   const [error, setError] = useState('')
   const [allocation, setAllocation] = useState<Allocation>({ allocated: 0, spent: 0, remaining: 0, percent: 0 })
   const [projects, setProjects] = useState<Project[]>([])
+  const [departmentStaff, setDepartmentStaff] = useState<any[]>([])
 
   useEffect(() => {
     let mounted = true
@@ -187,6 +190,10 @@ export default function PerformanceDashboard() {
           mergedProjects.push(...(payload.projects || []))
         }
 
+        // Fetch staff data for avatars
+        const staffRes = await fetch(`${API}/staff?department_id=${myDepartment.id}`, { headers: authHeaders() })
+        const staffData = staffRes.ok ? (await staffRes.json()).staff || [] : []
+
         let chairID = currentUser.assigned_program_chair_id || myDepartment.program_chair_id || ''
         let nextAllocation: Allocation = { allocated: 0, spent: 0, remaining: 0, percent: 0 }
 
@@ -209,6 +216,7 @@ export default function PerformanceDashboard() {
 
         if (!mounted) return
         setProjects(mergedProjects.sort((a, b) => +new Date(b.created_at || '') - +new Date(a.created_at || '')))
+        setDepartmentStaff(staffData)
         setAllocation(nextAllocation)
       } catch (err) {
         if (!mounted) return
@@ -267,6 +275,28 @@ export default function PerformanceDashboard() {
       trend: 'Based on Budget Management allocation',
     }
   ]
+
+  const userAvatarMapByID = useMemo(() => {
+    const map = new Map<string, { name: string; avatarUrl?: string; role: string }>()
+    
+    departmentStaff.forEach(staff => {
+      map.set(staff.id, {
+        name: `${staff.first_name || ''} ${staff.last_name || ''}`.trim() || staff.username || 'Staff',
+        avatarUrl: staff.avatar_url,
+        role: 'staff',
+      })
+    })
+    
+    if (currentUser?.id) {
+      map.set(currentUser.id, {
+        name: userName,
+        avatarUrl: currentUser.avatar_url,
+        role: 'project-head',
+      })
+    }
+    
+    return map
+  }, [departmentStaff, currentUser, userName])
 
   const displayProjects = useMemo(() => projects.slice(0, 20), [projects])
 
@@ -391,9 +421,31 @@ export default function PerformanceDashboard() {
                             </Badge>
                           </div>
                         </div>
-                        <div className="h-8 w-8 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-semibold text-xs shrink-0">
-                          {getOwnerLabel(project).split(' ').map(n => n[0]).join('').slice(0, 2)}
-                        </div>
+                        {(() => {
+                          const userAvatarData = userAvatarMapByID.get(project.created_by || '')
+                          const ownerName = getOwnerLabel(project)
+                          const initials = ownerName.split(' ').map(n => n[0]).join('').slice(0, 2)
+                          
+                          // Use real avatar if available
+                          if (userAvatarData?.avatarUrl) {
+                            return (
+                              <ProfileAvatar
+                                imageUrl={userAvatarData.avatarUrl}
+                                fullName={userAvatarData.name}
+                                alt={userAvatarData.name}
+                                className="h-8 w-8 border border-slate-300 shrink-0"
+                                textClassName="text-xs"
+                              />
+                            )
+                          }
+                          
+                          // Fallback to initials
+                          return (
+                            <div className="h-8 w-8 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-semibold text-xs shrink-0">
+                              {initials}
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
                   ))}

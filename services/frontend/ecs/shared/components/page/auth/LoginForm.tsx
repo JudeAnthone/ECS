@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation"
 
 import Link from "next/link"
 import Image from "next/image"
+import { Eye, EyeOff } from "lucide-react"
 
 export function LoginForm({
   className,
@@ -28,6 +29,7 @@ export function LoginForm({
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [keepSignedIn, setKeepSignedIn] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,6 +37,7 @@ export function LoginForm({
     setIsLoading(true)
 
     try {
+      window.sessionStorage.setItem('ecs-login-redirecting', '1')
       const response = await AuthService.login({ email, password })
       // Store keepSignedIn flag in localStorage or sessionStorage
       if (keepSignedIn) {
@@ -56,6 +59,7 @@ export function LoginForm({
         router.push('/public-user/public-user-dashboard')
       }
     } catch (err) {
+      window.sessionStorage.removeItem('ecs-login-redirecting')
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
       setIsLoading(false)
@@ -82,9 +86,6 @@ export function LoginForm({
               <span className="sr-only">Earist</span>
             </Link>
             <h1 className="text-xl font-bold">Welcome to <br/> Earist Extension Service</h1>
-              <FieldDescription>
-              First time here? <Link href="/sign-up">Sign up</Link>
-            </FieldDescription>
           </div>
           {error && (
             <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
@@ -106,16 +107,26 @@ export function LoginForm({
           </Field>
           <Field>
             <FieldLabel htmlFor="login_password">Password<span className="text-destructive">*</span></FieldLabel>
-            <Input
-              id="login_password"
-              type="password"
-              placeholder="************"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="border-primary"
-              disabled={isLoading}
-            />
+            <div className="relative">
+              <Input
+                id="login_password"
+                type={showPassword ? "text" : "password"}
+                placeholder="************"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="border-primary pr-10"
+                disabled={isLoading}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                disabled={isLoading}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
             <div className="flex items-center justify-between mt-2">
               <label className="flex items-center gap-2 text-xs select-none">
                 <input

@@ -37,6 +37,8 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/shared/components/ui/Dialog';
 import { Loader2, Check, X, Eye, Printer } from 'lucide-react';
 import { API_URL } from '@/shared/lib/api-config';
+import ActivityLogService from '@/shared/lib/activity-log-service';
+import { AuthService } from '@/shared/lib/auth-service';
 
 type ProgramRecord = {
   id: string;
@@ -359,6 +361,24 @@ export default function ProgramChairBudgetManagementPage() {
           }
         ]
       })
+      const currentUser = AuthService.getUser();
+      const departmentName = visibleDepartments.find((department) => department.id === allocDeptId)?.department_name;
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'program_chair',
+          currentUser.department || 'Budget Management',
+          `Updated department allocation for ${departmentName || allocDeptId}`,
+          'other',
+          {
+            departmentId: allocDeptId,
+            departmentName,
+            allocatedAmount: amt,
+          }
+        );
+      }
+
       setAllocAmount('')
       setAllocDeptId('')
       await fetchData()
@@ -393,6 +413,23 @@ export default function ProgramChairBudgetManagementPage() {
       }
       // remove from local state
       setChairDepartmentBudgets(prev => prev.filter(p => p.department_id !== revertDialog.deptId))
+
+      const currentUser = AuthService.getUser();
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'program_chair',
+          currentUser.department || 'Budget Management',
+          `Reverted department allocation for ${revertDialog.deptName || revertDialog.deptId}`,
+          'other',
+          {
+            departmentId: revertDialog.deptId,
+            departmentName: revertDialog.deptName,
+          }
+        );
+      }
+
       await fetchData()
       setToast({ message: 'Department allocation reverted.', type: 'success' })
       setRevertDialog(null)
@@ -420,6 +457,26 @@ export default function ProgramChairBudgetManagementPage() {
           approved_by: user.id,
         } as RequestRecord)
       }
+
+      const currentUser = AuthService.getUser();
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'program_chair',
+          currentUser.department || 'Budget Management',
+          `${status === 'approved' ? 'Approved' : 'Rejected'} request: ${req.project_name || req.id}`,
+          'approval',
+          {
+            requestId: req.id,
+            status,
+            amount: req.estimated_budget || req.amount,
+            projectId: req.project_id,
+            projectName: req.project_name,
+          }
+        );
+      }
+
       await fetchData()
       setToast({ message: status === 'approved' ? 'Request approved successfully!' : 'Request rejected successfully!', type: 'success' })
     } catch (error) {
@@ -458,6 +515,18 @@ export default function ProgramChairBudgetManagementPage() {
       if (budgetReviewStatus === 'approved') {
         setApprovedBudgetSlip(updated)
       }
+      const currentUser = AuthService.getUser();
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'program_chair',
+          currentUser.department || 'Budget Management',
+          `${budgetReviewStatus === 'approved' ? 'Approved' : 'Declined'} budget request for ${budgetReviewReq.project_name || 'project'}`,
+          'approval',
+          { budgetRequestId: budgetReviewReq.id, projectId: budgetReviewReq.project_id, status: budgetReviewStatus, amount: budgetReviewReq.amount }
+        );
+      }
       setBudgetReviewReq(null)
       setBudgetReviewNotes('')
       setBudgetReviewStatus('approved')
@@ -492,6 +561,18 @@ export default function ProgramChairBudgetManagementPage() {
       }
       if (budgetReviewReq?.id === budgetDeleteReq.id) {
         setBudgetReviewReq(null)
+      }
+      const currentUser = AuthService.getUser();
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'program_chair',
+          currentUser.department || 'Budget Management',
+          `Deleted budget request for ${budgetDeleteReq.project_name || 'project'}`,
+          'other',
+          { budgetRequestId: budgetDeleteReq.id, projectId: budgetDeleteReq.project_id, amount: budgetDeleteReq.amount }
+        );
       }
       setBudgetDeleteReq(null)
       await fetchData()

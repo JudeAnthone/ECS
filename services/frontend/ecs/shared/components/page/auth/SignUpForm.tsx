@@ -19,14 +19,18 @@ import { Alert, AlertDescription } from "@/shared/components/ui/Alert"
 import { AuthService } from "@/shared/lib/auth-service"
 
 import Link from "next/link"
+import Image from "next/image"
+import { Eye, EyeOff } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
-export function SignupForm({ onOpenLogin, ...props }: React.ComponentProps<typeof Card> & { onOpenLogin?: () => void }) {
+export function SignupForm({ onOpenLogin }: { onOpenLogin?: () => void }) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
@@ -109,32 +113,32 @@ export function SignupForm({ onOpenLogin, ...props }: React.ComponentProps<typeo
   };
 
   return (
-    <Card {...props} className="border-0 shadow-2xl rounded-2xl bg-white max-w-md mx-auto">
+    <div className="w-full max-w-md mx-auto">
       <div className="flex flex-col items-center gap-2 text-center mt-8 mb-2">
         <Link
           href="/"
           className="flex flex-col items-center gap-2 font-medium"
         >
-          <div className="flex size-16 items-center justify-center rounded-full bg-[#CC2E28] shadow-md">
-            <img
+          <div className="flex size-15 items-center justify-center rounded-md">
+            <Image
               src="/earist-logo.png"
               alt="Earist"
-              width="72"
-              height="72"
-              className="rounded-full bg-white p-2"
+              width={100}
+              height={100}
+              priority
             />
           </div>
           <span className="sr-only">Earist</span>
         </Link>
         <h1 className="text-2xl font-extrabold text-[#CC2E28]">Sign up to<br/> <span className="text-black">Earist Extension Service</span></h1>
       </div>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg font-semibold text-[#CC2E28]">Request an account</CardTitle>
-        <CardDescription className="text-gray-600">
+      <div className="pb-2">
+        <div className="text-lg font-semibold text-[#CC2E28]">Request an account</div>
+        <div className="text-gray-600">
           Enter your information below to request your account
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-0">
+        </div>
+      </div>
+      <div className="pt-0">
         <form onSubmit={handleSubmit}>
           <FieldGroup>
             {error && (
@@ -157,7 +161,7 @@ export function SignupForm({ onOpenLogin, ...props }: React.ComponentProps<typeo
                 value={formData.first_name}
                 onChange={handleInputChange}
                 disabled={isLoading}
-                required 
+                required
               />
             </Field>
             <Field>
@@ -208,32 +212,52 @@ export function SignupForm({ onOpenLogin, ...props }: React.ComponentProps<typeo
             </Field>
             <Field>
               <FieldLabel htmlFor="password">Password<span className="text-destructive">*</span></FieldLabel>
-              <Input 
-                id="password" 
-                name="password"
-                type="password" 
-                placeholder="***********" 
-                value={formData.password}
-                onChange={handleInputChange}
-                disabled={isLoading}
-                required 
-              />
+              <div className="relative">
+                <Input 
+                  id="password" 
+                  name="password"
+                  type={showPassword ? "text" : "password"} 
+                  placeholder="***********" 
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  disabled={isLoading}
+                  required 
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                  disabled={isLoading}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
               <FieldDescription>
                 Must be at least 6 characters
               </FieldDescription>
             </Field>
             <Field>
               <FieldLabel htmlFor="confirmPassword">Confirm password<span className="text-destructive">*</span></FieldLabel>
-              <Input 
-                id="confirmPassword" 
-                name="confirmPassword"
-                type="password" 
-                placeholder="***********" 
-                value={formData.confirmPassword}
-                onChange={handleInputChange}
-                disabled={isLoading}
-                required 
-              />
+              <div className="relative">
+                <Input 
+                  id="confirmPassword" 
+                  name="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"} 
+                  placeholder="***********" 
+                  value={formData.confirmPassword}
+                  onChange={handleInputChange}
+                  disabled={isLoading}
+                  required 
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                  disabled={isLoading}
+                >
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </Field>
             <FieldGroup>
               <Field>
@@ -254,7 +278,7 @@ export function SignupForm({ onOpenLogin, ...props }: React.ComponentProps<typeo
             </FieldGroup>
           </FieldGroup>
         </form>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

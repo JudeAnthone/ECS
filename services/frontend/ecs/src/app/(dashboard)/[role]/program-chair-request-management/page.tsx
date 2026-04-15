@@ -38,6 +38,9 @@ import {
   Loader2,
   Trash2,
 } from 'lucide-react'
+import ProfileAvatar from '@/shared/components/ui/ProfileAvatar'
+import ActivityLogService from '@/shared/lib/activity-log-service'
+import { AuthService } from '@/shared/lib/auth-service'
 
 const API = 'http://localhost:8081/api/v1'
 
@@ -91,6 +94,7 @@ interface UserProfile {
   first_name?: string
   last_name?: string
   email?: string
+  avatar_url?: string | null
 }
 
 // ── Status helpers ──────────────────────────────────────────────────────────
@@ -212,6 +216,28 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
     return fullName || user.email || requestedBy
   }
 
+  const requestedByCell = (requestedBy: string) => {
+    const user = publicUsersByID[requestedBy]
+    const fullName = `${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim() || requestedBy
+    return (
+      <div className="flex items-center gap-2">
+        <ProfileAvatar
+          imageUrl={user?.avatar_url}
+          firstName={user?.first_name}
+          lastName={user?.last_name}
+          fullName={fullName}
+          alt={fullName}
+          className="h-7 w-7 border border-slate-300"
+          textClassName="text-[10px]"
+        />
+        <div className="min-w-0">
+          <p className="text-slate-700 truncate">{fullName}</p>
+          {user?.email && <p className="text-[11px] text-slate-500 truncate">{user.email}</p>}
+        </div>
+      </div>
+    )
+  }
+
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type })
   }
@@ -294,6 +320,26 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
         alert(d.error || 'Review failed')
         return
       }
+
+      const currentUser = AuthService.getUser()
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'program_chair',
+          currentUser.department || 'Program Management',
+          `${reviewStatus === 'approved' ? 'Approved' : 'Rejected'} request: ${reviewReq.request_title}`,
+          'approval',
+          {
+            requestId: reviewReq.id,
+            requestStatus: reviewStatus,
+            requestTitle: reviewReq.request_title,
+            departmentId: reviewDepartmentID || null,
+            programCategory: reviewProgramCategory || null,
+          }
+        )
+      }
+
       setReviewReq(null)
       setReviewNotes('')
       setReviewFeedback('')
@@ -323,6 +369,24 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
         headers: authHeaders(),
       })
       if (!res.ok) { const d = await res.json(); alert(d.error || 'Delete failed'); return }
+
+      const currentUser = AuthService.getUser()
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'program_chair',
+          currentUser.department || 'Program Management',
+          `Deleted request: ${deleteReq.request_title}`,
+          'other',
+          {
+            requestId: deleteReq.id,
+            requestTitle: deleteReq.request_title,
+            requestedBy: deleteReq.requested_by,
+          }
+        )
+      }
+
       setDeleteReq(null)
       await fetchData()
     } finally { setDeleteSubmitting(false) }
@@ -447,7 +511,7 @@ export default function ProgramChairRequestManagement({ onRequestApproved }: { o
                           <p className="text-xs text-slate-400">{req.requested_department}</p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{requestedByLabel(req.requested_by)}</td>
+                      <td className="px-4 py-3 text-slate-600">{requestedByCell(req.requested_by)}</td>
                       <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{fmt(req.created_at)}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${statusBadge(req.status)}`}>

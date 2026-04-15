@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Input } from '@/shared/components/ui/Input';
 import { Button } from '@/shared/components/ui/Button';
 import {
@@ -15,6 +15,7 @@ import {
 import { Textarea } from '@/shared/components/ui/TextArea';
 import { PROGRAM_CATEGORIES } from '@/shared/configs/program-categories';
 import { filterVisibleDepartments } from '@/shared/configs/department-visibility';
+import ProfileAvatar from '@/shared/components/ui/ProfileAvatar';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/shared/components/ui/DropdownMenu';
@@ -24,6 +25,7 @@ import {
   FolderOpen, Layers, Users, Tag, Target,
   CalendarRange, FileText, Building2, Wallet, UserCog,
 } from 'lucide-react';
+import ActivityLogService from '@/shared/lib/activity-log-service';
 import { AuthService } from '@/shared/lib/auth-service';
 import ProgramChairRequestManagement from '../program-chair-request-management/page';
 
@@ -130,23 +132,17 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function UserAvatar({ user, size = 'sm' }: { user: UserOption; size?: 'sm' | 'md' }) {
-  const sizeClass = size === 'sm' ? 'h-6 w-6 text-[10px]' : 'h-9 w-9 text-xs';
-  const initials = `${user.first_name?.[0] || ''}${user.last_name?.[0] || ''}`.toUpperCase() || 'US';
-
-  if (user.avatar_url) {
-    return (
-      <img
-        src={user.avatar_url}
-        alt={`${user.first_name} ${user.last_name}`}
-        className={`${sizeClass} rounded-full object-cover border border-slate-200 shrink-0`}
-      />
-    );
-  }
-
+  const sizeClass = size === 'sm' ? 'h-6 w-6' : 'h-9 w-9';
+  const textClass = size === 'sm' ? 'text-[10px]' : 'text-xs';
   return (
-    <div className={`${sizeClass} rounded-full bg-slate-200 text-slate-700 font-semibold flex items-center justify-center border border-slate-300 shrink-0`}>
-      {initials}
-    </div>
+    <ProfileAvatar
+      imageUrl={user.avatar_url}
+      firstName={user.first_name}
+      lastName={user.last_name}
+      alt={`${user.first_name} ${user.last_name}`.trim() || 'User'}
+      className={`${sizeClass} border border-slate-300`}
+      textClassName={textClass}
+    />
   );
 }
 
@@ -604,6 +600,17 @@ function ProjectsView({ program, departments, onBack }: {
     });
 
     if (res.ok) {
+      if (currentUser?.id) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'program_chair',
+          currentUser.department || 'Program Management',
+          `${approvalStatus === 'approved' ? 'Approved' : 'Rejected'} project ${project.project_name}`,
+          'approval',
+          { projectId: project.id, programId: project.program_id, approvalStatus }
+        );
+      }
       await loadProjects();
       setPageSuccess(approvalStatus === 'approved' ? 'Project approved successfully.' : 'Project declined successfully.');
       setProjectApprovalDialog(null);
@@ -746,7 +753,7 @@ function ProjectsView({ program, departments, onBack }: {
 
   const requesterUserByID = React.useMemo(() => {
     const map = new Map<string, UserOption>();
-    [...staffUsers, ...chairUsers].forEach(u => map.set(u.id, u));
+    [...staffUsers, ...chairUsers, ...heads].forEach(u => map.set(u.id, u));
     if (currentUser?.id) {
       map.set(currentUser.id, {
         id: currentUser.id,
@@ -758,7 +765,7 @@ function ProjectsView({ program, departments, onBack }: {
       });
     }
     return map;
-  }, [staffUsers, chairUsers, currentUser]);
+  }, [staffUsers, chairUsers, heads, currentUser]);
 
   const requesterUser = (p: Project): UserOption => {
     const existing = p.created_by ? requesterUserByID.get(p.created_by) : undefined;
@@ -952,7 +959,8 @@ function ProjectsView({ program, departments, onBack }: {
         {loading ? (
           <div className="text-center py-12 text-slate-400">Loading projects...</div>
         ) : (
-          <Table className="w-full text-sm">
+          <div className="max-h-[60vh] overflow-auto">
+            <Table className="w-full text-sm">
             <TableHeader>
               <TableRow className="bg-slate-50 border-b text-left">
                 <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Project Name</TableHead>
@@ -1033,6 +1041,7 @@ function ProjectsView({ program, departments, onBack }: {
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
       </div>
 
@@ -1307,9 +1316,14 @@ function ProjectsView({ program, departments, onBack }: {
                     onClick={() => setSelectedHeadID(u.id)}
                     className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors ${selectedHeadID === u.id ? 'bg-red-50' : 'hover:bg-slate-50'}`}
                   >
-                    <div className="w-9 h-9 rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center shrink-0 text-sm">
-                      {u.first_name[0]}{u.last_name[0]}
-                    </div>
+                    <ProfileAvatar
+                      imageUrl={u.avatar_url}
+                      firstName={u.first_name}
+                      lastName={u.last_name}
+                      alt={`${u.first_name} ${u.last_name}`.trim() || 'User'}
+                      className="w-9 h-9 border border-slate-300"
+                      textClassName="text-sm"
+                    />
                     <div className="flex flex-col items-start min-w-0">
                       <span className="text-sm font-medium text-slate-800 truncate">{u.first_name} {u.last_name}</span>
                       <span className="text-xs text-slate-400 truncate">{u.email}</span>
@@ -1353,6 +1367,7 @@ export default function ProgramChairProgramManagement() {
   const [programStatusDialog, setProgramStatusDialog] = useState<{ id: string; status: string; label: string } | null>(null);
   const [deleteProgramDialogID, setDeleteProgramDialogID] = useState<string | null>(null);
   const params = useParams();
+  const searchParams = useSearchParams();
   const role = params?.role;
 
   const emptyForm = {
@@ -1370,6 +1385,31 @@ export default function ProgramChairProgramManagement() {
       loadPrograms(user.id);
     }
   }, []);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'requests') {
+      setActiveTab('requests');
+      return;
+    }
+    if (tab === 'programs') {
+      setActiveTab('programs');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const view = searchParams.get('view');
+    const programId = searchParams.get('programId');
+    if (tab !== 'programs' || view !== 'projects' || !programId || programs.length === 0) {
+      return;
+    }
+
+    const targetProgram = programs.find((p) => p.id === programId);
+    if (targetProgram) {
+      setDrillProgram(targetProgram);
+    }
+  }, [searchParams, programs]);
 
   const loadPrograms = async (userId: string) => {
     try {
@@ -1405,6 +1445,17 @@ export default function ProgramChairProgramManagement() {
       }),
     });
     if (res.ok) {
+      if (currentUser?.id) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'program_chair',
+          currentUser.department || 'Program Management',
+          `Created program ${form.program_name}`,
+          'submission',
+          { programName: form.program_name, departmentId: form.department_id || null }
+        );
+      }
       await loadPrograms(currentUser?.id);
       setCreateOpen(false);
       setForm(emptyForm);
@@ -1431,6 +1482,17 @@ export default function ProgramChairProgramManagement() {
       }),
     });
     if (res.ok) {
+      if (currentUser?.id) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'program_chair',
+          currentUser.department || 'Program Management',
+          `Updated program ${selected.program_name}`,
+          'other',
+          { programId: selected.id, programName: selected.program_name }
+        );
+      }
       await loadPrograms(currentUser?.id);
       setEditOpen(false);
       setSelected(null);
@@ -1453,7 +1515,20 @@ export default function ProgramChairProgramManagement() {
       method: 'PATCH', headers: authHeaders(),
       body: JSON.stringify({ status: programStatusDialog.status }),
     });
-    if (res.ok) await loadPrograms(currentUser?.id);
+    if (res.ok) {
+      if (currentUser?.id) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'program_chair',
+          currentUser.department || 'Program Management',
+          `${programStatusDialog.status === 'completed' ? 'Completed' : 'Cancelled'} program ${programStatusDialog.id}`,
+          'other',
+          { programId: programStatusDialog.id, status: programStatusDialog.status }
+        );
+      }
+      await loadPrograms(currentUser?.id);
+    }
     else { const e = await res.json(); setProgramPageError(e.error || `Failed to ${programStatusDialog.label} program`); }
     setProgramStatusDialog(null);
   };
@@ -1517,7 +1592,6 @@ export default function ProgramChairProgramManagement() {
       setAssignDeptError(msg);
     }
   };
-
   const filtered = programs.filter(p => {
     const s = p.program_name.toLowerCase().includes(search.toLowerCase()) ||
       p.program_description?.toLowerCase().includes(search.toLowerCase());
@@ -1571,13 +1645,15 @@ export default function ProgramChairProgramManagement() {
                     <Plus className="w-4 h-4" /> Create Program
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="bg-white max-w-4xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Create New Program</DialogTitle>
-                    <DialogDescription>You will be automatically assigned as the program chair</DialogDescription>
-                  </DialogHeader>
-                  <ProgramForm formData={form} setFormData={setForm} departments={departments}
-                    onSubmit={handleCreate} onCancel={() => { setCreateOpen(false); setProgramFormError(''); }} submitLabel="Create Program" error={programFormError} />
+                <DialogContent className="bg-white max-w-4xl overflow-hidden p-0">
+                  <div className="max-h-[90vh] overflow-y-auto p-6 space-y-4">
+                    <DialogHeader>
+                      <DialogTitle>Create New Program</DialogTitle>
+                      <DialogDescription>You will be automatically assigned as the program chair</DialogDescription>
+                    </DialogHeader>
+                    <ProgramForm formData={form} setFormData={setForm} departments={departments}
+                      onSubmit={handleCreate} onCancel={() => { setCreateOpen(false); setProgramFormError(''); }} submitLabel="Create Program" error={programFormError} />
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>
@@ -1667,7 +1743,10 @@ export default function ProgramChairProgramManagement() {
                               <DropdownMenuItem onClick={() => setDrillProgram(p)}>
                                 <FolderOpen className="w-4 h-4 mr-2" /> View Projects
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { setSelected(p); setViewOpen(true); }}>
+                              <DropdownMenuItem onSelect={() => {
+                                setSelected(p)
+                                window.setTimeout(() => setViewOpen(true), 0)
+                              }}>
                                 <Eye className="w-4 h-4 mr-2" /> View Details
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => openEdit(p)}>
@@ -1705,13 +1784,15 @@ export default function ProgramChairProgramManagement() {
             </div>
             {/* Edit Dialog */}
             <Dialog open={editOpen} onOpenChange={v => { setEditOpen(v); if (!v) setProgramFormError(''); }}>
-              <DialogContent className="bg-white max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Edit Program</DialogTitle>
-                  <DialogDescription>Update program information</DialogDescription>
-                </DialogHeader>
-                <ProgramForm formData={form} setFormData={setForm} departments={departments}
-                  onSubmit={handleUpdate} onCancel={() => { setEditOpen(false); setProgramFormError(''); }} submitLabel="Update Program" error={programFormError} />
+              <DialogContent className="bg-white max-w-4xl overflow-hidden p-0">
+                <div className="max-h-[90vh] overflow-y-auto p-6 space-y-4">
+                  <DialogHeader>
+                    <DialogTitle>Edit Program</DialogTitle>
+                    <DialogDescription>Update program information</DialogDescription>
+                  </DialogHeader>
+                  <ProgramForm formData={form} setFormData={setForm} departments={departments}
+                    onSubmit={handleUpdate} onCancel={() => { setEditOpen(false); setProgramFormError(''); }} submitLabel="Update Program" error={programFormError} />
+                </div>
               </DialogContent>
             </Dialog>
 
@@ -1756,12 +1837,13 @@ export default function ProgramChairProgramManagement() {
 
             {/* View Details Dialog */}
             <Dialog open={viewOpen} onOpenChange={setViewOpen}>
-              <DialogContent className="bg-white max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>{selected?.program_name}</DialogTitle>
-                  <DialogDescription>Program Details</DialogDescription>
-                </DialogHeader>
-                {selected && (
+              <DialogContent className="bg-white max-w-4xl overflow-hidden p-0">
+                <div className="max-h-[90vh] overflow-y-auto p-6 space-y-4">
+                  <DialogHeader>
+                    <DialogTitle>{selected?.program_name}</DialogTitle>
+                    <DialogDescription>Program Details</DialogDescription>
+                  </DialogHeader>
+                  {selected && (
                   <div className="space-y-4 pt-2">
                     <div className="flex gap-2">
                       <StatusBadge status={selected.status} />
@@ -1816,13 +1898,38 @@ export default function ProgramChairProgramManagement() {
                         </p>
                       </div>
                     </div>
+                    <div>
+                      <label className="text-sm font-medium text-slate-700">Program Chair</label>
+                      {currentUser ? (
+                        <div className="mt-2 flex items-center gap-3 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
+                          <ProfileAvatar
+                            imageUrl={currentUser.avatar_url}
+                            firstName={currentUser.first_name}
+                            lastName={currentUser.last_name}
+                            alt={`${currentUser.first_name || 'Program'} ${currentUser.last_name || 'Chair'}`.trim()}
+                            className="w-10 h-10 border border-slate-200"
+                            textClassName="text-sm"
+                          />
+                          <div>
+                            <p className="text-sm font-medium text-slate-800">
+                              {currentUser.first_name || 'Program'} {currentUser.last_name || 'Chair'}
+                            </p>
+                            <p className="text-xs text-slate-400">{currentUser.email || '-'}</p>
+                            {currentUser.department && <p className="text-xs text-slate-400">{currentUser.department}</p>}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-slate-400 text-sm italic">No program chair assigned</p>
+                      )}
+                    </div>
                     <div className="flex justify-end pt-2">
                       <Button onClick={() => { setViewOpen(false); setDrillProgram(selected); }}>
                         <FolderOpen className="w-4 h-4 mr-2" /> View Projects
                       </Button>
                     </div>
                   </div>
-                )}
+                  )}
+                </div>
               </DialogContent>
             </Dialog>
             {/* Assign Department Dialog */}

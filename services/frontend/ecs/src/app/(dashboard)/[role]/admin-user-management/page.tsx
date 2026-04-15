@@ -46,16 +46,28 @@ import {
 } from 'lucide-react';
 import { userService, type User } from '@/shared/lib/user-service';
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert';
+import ProfileAvatar from '@/shared/components/ui/ProfileAvatar';
+import { useTheme } from '@/shared/components/providers/theme-provider';
+import ActivityLogService from '@/shared/lib/activity-log-service';
+import { AuthService } from '@/shared/lib/auth-service';
 
 function UserAvatar({ user, size = 'md' }: { user: User; size?: 'sm' | 'md' | 'lg' }) {
-  const sz = size === 'sm' ? 'h-7 w-7 text-xs' : size === 'lg' ? 'h-12 w-12 text-base' : 'h-9 w-9 text-sm';
-  const initials = `${user.first_name?.[0] ?? ''}${user.last_name?.[0] ?? ''}`.toUpperCase();
-  return user.avatar_url
-    ? <img src={user.avatar_url} alt={initials} className={`${sz} rounded-full object-cover shrink-0`} />
-    : <div className={`${sz} rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center shrink-0`}>{initials}</div>;
+  const sz = size === 'sm' ? 'h-7 w-7' : size === 'lg' ? 'h-12 w-12' : 'h-9 w-9';
+  const text = size === 'sm' ? 'text-[10px]' : size === 'lg' ? 'text-base' : 'text-xs';
+  return (
+    <ProfileAvatar
+      imageUrl={user.avatar_url}
+      firstName={user.first_name}
+      lastName={user.last_name}
+      alt={`${user.first_name} ${user.last_name}`.trim() || 'User'}
+      className={`${sz} border border-slate-300`}
+      textClassName={text}
+    />
+  );
 }
 
 export default function UserManagement() {
+  const { isDark } = useTheme();
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     React.useEffect(() => {
       if (toast) {
@@ -201,7 +213,24 @@ export default function UserManagement() {
         return;
       }
 
+      // Get user being approved for logging
+      const userBeingApproved = users.find(u => u.id === userId);
+
       await userService.approveUser(userId, token);
+      
+      // Log activity
+      const currentUser = AuthService.getUser();
+      if (currentUser && userBeingApproved) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`,
+          currentUser.role || 'admin',
+          currentUser.department || 'Admin',
+          `Approved user ${userBeingApproved.first_name} ${userBeingApproved.last_name}`,
+          'approval',
+          { userId, userEmail: userBeingApproved.email }
+        );
+      }
       
       // Reload users to reflect the change
       await loadUsers();
@@ -226,7 +255,24 @@ export default function UserManagement() {
         return;
       }
 
+      // Get user being rejected for logging
+      const userBeingRejected = users.find(u => u.id === userId);
+
       await userService.rejectUser(userId, token);
+      
+      // Log activity
+      const currentUser = AuthService.getUser();
+      if (currentUser && userBeingRejected) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`,
+          currentUser.role || 'admin',
+          currentUser.department || 'Admin',
+          `Rejected user ${userBeingRejected.first_name} ${userBeingRejected.last_name}`,
+          'approval',
+          { userId, userEmail: userBeingRejected.email }
+        );
+      }
       
       // Reload users to reflect the change
       await loadUsers();
@@ -255,7 +301,26 @@ export default function UserManagement() {
         setDeleteDialogUserId(null);
         return;
       }
+
+      // Get user being deleted for logging
+      const userBeingDeleted = users.find(u => u.id === deleteDialogUserId);
+
       await userService.deleteUser(deleteDialogUserId, token);
+      
+      // Log activity
+      const currentUser = AuthService.getUser();
+      if (currentUser && userBeingDeleted) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`,
+          currentUser.role || 'admin',
+          currentUser.department || 'Admin',
+          `Deleted user ${userBeingDeleted.first_name} ${userBeingDeleted.last_name}`,
+          'other',
+          { userId: deleteDialogUserId, userEmail: userBeingDeleted.email }
+        );
+      }
+
       await loadUsers();
       setToast({ message: 'User deleted successfully!', type: 'success' });
     } catch (err) {
@@ -354,6 +419,20 @@ export default function UserManagement() {
 
       await userService.updateUser(editingUser.id, updates, token);
       
+      // Log activity
+      const currentUser = AuthService.getUser();
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`,
+          currentUser.role || 'admin',
+          currentUser.department || 'Admin',
+          `Updated user ${editingUser.first_name} ${editingUser.last_name} profile`,
+          'other',
+          { userId: editingUser.id, changes: Object.keys(updates) }
+        );
+      }
+      
       // Reload users to reflect the change
       await loadUsers();
       
@@ -396,31 +475,59 @@ export default function UserManagement() {
   });
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-200 text-green-900 border-green-400';
-      case 'inactive':
-        return 'bg-gray-200 text-gray-900 border-gray-400';
-      case 'suspended':
-        return 'bg-red-200 text-red-900 border-red-400';
-      case 'pending_approval':
-        return 'bg-yellow-200 text-yellow-900 border-yellow-400';
-      case 'rejected':
-        return 'bg-pink-200 text-pink-900 border-pink-400';
-      default:
-        return 'bg-blue-200 text-blue-900 border-blue-400';
+    if (isDark) {
+      switch (status) {
+        case 'active':
+          return 'bg-green-900 text-green-200 border-green-700';
+        case 'inactive':
+          return 'bg-slate-600 text-slate-200 border-slate-500';
+        case 'suspended':
+          return 'bg-red-900 text-red-200 border-red-700';
+        case 'pending_approval':
+          return 'bg-yellow-900 text-yellow-200 border-yellow-700';
+        case 'rejected':
+          return 'bg-pink-900 text-pink-200 border-pink-700';
+        default:
+          return 'bg-blue-900 text-blue-200 border-blue-700';
+      }
+    } else {
+      switch (status) {
+        case 'active':
+          return 'bg-green-200 text-green-900 border-green-400';
+        case 'inactive':
+          return 'bg-gray-200 text-gray-900 border-gray-400';
+        case 'suspended':
+          return 'bg-red-200 text-red-900 border-red-400';
+        case 'pending_approval':
+          return 'bg-yellow-200 text-yellow-900 border-yellow-400';
+        case 'rejected':
+          return 'bg-pink-200 text-pink-900 border-pink-400';
+        default:
+          return 'bg-blue-200 text-blue-900 border-blue-400';
+      }
     }
   };
 
   const getRoleBadgeColor = (role: string) => {
-    const colors: Record<string, string> = {
-      admin: 'bg-purple-200 text-purple-900 border-purple-400',
-      program_chair: 'bg-blue-200 text-blue-900 border-blue-400',
-      project_head: 'bg-green-200 text-green-900 border-green-400',
-      staff: 'bg-orange-200 text-orange-900 border-orange-400',
-      public_user: 'bg-gray-200 text-gray-900 border-gray-400',
-    };
-    return colors[role] || 'bg-gray-200 text-gray-900 border-gray-400';
+    if (isDark) {
+      const colors: Record<string, string> = {
+        admin: 'bg-purple-900 text-purple-200 border-purple-700',
+        program_chair: 'bg-blue-900 text-blue-200 border-blue-700',
+        project_head: 'bg-green-900 text-green-200 border-green-700',
+        staff: 'bg-orange-900 text-orange-200 border-orange-700',
+        public_user: 'bg-slate-600 text-slate-200 border-slate-500',
+      };
+      return colors[role] || 'bg-slate-600 text-slate-200 border-slate-500';
+    } else {
+      const colors: Record<string, string> = {
+        admin: 'bg-purple-200 text-purple-900 border-purple-400',
+        program_chair: 'bg-blue-200 text-blue-900 border-blue-400',
+        project_head: 'bg-green-200 text-green-900 border-green-400',
+        staff: 'bg-orange-200 text-orange-900 border-orange-400',
+        public_user: 'bg-gray-200 text-gray-900 border-gray-400',
+      };
+      return colors[role] || 'bg-gray-200 text-gray-900 border-gray-400';
+    }
   };
 
   const formatStatus = (status: string) => {
@@ -481,7 +588,7 @@ export default function UserManagement() {
     });
 
   return (
-    <div className="min-h-screen bg-white p-6">
+    <div className={isDark ? "min-h-screen bg-slate-900 p-6" : "min-h-screen bg-white p-6"}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
         
@@ -497,23 +604,27 @@ export default function UserManagement() {
           background-color: rgba(15, 23, 42, 0.04);
           transition: all 0.2s ease;
         }
+
+        .dark .table-row-hover:hover {
+          background-color: rgba(148, 163, 184, 0.1);
+        }
       `}</style>
 
       <div className="max-w-[1920px] mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-2 tracking-tight">
+            <h1 className={isDark ? "text-4xl font-bold text-white mb-2 tracking-tight" : "text-4xl font-bold text-slate-900 mb-2 tracking-tight"}>
               User Management
             </h1>
-            <p className="text-slate-600 text-lg">Manage users, roles, and permissions</p>
+            <p className={isDark ? "text-gray-300 text-lg" : "text-slate-600 text-lg"}>Manage users, roles, and permissions</p>
           </div>
           <div className="flex items-center gap-3">
             <Button
               variant="outline"
               onClick={loadUsers}
               disabled={loading}
-              className="border-slate-300 text-slate-700 hover:bg-slate-100"
+              className={isDark ? "border-slate-600 text-gray-300 hover:bg-slate-700" : "border-slate-300 text-slate-700 hover:bg-slate-100"}
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -540,15 +651,15 @@ export default function UserManagement() {
 
         {/* Pending Approvals Card */}
         {pendingUsers.length > 0 && !loading && (
-          <Card className="bg-white border-orange-200 shadow-lg">
+          <Card className={isDark ? "bg-slate-800 border-orange-900 shadow-lg" : "bg-white border-orange-200 shadow-lg"}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-slate-900 text-2xl mb-2 flex items-center gap-2">
+                  <CardTitle className={isDark ? "text-white text-2xl mb-2 flex items-center gap-2" : "text-slate-900 text-2xl mb-2 flex items-center gap-2"}>
                     <UserCheck className="h-6 w-6 text-[#BA0021]" />
                     Pending Approvals
                   </CardTitle>
-                  <CardDescription className="text-slate-600">
+                  <CardDescription className={isDark ? "text-gray-400" : "text-slate-600"}>
                     Users waiting for approval to access the system
                   </CardDescription>
                 </div>
@@ -558,38 +669,38 @@ export default function UserManagement() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className={isDark ? "border border-slate-700 rounded-lg overflow-hidden" : "border border-slate-200 rounded-lg overflow-hidden"}>
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-slate-50 hover:bg-slate-50">
-                      <TableHead className="text-slate-700 font-semibold w-20">ID</TableHead>
-                      <TableHead className="text-slate-700 font-semibold">Full Name</TableHead>
-                      <TableHead className="text-slate-700 font-semibold">Email</TableHead>
-                      <TableHead className="text-slate-700 font-semibold">Username</TableHead>
-                      <TableHead className="text-slate-700 font-semibold">Role</TableHead>
-                      <TableHead className="text-slate-700 font-semibold">Department</TableHead>
+                    <TableRow className={isDark ? "bg-slate-700 hover:bg-slate-700" : "bg-slate-50 hover:bg-slate-50"}>
+                      <TableHead className={isDark ? "text-gray-300 font-semibold w-20" : "text-slate-700 font-semibold w-20"}>ID</TableHead>
+                      <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Full Name</TableHead>
+                      <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Email</TableHead>
+                      <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Username</TableHead>
+                      <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Role</TableHead>
+                      <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Department</TableHead>
                       
-                      <TableHead className="text-slate-700 font-semibold">Last Active</TableHead>
-                      <TableHead className="text-slate-700 font-semibold">Date Registered</TableHead>
-                      <TableHead className="text-slate-700 font-semibold text-right">Actions</TableHead>
+                      <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Last Active</TableHead>
+                      <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Date Registered</TableHead>
+                      <TableHead className={isDark ? "text-gray-300 font-semibold text-right" : "text-slate-700 font-semibold text-right"}>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {pendingUsers.map((user) => (
-                      <TableRow key={user.id} className="table-row-hover border-slate-200 cursor-pointer text-sm [&>td]:py-2 [&>td]:px-2">
-                        <TableCell className="font-semibold text-slate-900 mono text-xs w-20 px-2">
+                      <TableRow key={user.id} className={isDark ? "table-row-hover border-slate-700 cursor-pointer text-sm [&>td]:py-2 [&>td]:px-2" : "table-row-hover border-slate-200 cursor-pointer text-sm [&>td]:py-2 [&>td]:px-2"}>
+                        <TableCell className={isDark ? "font-semibold text-gray-200 mono text-xs w-20 px-2" : "font-semibold text-slate-900 mono text-xs w-20 px-2"}>
                           {user.id.substring(0, 6)}...
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <UserAvatar user={user} size="sm" />
-                            <span className="text-slate-900 font-medium">{user.first_name} {user.last_name}</span>
+                            <span className={isDark ? "text-gray-200 font-medium" : "text-slate-900 font-medium"}>{user.first_name} {user.last_name}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-slate-700 text-sm">
+                        <TableCell className={isDark ? "text-gray-300 text-sm" : "text-slate-700 text-sm"}>
                           {user.email}
                         </TableCell>
-                        <TableCell className="text-slate-700 font-medium">
+                        <TableCell className={isDark ? "text-gray-300 font-medium" : "text-slate-700 font-medium"}>
                           {user.username}
                         </TableCell>
                         <TableCell>
@@ -597,14 +708,14 @@ export default function UserManagement() {
                             {user.role.replace('_', ' ').toUpperCase()}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-slate-700">
+                        <TableCell className={isDark ? "text-gray-300" : "text-slate-700"}>
                           {user.department || '-'}
                         </TableCell>
                         
-                        <TableCell className="text-slate-600 text-sm">
+                        <TableCell className={isDark ? "text-gray-400 text-sm" : "text-slate-600 text-sm"}>
                           {formatLastActive(user.last_active)}
                         </TableCell>
-                        <TableCell className="text-slate-600 text-sm">
+                        <TableCell className={isDark ? "text-gray-400 text-sm" : "text-slate-600 text-sm"}>
                           {formatDate(user.created_at)}
                         </TableCell>
                         <TableCell className="text-right">
@@ -639,12 +750,12 @@ export default function UserManagement() {
         )}
 
         {/* Main Content */}
-        <Card className="bg-white border-slate-200 shadow-lg">
+        <Card className={isDark ? "bg-slate-800 border-slate-700 shadow-lg" : "bg-white border-slate-200 shadow-lg"}>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-slate-900 text-2xl mb-2">User Directory</CardTitle>
-                <CardDescription className="text-slate-600">
+                <CardTitle className={isDark ? "text-white text-2xl mb-2" : "text-slate-900 text-2xl mb-2"}>User Directory</CardTitle>
+                <CardDescription className={isDark ? "text-gray-400" : "text-slate-600"}>
                   Complete directory of all users - search and filter by role, status, or search term
                 </CardDescription>
               </div>
@@ -654,27 +765,27 @@ export default function UserManagement() {
             <div className="flex flex-col md:flex-row gap-4 mt-6">
               {/* Search Input */}
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Search className={isDark ? "absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" : "absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400"} />
                 <Input
                   type="text"
                   placeholder="Search by ID, email, or name..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-white border-slate-300 text-slate-900"
+                  className={isDark ? "pl-10 bg-slate-700 border-slate-600 text-white placeholder-gray-500" : "pl-10 bg-white border-slate-300 text-slate-900"}
                 />
               </div>
 
               {/* Role Filter */}
               <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-slate-500" />
+                <Filter className={isDark ? "h-4 w-4 text-gray-400" : "h-4 w-4 text-slate-500"} />
                 <Select value={selectedRole} onValueChange={setSelectedRole}>
-                  <SelectTrigger className="w-[200px] bg-white border-slate-300 text-slate-900">
+                  <SelectTrigger className={isDark ? "w-[200px] bg-slate-700 border-slate-600 text-white" : "w-[200px] bg-white border-slate-300 text-slate-900"}>
                     <SelectValue placeholder="Filter by role" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="all" className="text-slate-900">All Roles</SelectItem>
+                  <SelectContent className={isDark ? "bg-slate-700 border-slate-600" : "bg-white border-slate-200"}>
+                    <SelectItem value="all" className={isDark ? "text-white" : "text-slate-900"}>All Roles</SelectItem>
                     {roles.map(role => (
-                      <SelectItem key={role} value={role} className="text-slate-900">
+                      <SelectItem key={role} value={role} className={isDark ? "text-white" : "text-slate-900"}>
                         {role.replace('_', ' ').toUpperCase()}
                       </SelectItem>
                     ))}
@@ -685,15 +796,15 @@ export default function UserManagement() {
               {/* Status Filter */}
               <div className="flex items-center gap-2">
                 <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                  <SelectTrigger className="w-[200px] bg-white border-slate-300 text-slate-900">
+                  <SelectTrigger className={isDark ? "w-[200px] bg-slate-700 border-slate-600 text-white" : "w-[200px] bg-white border-slate-300 text-slate-900"}>
                     <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    <SelectItem value="all" className="text-slate-900">All Statuses</SelectItem>
-                    <SelectItem value="active" className="text-slate-900">ACTIVE</SelectItem>
-                    <SelectItem value="inactive" className="text-slate-900">INACTIVE</SelectItem>
-                    <SelectItem value="suspended" className="text-slate-900">SUSPENDED</SelectItem>
-                    <SelectItem value="rejected" className="text-slate-900">REJECTED</SelectItem>
+                  <SelectContent className={isDark ? "bg-slate-700 border-slate-600" : "bg-white border-slate-200"}>
+                    <SelectItem value="all" className={isDark ? "text-white" : "text-slate-900"}>All Statuses</SelectItem>
+                    <SelectItem value="active" className={isDark ? "text-white" : "text-slate-900"}>ACTIVE</SelectItem>
+                    <SelectItem value="inactive" className={isDark ? "text-white" : "text-slate-900"}>INACTIVE</SelectItem>
+                    <SelectItem value="suspended" className={isDark ? "text-white" : "text-slate-900"}>SUSPENDED</SelectItem>
+                    <SelectItem value="rejected" className={isDark ? "text-white" : "text-slate-900"}>REJECTED</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -707,7 +818,7 @@ export default function UserManagement() {
                     setSelectedRole('all');
                     setSelectedStatus('all');
                   }}
-                  className="border-slate-300 text-slate-700 hover:bg-slate-100"
+                  className={isDark ? "border-slate-600 text-gray-300 hover:bg-slate-700" : "border-slate-300 text-slate-700 hover:bg-slate-100"}
                 >
                   Clear Filters
                 </Button>
@@ -719,64 +830,64 @@ export default function UserManagement() {
             {loading ? (
               <div className="text-center py-12">
                 <RefreshCw className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-                <p className="text-slate-600">Loading users...</p>
+                <p className={isDark ? "text-gray-400" : "text-slate-600"}>Loading users...</p>
               </div>
             ) : (
               <>
                 {toast && (
-                  <div className={`fixed top-6 right-6 z-50 rounded-lg shadow-lg px-4 py-3 text-sm font-medium ${toast.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                  <div className={`fixed top-6 right-6 z-50 rounded-lg shadow-lg px-4 py-3 text-sm font-medium ${toast.type === 'success' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') : (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800')}`}>
                     {toast.message}
                   </div>
                 )}
                 {/* Results Count */}
                 <div className="mb-4">
-                  <p className="text-sm text-slate-600">
-                    Showing <span className="font-semibold text-slate-900">{filteredUsers.length}</span> of{' '}
-                    <span className="font-semibold text-slate-900">{users.length - pendingUsers.length}</span> processed users
+                  <p className={isDark ? "text-sm text-gray-400" : "text-sm text-slate-600"}>
+                    Showing <span className={isDark ? "font-semibold text-white" : "font-semibold text-slate-900"}>{filteredUsers.length}</span> of{' '}
+                    <span className={isDark ? "font-semibold text-white" : "font-semibold text-slate-900"}>{users.length - pendingUsers.length}</span> processed users
                   </p>
                 </div>
 
                 {/* User Table */}
-                <div className="border border-slate-200 rounded-lg overflow-hidden max-h-[60vh] overflow-y-auto">
+                <div className={isDark ? "border border-slate-700 rounded-lg overflow-hidden max-h-[60vh] overflow-y-auto" : "border border-slate-200 rounded-lg overflow-hidden max-h-[60vh] overflow-y-auto"}>
                   <Table>
                     <TableHeader className="sticky top-0 z-10" style={{ position: 'sticky', top: 0, zIndex: 10 }}>
-                      <TableRow className="bg-slate-50 hover:bg-slate-50">
-                        <TableHead className="text-slate-700 font-semibold w-20">ID</TableHead>
-                        <TableHead className="text-slate-700 font-semibold">Full Name</TableHead>
-                        <TableHead className="text-slate-700 font-semibold">Email</TableHead>
-                        <TableHead className="text-slate-700 font-semibold">Username</TableHead>
-                        <TableHead className="text-slate-700 font-semibold">Role</TableHead>
-                        <TableHead className="text-slate-700 font-semibold">Department</TableHead>
+                      <TableRow className={isDark ? "bg-slate-700 hover:bg-slate-700" : "bg-slate-50 hover:bg-slate-50"}>
+                        <TableHead className={isDark ? "text-gray-300 font-semibold w-20" : "text-slate-700 font-semibold w-20"}>ID</TableHead>
+                        <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Full Name</TableHead>
+                        <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Email</TableHead>
+                        <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Username</TableHead>
+                        <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Role</TableHead>
+                        <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Department</TableHead>
                         
-                        <TableHead className="text-slate-700 font-semibold">Last Logged</TableHead>
-                        <TableHead className="text-slate-700 font-semibold">Status</TableHead>
-                        <TableHead className="text-slate-700 font-semibold">Date Joined</TableHead>
-                        <TableHead className="text-slate-700 font-semibold text-right">Actions</TableHead>
+                        <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Last Logged</TableHead>
+                        <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Status</TableHead>
+                        <TableHead className={isDark ? "text-gray-300 font-semibold" : "text-slate-700 font-semibold"}>Date Joined</TableHead>
+                        <TableHead className={isDark ? "text-gray-300 font-semibold text-right" : "text-slate-700 font-semibold text-right"}>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredUsers.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={11} className="text-center py-8 text-slate-500">
+                          <TableCell colSpan={11} className={isDark ? "text-center py-8 text-gray-400" : "text-center py-8 text-slate-500"}>
                             No users found matching your search criteria
                           </TableCell>
                         </TableRow>
                       ) : (
                         filteredUsers.map((user) => (
-                          <TableRow key={user.id} className="table-row-hover border-slate-200 cursor-pointer text-sm [&>td]:py-2 [&>td]:px-2">
-                            <TableCell className="font-semibold text-slate-900 mono text-xs w-20 px-2">
+                          <TableRow key={user.id} className={isDark ? "table-row-hover border-slate-700 cursor-pointer text-sm [&>td]:py-2 [&>td]:px-2" : "table-row-hover border-slate-200 cursor-pointer text-sm [&>td]:py-2 [&>td]:px-2"}>
+                            <TableCell className={isDark ? "font-semibold text-gray-200 mono text-xs w-20 px-2" : "font-semibold text-slate-900 mono text-xs w-20 px-2"}>
                               {user.id.substring(0, 6)}...
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
                                 <UserAvatar user={user} size="sm" />
-                                <span className="text-slate-900 font-medium">{user.first_name} {user.last_name}</span>
+                                <span className={isDark ? "text-gray-200 font-medium" : "text-slate-900 font-medium"}>{user.first_name} {user.last_name}</span>
                               </div>
                             </TableCell>
-                            <TableCell className="text-slate-700 text-sm">
+                            <TableCell className={isDark ? "text-gray-300 text-sm" : "text-slate-700 text-sm"}>
                               {user.email}
                             </TableCell>
-                            <TableCell className="text-slate-700 font-medium">
+                            <TableCell className={isDark ? "text-gray-300 font-medium" : "text-slate-700 font-medium"}>
                               {user.username}
                             </TableCell>
                             <TableCell>
@@ -784,11 +895,11 @@ export default function UserManagement() {
                                 {user.role.replace('_', ' ').toUpperCase()}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-slate-700">
+                            <TableCell className={isDark ? "text-gray-300" : "text-slate-700"}>
                               {user.department || '-'}
                             </TableCell>
                             
-                            <TableCell className="text-slate-600 text-sm">
+                            <TableCell className={isDark ? "text-gray-400 text-sm" : "text-slate-600 text-sm"}>
                               {formatLastActive(user.last_active)}
                             </TableCell>
                             <TableCell>
@@ -796,7 +907,7 @@ export default function UserManagement() {
                                 {formatStatus(user.account_status)}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-slate-600 text-sm">
+                            <TableCell className={isDark ? "text-gray-400 text-sm" : "text-slate-600 text-sm"}>
                               {formatDate(user.created_at)}
                             </TableCell>
                             <TableCell className="text-right">
@@ -828,10 +939,10 @@ export default function UserManagement() {
                                       <MoreVertical className="h-4 w-4" />
                                     </Button>
                                   </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="bg-white border-slate-200">
+                                  <DropdownMenuContent align="end" className={isDark ? "bg-slate-700 border-slate-600" : "bg-white border-slate-200"}>
                                     <DropdownMenuItem 
                                       onClick={() => handleEdit(user.id)}
-                                      className="cursor-pointer text-slate-900 hover:bg-slate-100"
+                                      className={isDark ? "cursor-pointer text-gray-200 hover:bg-slate-600" : "cursor-pointer text-slate-900 hover:bg-slate-100"}
                                     >
                                       <Edit className="mr-2 h-4 w-4 text-[#BA0021]" />
                                       <span>Edit User</span>
@@ -839,7 +950,7 @@ export default function UserManagement() {
                                     {(user.account_status === 'inactive' || user.account_status === 'suspended') && (
                                       <DropdownMenuItem 
                                         onClick={() => handleApprove(user.id)}
-                                        className="cursor-pointer text-slate-900 hover:bg-green-50"
+                                        className={isDark ? "cursor-pointer text-gray-200 hover:bg-slate-600" : "cursor-pointer text-slate-900 hover:bg-green-50"}
                                       >
                                         <UserCheck className="mr-2 h-4 w-4 text-green-600" />
                                         <span>Approve User</span>
@@ -848,7 +959,7 @@ export default function UserManagement() {
                                     {(user.account_status === 'inactive' || user.account_status === 'suspended') && (
                                       <DropdownMenuItem 
                                         onClick={() => handleReject(user.id)}
-                                        className="cursor-pointer text-slate-900 hover:bg-red-50"
+                                        className={isDark ? "cursor-pointer text-gray-200 hover:bg-slate-600" : "cursor-pointer text-slate-900 hover:bg-red-50"}
                                       >
                                         <UserX className="mr-2 h-4 w-4 text-red-600" />
                                         <span>Reject User</span>
@@ -856,7 +967,7 @@ export default function UserManagement() {
                                     )}
                                     <DropdownMenuItem 
                                       onClick={() => handleDelete(user.id)}
-                                      className="cursor-pointer text-red-600 hover:bg-red-50"
+                                      className={isDark ? "cursor-pointer text-red-400 hover:bg-slate-600" : "cursor-pointer text-red-600 hover:bg-red-50"}
                                     >
                                       <Trash2 className="mr-2 h-4 w-4" />
                                       <span>Delete User</span>
@@ -886,20 +997,20 @@ export default function UserManagement() {
             }
           }}
         >
-          <DialogContent className="bg-white max-w-4xl w-full">
+          <DialogContent className={isDark ? "bg-slate-800 border-slate-700 max-w-4xl w-full" : "bg-white max-w-4xl w-full"}>
             <DialogHeader>
-              <DialogTitle className="text-2xl text-slate-900">Edit User</DialogTitle>
-              <DialogDescription className="text-slate-600">
+              <DialogTitle className={isDark ? "text-2xl text-white" : "text-2xl text-slate-900"}>Edit User</DialogTitle>
+              <DialogDescription className={isDark ? "text-gray-400" : "text-slate-600"}>
                 Update user information. Fields marked with * are required.
               </DialogDescription>
               {editDialogError && (
-                <Alert variant="destructive" className="mt-3">
-                  <AlertDescription>{editDialogError}</AlertDescription>
+                <Alert variant="destructive" className={isDark ? "mt-3 border-red-900 bg-red-900/20" : "mt-3"}>
+                  <AlertDescription className={isDark ? "text-red-200" : ""}>{editDialogError}</AlertDescription>
                 </Alert>
               )}
               {isEditingSelf && (
-                <Alert className="mt-3 border-orange-200 bg-orange-50">
-                  <AlertDescription className="text-orange-800 text-sm">
+                <Alert className={isDark ? "mt-3 border-orange-900 bg-orange-900/20" : "mt-3 border-orange-200 bg-orange-50"}>
+                  <AlertDescription className={isDark ? "text-orange-200 text-sm" : "text-orange-800 text-sm"}>
                     ⚠️ You are editing your own account. Role and Account Status fields are disabled to prevent self-lockout.
                   </AlertDescription>
                 </Alert>
@@ -909,22 +1020,22 @@ export default function UserManagement() {
             <div className="grid gap-4 py-4">
               {/* User ID Display */}
               {editingUser && (
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+                <div className={isDark ? "bg-slate-700 border border-slate-600 rounded-lg p-3" : "bg-slate-50 border border-slate-200 rounded-lg p-3"}>
                   <div className="flex items-center gap-3">
                     <UserAvatar user={editingUser} size="lg" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-slate-900">{editingUser.first_name} {editingUser.last_name}</p>
-                      <p className="text-xs text-slate-500 truncate">{editingUser.email}</p>
+                      <p className={isDark ? "text-sm font-semibold text-white" : "text-sm font-semibold text-slate-900"}>{editingUser.first_name} {editingUser.last_name}</p>
+                      <p className={isDark ? "text-xs text-gray-400 truncate" : "text-xs text-slate-500 truncate"}>{editingUser.email}</p>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs text-slate-500 font-medium mb-1">User ID</p>
-                      <p className="text-xs font-mono text-slate-700">{editingUser.id}</p>
+                    <div className={isDark ? "text-right shrink-0 text-gray-400" : "text-right shrink-0"}>
+                      <p className={isDark ? "text-xs text-gray-400 font-medium mb-1" : "text-xs text-slate-500 font-medium mb-1"}>User ID</p>
+                      <p className={isDark ? "text-xs font-mono text-gray-300" : "text-xs font-mono text-slate-700"}>{editingUser.id}</p>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => { navigator.clipboard.writeText(editingUser.id); }}
-                      className="text-[#BA0021] hover:text-[#930018] hover:bg-red-50 shrink-0"
+                      className={isDark ? "text-[#BA0021] hover:text-[#ff6b6b] hover:bg-slate-700 shrink-0" : "text-[#BA0021] hover:text-[#930018] hover:bg-red-50 shrink-0"}
                     >
                       Copy ID
                     </Button>
@@ -934,32 +1045,32 @@ export default function UserManagement() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">
+                  <label className={isDark ? "text-sm font-medium text-gray-300" : "text-sm font-medium text-slate-700"}>
                     First Name *
                   </label>
                   <Input
                     value={editForm.first_name}
                     onChange={(e) => setEditForm({...editForm, first_name: e.target.value})}
                     placeholder="First name"
-                    className="border-slate-300"
+                    className={isDark ? "border-slate-600 bg-slate-700 text-white placeholder-gray-500" : "border-slate-300"}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">
+                  <label className={isDark ? "text-sm font-medium text-gray-300" : "text-sm font-medium text-slate-700"}>
                     Last Name *
                   </label>
                   <Input
                     value={editForm.last_name}
                     onChange={(e) => setEditForm({...editForm, last_name: e.target.value})}
                     placeholder="Last name"
-                    className="border-slate-300"
+                    className={isDark ? "border-slate-600 bg-slate-700 text-white placeholder-gray-500" : "border-slate-300"}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">
+                  <label className={isDark ? "text-sm font-medium text-gray-300" : "text-sm font-medium text-slate-700"}>
                     Email *
                   </label>
                   <Input
@@ -967,25 +1078,25 @@ export default function UserManagement() {
                     value={editForm.email}
                     onChange={(e) => setEditForm({...editForm, email: e.target.value})}
                     placeholder="email@example.com"
-                    className="border-slate-300"
+                    className={isDark ? "border-slate-600 bg-slate-700 text-white placeholder-gray-500" : "border-slate-300"}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">
+                  <label className={isDark ? "text-sm font-medium text-gray-300" : "text-sm font-medium text-slate-700"}>
                     Username *
                   </label>
                   <Input
                     value={editForm.username}
                     onChange={(e) => setEditForm({...editForm, username: e.target.value})}
                     placeholder="username"
-                    className="border-slate-300"
+                    className={isDark ? "border-slate-600 bg-slate-700 text-white placeholder-gray-500" : "border-slate-300"}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">
+                  <label className={isDark ? "text-sm font-medium text-gray-300" : "text-sm font-medium text-slate-700"}>
                     Role *
                   </label>
                   <Select 
@@ -997,10 +1108,10 @@ export default function UserManagement() {
                     })}
                     disabled={isEditingSelf}
                   >
-                    <SelectTrigger className="border-slate-300">
+                    <SelectTrigger className={isDark ? "border-slate-600 bg-slate-700 text-white" : "border-slate-300"}>
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white">
+                    <SelectContent className={isDark ? "bg-slate-700 border-slate-600" : "bg-white"}>
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="program_chair">Program Chair</SelectItem>
                       <SelectItem value="project_head">Project Head</SelectItem>
@@ -1009,34 +1120,34 @@ export default function UserManagement() {
                     </SelectContent>
                   </Select>
                   {isEditingSelf && (
-                    <p className="text-xs text-orange-600">Cannot change your own role</p>
+                    <p className={isDark ? "text-xs text-orange-400" : "text-xs text-orange-600"}>Cannot change your own role</p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">
+                  <label className={isDark ? "text-sm font-medium text-gray-300" : "text-sm font-medium text-slate-700"}>
                     Contact Number
                   </label>
                   <Input
                     value={editForm.contact_number}
                     onChange={(e) => setEditForm({...editForm, contact_number: e.target.value})}
                     placeholder="e.g., +63 123 456 7890"
-                    className="border-slate-300"
+                    className={isDark ? "border-slate-600 bg-slate-700 text-white placeholder-gray-500" : "border-slate-300"}
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">
+                <label className={isDark ? "text-sm font-medium text-gray-300" : "text-sm font-medium text-slate-700"}>
                   Department {(editForm.role === 'project_head' || editForm.role === 'staff') && '*'}
                 </label>
                 <Select 
                   value={editForm.department} 
                   onValueChange={(value) => setEditForm({...editForm, department: value})}
                 >
-                  <SelectTrigger className="border-slate-300">
+                  <SelectTrigger className={isDark ? "border-slate-600 bg-slate-700 text-white" : "border-slate-300"}>
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white">
+                  <SelectContent className={isDark ? "bg-slate-700 border-slate-600" : "bg-white"}>
                     <SelectItem value="None">None</SelectItem>
                     {departments.length === 0 ? (
                       <SelectItem value="loading" disabled>Loading departments...</SelectItem>
@@ -1059,26 +1170,26 @@ export default function UserManagement() {
                   </SelectContent>
                 </Select>
                 {departments.length === 0 && (
-                  <p className="text-xs text-red-600">No departments loaded. Check console for errors.</p>
+                  <p className={isDark ? "text-xs text-red-400" : "text-xs text-red-600"}>No departments loaded. Check console for errors.</p>
                 )}
                 {(editForm.role === 'program_chair' || editForm.role === 'project_head' || editForm.role === 'staff') && (
-                  <p className="text-xs text-slate-500">Required for Project Head and Staff roles</p>
+                  <p className={isDark ? "text-xs text-gray-400" : "text-xs text-slate-500"}>Required for Project Head and Staff roles</p>
                 )}
               </div>
 
               {(editForm.role === 'project_head' || editForm.role === 'staff') && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">
+                  <label className={isDark ? "text-sm font-medium text-gray-300" : "text-sm font-medium text-slate-700"}>
                     Assigned Program Chair {(editForm.account_status === 'active') && '*'}
                   </label>
                   <Select
                     value={editForm.assigned_program_chair_id || '__none__'}
                     onValueChange={(value) => setEditForm({ ...editForm, assigned_program_chair_id: value === '__none__' ? '' : value })}
                   >
-                    <SelectTrigger className="border-slate-300">
+                    <SelectTrigger className={isDark ? "border-slate-600 bg-slate-700 text-white" : "border-slate-300"}>
                       <SelectValue placeholder="Select assigned program chair" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white">
+                    <SelectContent className={isDark ? "bg-slate-700 border-slate-600" : "bg-white"}>
                       <SelectItem value="__none__">None</SelectItem>
                       {programChairs.map((chair) => (
                         <SelectItem key={chair.id} value={chair.id}>
@@ -1087,18 +1198,18 @@ export default function UserManagement() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-slate-500">
+                  <p className={isDark ? "text-xs text-gray-400" : "text-xs text-slate-500"}>
                     Project Head and Staff must belong to one Program Chair team.
                   </p>
                   {assignedProgramChair && (
-                    <div className="mt-2 w-full max-w-sm rounded-md border border-blue-200 bg-blue-50 p-3">
+                    <div className={isDark ? "mt-2 w-full max-w-sm rounded-md border border-blue-900 bg-blue-900/20 p-3" : "mt-2 w-full max-w-sm rounded-md border border-blue-200 bg-blue-50 p-3"}>
                       <div className="flex items-center gap-2">
                         <UserAvatar user={assignedProgramChair} size="sm" />
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-slate-900 truncate">
+                          <p className={isDark ? "text-sm font-semibold text-white truncate" : "text-sm font-semibold text-slate-900 truncate"}>
                             {assignedProgramChair.first_name} {assignedProgramChair.last_name}
                           </p>
-                          <p className="text-xs text-slate-600 truncate">
+                          <p className={isDark ? "text-xs text-gray-400 truncate" : "text-xs text-slate-600 truncate"}>
                             {assignedProgramChair.email} • {assignedProgramChair.department || 'No department'}
                           </p>
                         </div>
@@ -1109,7 +1220,7 @@ export default function UserManagement() {
               )}
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-700">
+                <label className={isDark ? "text-sm font-medium text-gray-300" : "text-sm font-medium text-slate-700"}>
                   Account Status *
                 </label>
                 <Select 
@@ -1117,10 +1228,10 @@ export default function UserManagement() {
                   onValueChange={(value) => setEditForm({...editForm, account_status: value})}
                   disabled={isEditingSelf}
                 >
-                  <SelectTrigger className="border-slate-300">
+                  <SelectTrigger className={isDark ? "border-slate-600 bg-slate-700 text-white" : "border-slate-300"}>
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
-                  <SelectContent className="bg-white">
+                  <SelectContent className={isDark ? "bg-slate-700 border-slate-600" : "bg-white"}>
                     <SelectItem value="active">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-green-500"></div>
@@ -1142,9 +1253,9 @@ export default function UserManagement() {
                   </SelectContent>
                 </Select>
                 {isEditingSelf ? (
-                  <p className="text-xs text-orange-600">Cannot change your own account status</p>
+                  <p className={isDark ? "text-xs text-orange-400" : "text-xs text-orange-600"}>Cannot change your own account status</p>
                 ) : (
-                  <p className="text-xs text-slate-500">
+                  <p className={isDark ? "text-xs text-gray-400" : "text-xs text-slate-500"}>
                     {editForm.account_status === 'active' && 'User can access the system'}
                     {editForm.account_status === 'deactivated' && 'User cannot access the system'}
                     {editForm.account_status === 'pending_approval' && 'User awaiting admin approval'}
@@ -1160,7 +1271,7 @@ export default function UserManagement() {
                   setIsEditDialogOpen(false);
                   setEditDialogError(null);
                 }}
-                className="border-slate-300"
+                className={isDark ? "border-slate-600 text-gray-300 hover:bg-slate-700" : "border-slate-300"}
               >
                 Cancel
               </Button>
@@ -1177,10 +1288,10 @@ export default function UserManagement() {
 
         {/* Delete Confirmation Dialog */}
         <Dialog open={!!deleteDialogUserId} onOpenChange={open => !open && setDeleteDialogUserId(null)}>
-          <DialogContent className="max-w-md p-4">
+          <DialogContent className={isDark ? "bg-slate-800 border-slate-700 max-w-md p-4" : "bg-white max-w-md p-4"}>
             <DialogHeader>
-              <DialogTitle className="text-base">Confirm Delete</DialogTitle>
-              <DialogDescription className="text-sm">
+              <DialogTitle className={isDark ? "text-base text-white" : "text-base"}>Confirm Delete</DialogTitle>
+              <DialogDescription className={isDark ? "text-sm text-gray-400" : "text-sm"}>
                 {(() => {
                   const user = users.find(u => u.id === deleteDialogUserId);
                   if (!user) return 'Are you sure you want to delete this user? This action cannot be undone.';
@@ -1190,7 +1301,7 @@ export default function UserManagement() {
             </DialogHeader>
             <DialogFooter className="flex gap-2 justify-end mt-4">
               <Button variant="destructive" size="sm" onClick={handleConfirmDelete} disabled={processingId !== null}>Delete</Button>
-              <Button variant="outline" size="sm" onClick={() => setDeleteDialogUserId(null)} disabled={processingId !== null}>Cancel</Button>
+              <Button variant="outline" size="sm" onClick={() => setDeleteDialogUserId(null)} disabled={processingId !== null} className={isDark ? "border-slate-600 text-gray-300 hover:bg-slate-700" : ""}>Cancel</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

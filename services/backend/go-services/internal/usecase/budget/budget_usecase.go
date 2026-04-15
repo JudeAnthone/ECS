@@ -16,10 +16,11 @@ type budgetUsecase struct {
 	budgetRepo  repository.BudgetRepository
 	projectRepo repository.ProjectRepository
 	programRepo repository.ProgramRepository
+	notificationRepo repository.NotificationRepository
 }
 
-func NewBudgetUsecase(bRepo repository.BudgetRepository, projectRepo repository.ProjectRepository, programRepo repository.ProgramRepository) UseCase {
-	return &budgetUsecase{budgetRepo: bRepo, projectRepo: projectRepo, programRepo: programRepo}
+func NewBudgetUsecase(bRepo repository.BudgetRepository, projectRepo repository.ProjectRepository, programRepo repository.ProgramRepository, notificationRepo repository.NotificationRepository) UseCase {
+	return &budgetUsecase{budgetRepo: bRepo, projectRepo: projectRepo, programRepo: programRepo, notificationRepo: notificationRepo}
 }
 
 func (uc *budgetUsecase) GetTotalBudget(ctx context.Context) (float64, error) {
@@ -144,6 +145,30 @@ func (uc *budgetUsecase) CreateBudgetRequest(ctx context.Context, requestedBy st
 	if err != nil {
 		return nil, fmt.Errorf("failed to create budget request: %w", err)
 	}
+
+	if role == domain.RoleProjectHead && uc.notificationRepo != nil && project.ProgramID != nil {
+		program, programErr := uc.programRepo.GetByID(ctx, *project.ProgramID)
+		if programErr == nil && program != nil && program.ProgramChairID != nil && *program.ProgramChairID != requestedBy {
+			requesterName := strings.TrimSpace(created.RequestedByName)
+			if requesterName == "" {
+				requesterName = "A project head"
+			}
+			title := "New Budget Request"
+			message := fmt.Sprintf("%s requested %s for project %s.", requesterName, formatCurrency(created.Amount), project.ProjectName)
+			entityType := "budget_request"
+			entityID := created.ID
+			_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+				UserID:     *program.ProgramChairID,
+				Title:      title,
+				Message:    message,
+				Type:       "budget_request",
+				EntityType: &entityType,
+				EntityID:   &entityID,
+				IsRead:     false,
+			})
+		}
+	}
+
 	return uc.toDTO(created), nil
 }
 
@@ -202,7 +227,35 @@ func (uc *budgetUsecase) ReviewBudgetRequest(ctx context.Context, id string, rev
 	if err != nil {
 		return nil, fmt.Errorf("failed to review budget request: %w", err)
 	}
+
+	if uc.notificationRepo != nil {
+		title := "Budget Request Updated"
+		typeValue := "request_updated"
+		statusLabel := "declined"
+		if approved {
+			title = "Budget Request Approved"
+			typeValue = "budget_approved"
+			statusLabel = "approved"
+		}
+		message := fmt.Sprintf("Your budget request for project %s was %s.", req.ProjectName, statusLabel)
+		entityType := "budget_request"
+		entityID := updated.ID
+		_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+			UserID:     req.RequestedBy,
+			Title:      title,
+			Message:    message,
+			Type:       typeValue,
+			EntityType: &entityType,
+			EntityID:   &entityID,
+			IsRead:     false,
+		})
+	}
+
 	return uc.toDTO(updated), nil
+}
+
+func formatCurrency(amount float64) string {
+	return fmt.Sprintf("PHP %.2f", amount)
 }
 
 func (uc *budgetUsecase) DeleteBudgetRequest(ctx context.Context, id string, userID string, role string) error {

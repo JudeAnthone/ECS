@@ -3,8 +3,10 @@ package user
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/delivery/http/dto"
+	"github.com/Xschema-dev/Earist-Extension-Service/internal/domain"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/repository"
 )
 
@@ -18,6 +20,34 @@ func NewUserUseCase(userRepo repository.UserRepository) UseCase {
 	}
 }
 
+func toUserDTO(user *domain.User) *dto.UserDTO {
+	if user == nil {
+		return nil
+	}
+
+	var lastActive *string
+	if user.LastActive != nil {
+		formatted := user.LastActive.Format("2006-01-02T15:04:05Z07:00")
+		lastActive = &formatted
+	}
+
+	return &dto.UserDTO{
+		ID:                     user.ID,
+		Username:               user.Username,
+		FirstName:              user.FirstName,
+		LastName:               user.LastName,
+		Email:                  user.Email,
+		Role:                   user.Role,
+		Department:             user.Department,
+		AssignedProgramChairID: user.AssignedProgramChairID,
+		ContactNumber:          user.ContactNumber,
+		AccountStatus:          user.AccountStatus,
+		AvatarURL:              user.AvatarURL,
+		LastActive:             lastActive,
+		CreatedAt:              user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+	}
+}
+
 func (uc *userUseCase) GetAllUsers(ctx context.Context) ([]*dto.UserDTO, error) {
 	users, err := uc.userRepo.GetAllUsers(ctx)
 	if err != nil {
@@ -26,30 +56,18 @@ func (uc *userUseCase) GetAllUsers(ctx context.Context) ([]*dto.UserDTO, error) 
 
 	userDTOs := make([]*dto.UserDTO, 0, len(users))
 	for _, user := range users {
-		var lastActive *string
-		if user.LastActive != nil {
-			formatted := user.LastActive.Format("2006-01-02T15:04:05Z07:00")
-			lastActive = &formatted
-		}
-
-		userDTOs = append(userDTOs, &dto.UserDTO{
-			ID:                     user.ID,
-			Username:               user.Username,
-			FirstName:              user.FirstName,
-			LastName:               user.LastName,
-			Email:                  user.Email,
-			Role:                   user.Role,
-			Department:             user.Department,
-			AssignedProgramChairID: user.AssignedProgramChairID,
-			ContactNumber:          user.ContactNumber,
-			AccountStatus:          user.AccountStatus,
-			AvatarURL:              user.AvatarURL,
-			LastActive:             lastActive,
-			CreatedAt:              user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		})
+		userDTOs = append(userDTOs, toUserDTO(user))
 	}
 
 	return userDTOs, nil
+}
+
+func (uc *userUseCase) GetUserByID(ctx context.Context, userID string) (*dto.UserDTO, error) {
+	user, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	return toUserDTO(user), nil
 }
 
 func (uc *userUseCase) ApproveUser(ctx context.Context, userID string, approvedByID string) error {
@@ -251,6 +269,79 @@ func (uc *userUseCase) UpdateUser(ctx context.Context, userID string, updates *d
 	return nil
 }
 
+func (uc *userUseCase) UpdateOwnAvatar(ctx context.Context, userID string, avatarURL *string) (*dto.UserDTO, error) {
+	user, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	user.AvatarURL = avatarURL
+	if err := uc.userRepo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to update avatar: %w", err)
+	}
+	updatedUser, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load updated user: %w", err)
+	}
+	return toUserDTO(updatedUser), nil
+}
+
+func (uc *userUseCase) UpdateOwnProfile(ctx context.Context, userID string, updates *dto.UpdateOwnProfileDTO) (*dto.UserDTO, error) {
+	user, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	if updates.FirstName != nil {
+		trimmed := strings.TrimSpace(*updates.FirstName)
+		if trimmed == "" {
+			return nil, fmt.Errorf("first_name cannot be empty")
+		}
+		user.FirstName = trimmed
+	}
+
+	if updates.LastName != nil {
+		trimmed := strings.TrimSpace(*updates.LastName)
+		if trimmed == "" {
+			return nil, fmt.Errorf("last_name cannot be empty")
+		}
+		user.LastName = trimmed
+	}
+
+	if updates.Email != nil {
+		email := strings.TrimSpace(*updates.Email)
+		if email == "" {
+			return nil, fmt.Errorf("email cannot be empty")
+		}
+		if email != user.Email {
+			existingUser, _ := uc.userRepo.GetByEmail(ctx, email)
+			if existingUser != nil && existingUser.ID != userID {
+				return nil, fmt.Errorf("email is already taken")
+			}
+		}
+		user.Email = email
+	}
+
+	if updates.ContactNumber != nil {
+		contact := strings.TrimSpace(*updates.ContactNumber)
+		if contact == "" {
+			user.ContactNumber = nil
+		} else {
+			user.ContactNumber = &contact
+		}
+	}
+
+	if err := uc.userRepo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to update user profile: %w", err)
+	}
+
+	updatedUser, err := uc.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load updated user: %w", err)
+	}
+
+	return toUserDTO(updatedUser), nil
+}
+
 // GetUsersByRole returns active users filtered by role as UserDTOs
 func (uc *userUseCase) GetUsersByRole(ctx context.Context, role string) ([]*dto.UserDTO, error) {
 	users, err := uc.userRepo.GetUsersByRole(ctx, role)
@@ -259,16 +350,7 @@ func (uc *userUseCase) GetUsersByRole(ctx context.Context, role string) ([]*dto.
 	}
 	var result []*dto.UserDTO
 	for _, u := range users {
-		result = append(result, &dto.UserDTO{
-			ID:                     u.ID,
-			Username:               u.Username,
-			FirstName:              u.FirstName,
-			LastName:               u.LastName,
-			Email:                  u.Email,
-			Role:                   u.Role,
-			Department:             u.Department,
-			AssignedProgramChairID: u.AssignedProgramChairID,
-		})
+		result = append(result, toUserDTO(u))
 	}
 	if result == nil {
 		result = []*dto.UserDTO{}

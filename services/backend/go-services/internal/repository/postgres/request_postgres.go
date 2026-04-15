@@ -350,8 +350,23 @@ func (r *RequestRepository) Delete(ctx context.Context, id string) error {
 // to a department managed by the given program chair.
 func (r *RequestRepository) GetByDepartmentChair(ctx context.Context, chairID string) ([]*domain.ProjectRequest, error) {
 	query := selectAllCols + `
-		WHERE requested_department_id IN (
-			SELECT id FROM departments WHERE program_chair_id = $1
+		WHERE (
+			requested_department_id IN (
+				SELECT id FROM departments WHERE program_chair_id = $1
+			)
+			OR (
+				requested_department_id IS NULL
+				AND requested_department IS NOT NULL
+				AND EXISTS (
+					SELECT 1
+					FROM departments d
+					WHERE d.program_chair_id = $1
+					  AND (
+						LOWER(TRIM(requested_department)) = LOWER(TRIM(d.department_name))
+						OR LOWER(TRIM(requested_department)) = LOWER(TRIM(d.department_code))
+					  )
+				)
+			)
 		)
 		ORDER BY created_at DESC
 	`

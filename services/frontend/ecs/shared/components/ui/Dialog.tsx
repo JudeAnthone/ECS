@@ -11,8 +11,9 @@ import { XIcon } from "lucide-react"
 
 
 
-function useBodyScrollbarCompensation() {
+function useBodyScrollbarCompensation(enabled: boolean) {
   React.useEffect(() => {
+    if (!enabled) return;
     const body = document.body;
     let prevVar = body.style.getPropertyValue('--modal-scrollbar-compensation');
     const compensate = () => {
@@ -36,16 +37,17 @@ function useBodyScrollbarCompensation() {
       body.style.setProperty('--modal-scrollbar-compensation', prevVar || '0px');
       body.classList.remove('modal-open');
     };
-  }, []);
+  }, [enabled]);
 }
 
-function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  useBodyScrollbarCompensation();
+function Dialog({ modal = true, ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  useBodyScrollbarCompensation(modal);
   const [isOpen, setIsOpen] = React.useState(false);
   const controlled = typeof props.open === 'boolean';
   return (
     <DialogPrimitive.Root
       data-slot="dialog"
+      modal={modal}
       {...props}
       open={controlled ? props.open : isOpen}
       onOpenChange={value => {
@@ -81,7 +83,7 @@ function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
-      className={cn("data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs fixed inset-0 isolate z-50", className)}
+      className={cn("data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 bg-black/20 backdrop-blur-sm duration-100 fixed inset-0 isolate z-50", className)}
       {...props}
     />
   )

@@ -1,4 +1,6 @@
-import React from 'react';
+"use client";
+
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card'
 import { Badge } from '@/shared/components/ui/Badge'
 import { ScrollArea } from '@/shared/components/ui/ScrollArea'
@@ -13,8 +15,60 @@ import {
   Activity
 } from 'lucide-react';
 import ClientNow from '@/shared/components/ui/ClientNow'
+import ActivityLogService from '@/shared/lib/activity-log-service';
+import ProfileAvatar from '@/shared/components/ui/ProfileAvatar';
 
 export default function Dashboard() {
+  const humanizeRole = (role: string) =>
+    role
+      .split('_')
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+
+  const normalizeLabel = (value: string) =>
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[_\-\s]+/g, ' ')
+      .replace(/\s+/g, ' ');
+
+  const [recentActivity, setRecentActivity] = useState<Array<{
+    id: string;
+    user: string;
+    avatarUrl?: string;
+    role: string;
+    department: string;
+    action: string;
+    timestamp: string;
+  }>>([]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadActivities = async () => {
+      const activities = await ActivityLogService.getRecentActivitiesFromAPI(8);
+      if (!mounted) return;
+
+      setRecentActivity(
+        activities.map((activity) => ({
+          id: activity.id,
+          user: activity.userName,
+          avatarUrl: activity.userAvatarUrl,
+          role: humanizeRole(activity.userRole),
+          department: activity.userDepartment,
+          action: activity.action,
+          timestamp: ActivityLogService.formatActivityTimestamp(activity.timestamp),
+        }))
+      );
+    };
+
+    loadActivities();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const metrics = [
     {
       title: 'Pending Requests',
@@ -93,65 +147,6 @@ export default function Dashboard() {
     }
   ];
 
-  const recentActivity = [
-    {
-      id: 1,
-      user: 'Sarah Chen',
-      department: 'IT Operations',
-      action: 'Resolved ticket #4521 - Network connectivity issue',
-      timestamp: '5 minutes ago'
-    },
-    {
-      id: 2,
-      user: 'Marcus Rodriguez',
-      department: 'Customer Support',
-      action: 'Assigned 3 new support tickets to team members',
-      timestamp: '12 minutes ago'
-    },
-    {
-      id: 3,
-      user: 'Emily Watson',
-      department: 'HR',
-      action: 'Approved leave request for John Smith',
-      timestamp: '28 minutes ago'
-    },
-    {
-      id: 4,
-      user: 'David Kim',
-      department: 'Engineering',
-      action: 'Deployed hotfix to production environment',
-      timestamp: '45 minutes ago'
-    },
-    {
-      id: 5,
-      user: 'Lisa Anderson',
-      department: 'Finance',
-      action: 'Processed invoice batch #INV-2026-127',
-      timestamp: '1 hour ago'
-    },
-    {
-      id: 6,
-      user: 'James Foster',
-      department: 'IT Security',
-      action: 'Completed security audit for Q1 2026',
-      timestamp: '1 hour ago'
-    },
-    {
-      id: 7,
-      user: 'Patricia Martinez',
-      department: 'Sales',
-      action: 'Updated CRM with 5 new client records',
-      timestamp: '2 hours ago'
-    },
-    {
-      id: 8,
-      user: 'Robert Taylor',
-      department: 'Operations',
-      action: 'Scheduled maintenance window for server upgrades',
-      timestamp: '2 hours ago'
-    }
-  ];
-
   return (
     <div className="min-h-screen bg-white p-6">
       <div className="max-w-[1920px] mx-auto space-y-6">
@@ -180,8 +175,8 @@ export default function Dashboard() {
                   <Icon className={`h-4 w-4 ${metric.variant === 'destructive' ? 'text-red-600' : metric.variant === 'warning' ? 'text-amber-600' : 'text-slate-500'}`} />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-slate-900">{metric.value}</div>
-                  <p className="text-xs text-slate-500 mt-1">{metric.trend}</p>
+                <div className="text-3xl font-bold text-slate-900">{metric.value}</div>
+                <p className="text-xs text-slate-500 mt-1">{metric.trend}</p>
                 </CardContent>
               </Card>
             );
@@ -233,19 +228,33 @@ export default function Dashboard() {
             <CardContent>
               <ScrollArea className="h-[400px] pr-4">
                 <div className="space-y-4">
-                  {recentActivity.map((activity) => (
-                    <div key={activity.id} className="flex items-start gap-3 pb-3 border-b border-slate-100 last:border-0">
-                      <div className="h-8 w-8 rounded-full bg-[#BA0021] flex items-center justify-center text-white font-semibold text-sm shrink-0">
-                        {activity.user.split(' ').map(n => n[0]).join('')}
+                  {recentActivity.length > 0 ? (
+                    recentActivity.map((activity) => (
+                      <div key={activity.id} className="flex items-start gap-3 pb-3 border-b border-slate-100 last:border-0">
+                        <ProfileAvatar
+                          imageUrl={activity.avatarUrl}
+                          fullName={activity.user}
+                          className="h-8 w-8 border border-slate-300"
+                          textClassName="text-[10px]"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-slate-900">{activity.user}</p>
+                          <p className="text-xs text-slate-500">{activity.role}</p>
+                          {activity.department &&
+                            normalizeLabel(activity.department) !== normalizeLabel(activity.role) &&
+                            normalizeLabel(activity.department) !== normalizeLabel(activity.user) && (
+                              <p className="text-xs text-slate-500 mb-1">{activity.department}</p>
+                            )}
+                          <p className="text-sm text-slate-700">{activity.action}</p>
+                          <p className="text-xs text-slate-400 mt-1">{activity.timestamp}</p>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900">{activity.user}</p>
-                        <p className="text-xs text-slate-500 mb-1">{activity.department}</p>
-                        <p className="text-sm text-slate-700">{activity.action}</p>
-                        <p className="text-xs text-slate-400 mt-1">{activity.timestamp}</p>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="flex items-center justify-center h-40">
+                      <p className="text-sm text-slate-500">No recent activity yet</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </ScrollArea>
             </CardContent>

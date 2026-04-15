@@ -21,22 +21,19 @@ const projectSelectColumns = `
 	       p.creation_source, p.request_id, p.created_by, p.updated_by,
 	       p.objectives, p.budget_allocated, p.budget_used, p.start_date, p.end_date, p.progress_percentage,
 	       p.status, p.approval_status,
-	       CASE
-	         WHEN p.approval_status = 'rejected' THEN feedback.latest_rejection_feedback
-	         ELSE NULL
-	       END AS feedback,
+	       feedback.latest_review_feedback AS feedback,
 	       COALESCE(creator.role = 'staff', false) AS staff_originated,
 	       p.is_published, p.created_at, p.updated_at,
 	       p.created_by_role, p.created_by_first_name, p.created_by_last_name
 	FROM projects p
 	LEFT JOIN users creator ON creator.id = p.created_by
 	LEFT JOIN LATERAL (
-		SELECT NULLIF(BTRIM(al.details->>'review_notes'), '') AS latest_rejection_feedback
+		SELECT NULLIF(BTRIM(al.details->>'review_notes'), '') AS latest_review_feedback
 		FROM activity_logs al
 		WHERE al.entity_type = 'project'
 		  AND al.entity_id = p.id
 		  AND (
-			(al.details->>'approval_status') = 'rejected'
+			(al.details->>'approval_status') IN ('approved', 'rejected')
 			OR (al.details->>'status') = 'cancelled'
 		  )
 		ORDER BY al.created_at DESC

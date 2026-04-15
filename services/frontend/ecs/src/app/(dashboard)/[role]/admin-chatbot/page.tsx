@@ -45,23 +45,69 @@ export default function ChatbotPage() {
   }, [messages]);
 
   // Simulated bot responses
+  const isOffTopicQuestion = (msg: string): boolean => {
+    const lowerMsg = msg.toLowerCase().trim();
+    
+    // Detect insults - stricter matching
+    const insults = ['stupid', 'idiot', 'dumb', 'fool', 'crazy', 'insane', 'worthless', 'useless'];
+    for (const insult of insults) {
+      if (lowerMsg === insult || 
+          lowerMsg === insult + '?' ||
+          lowerMsg === insult + '!' ||
+          lowerMsg === insult + '.' ||
+          lowerMsg.startsWith(insult + ' ') || 
+          lowerMsg.includes(' ' + insult) ||
+          lowerMsg.endsWith(' ' + insult)) {
+        return true;
+      }
+    }
+    
+    // Detect political and off-topic keywords
+    const offTopicKeywords = [
+      'duterte', 'trump', 'biden', 'marcos', 'aquino', 'politician', 'president', 'election',
+      'weather', 'sports', 'football', 'basketball', 'movie', 'actor', 'recipe', 'cooking',
+      'music', 'song', 'birthday', 'joke', 'funny', 'game', 'video game', 'hobby', 'pet',
+      'love', 'dating', 'boyfriend', 'girlfriend', 'religion', 'god', 'philosophy',
+      'vaccination', 'crypto', 'bitcoin', 'investment', 'stock', 'loan', 'medical', 'doctor',
+      'disease', 'treatment', 'diagnosis', 'symptom', 'legal advice', 'lawsuit', 'divorce',
+      'fashion', 'travel', 'vacation', 'car', 'book', 'novel'
+    ]
+    
+    // Detect political and off-topic keywords
+    const offTopicKeywords = [
+      'duterte', 'trump', 'biden', 'marcos', 'aquino', 'politician', 'president', 'election',
+      'weather', 'sports', 'football', 'basketball', 'movie', 'actor', 'recipe', 'cooking',
+      'music', 'song', 'birthday', 'joke', 'funny', 'game', 'video game', 'hobby', 'pet',
+      'love', 'dating', 'boyfriend', 'girlfriend', 'religion', 'god', 'philosophy',
+      'vaccination', 'crypto', 'bitcoin', 'investment', 'stock', 'loan', 'medical', 'doctor',
+      'disease', 'treatment', 'diagnosis', 'symptom', 'legal advice', 'lawsuit', 'divorce',
+      'fashion', 'travel', 'vacation', 'car', 'book', 'novel'
+    ];
+    return offTopicKeywords.some(keyword => lowerMsg.includes(keyword));
+  };
+
   const getBotResponse = (userMessage: string): string => {
     const lowerMessage = userMessage.toLowerCase();
 
+    // Handle off-topic questions with proper etiquette first
+    if (isOffTopicQuestion(userMessage)) {
+      return "I appreciate the question, but I'm specifically designed to help with the Extension Services system including project management, user administration, budget oversight, and analytics. Is there anything related to the system I can assist you with?";
+    }
+
     // Project-related queries
     if (lowerMessage.includes('project') && lowerMessage.includes('status')) {
-      return "I can help you check project status. Currently, we have 12 active projects across all departments. 7 are completed, 4 are ongoing, and 1 is delayed. Would you like details about a specific project?";
+      return "To check project status, go to the Dashboard and click on 'Project Management'. You can view all projects, filter by status (Pending, In Progress, Completed), and see detailed information including budget, timeline, and assigned personnel.";
     }
     if (lowerMessage.includes('project') && (lowerMessage.includes('create') || lowerMessage.includes('new'))) {
-      return "To create a new project, you'll need to provide: Project Name, Department, Assigned Personnel, Budget, and Deadline. You can access the Project Management section from the main menu to create a new project.";
+      return "To create a new project, navigate to Dashboard → Project Management → Click 'Create Project'. Fill in: Project Name, Department, Description, Budget Amount, Timeline/Deadline, and Assigned Program/Department Chair. Review and submit for approval.";
     }
     if (lowerMessage.includes('project') && lowerMessage.includes('budget')) {
-      return "Our current total project budget allocation is $2,500,000 with $1,850,000 spent (74% utilization). The remaining budget is $650,000. Would you like a breakdown by department?";
+      return "To understand project budgets: 1) Go to Analytics → Projects tab, 2) View budget status for each active project, 3) See allocated vs. spent amounts, 4) Check which projects have budget requests pending, 5) Use this to identify budget bottlenecks or opportunities. You can drill down into specific projects for detailed budget history.";
     }
 
     // User management queries
     if (lowerMessage.includes('user') && (lowerMessage.includes('add') || lowerMessage.includes('create'))) {
-      return "To add a new user, navigate to User Management and click 'Add User'. You'll need to provide: Full Name, Email, Department, Role, and initial password. The user will receive an email to set up their account.";
+      return "To add a new user, go to Dashboard → Administration → User Management → Click 'Add User'. Fill in: Full Name, Email Address, Department, Assign Role (Admin, Program Chair, Project Head, Staff, Public User). System sends welcome email with account setup instructions.";
     }
     if (lowerMessage.includes('user') && lowerMessage.includes('reset')) {
       return "To reset a user's password, go to User Management, find the user, click the three-dot menu, and select 'Reset Password'. The user will receive an email with password reset instructions.";
@@ -69,12 +115,12 @@ export default function ChatbotPage() {
 
     // Budget queries
     if (lowerMessage.includes('budget') && lowerMessage.includes('department')) {
-      return "Here's the budget breakdown by department:\n• Engineering: $850,000 (75% utilized)\n• Marketing: $620,000 (78% utilized)\n• Research: $580,000 (73% utilized)\n• Operations: $720,000 (82% utilized)";
+      return "To analyze budget by department, go to Analytics Dashboard → Select Funds as analysis type. Filter by department to see their allocated budget, actual spending, committed amounts, and remaining balance. You can also download detailed reports for budget review meetings.";
     }
 
     // Analytics queries
     if (lowerMessage.includes('analytic') || lowerMessage.includes('report')) {
-      return "You can access detailed analytics in the Analytics Dashboard. You can filter by department, select analytics type (Funds, Projects, or Services), and choose any date range. The reports can be printed or downloaded for your records.";
+      return "To access analytics, go to Dashboard → Analytics. Choose your analysis type: 'Funds' (budget tracking by department/program), 'Projects' (project timelines and status), or 'Services' (request volume and processing time). Filter by date range, department, or program. Download reports for meetings or strategic planning.";
     }
 
     // Help queries
@@ -84,17 +130,24 @@ export default function ChatbotPage() {
 
     // Department queries
     if (lowerMessage.includes('department')) {
-      return "We have 4 main departments:\n• Engineering (12 personnel)\n• Marketing (8 personnel)\n• Research (6 personnel)\n• Operations (10 personnel)\n\nWhich department would you like to know more about?";
+      return "To view department information, navigate to Dashboard → Administration → Departments. You can see all departments, assigned personnel, budget allocations, and ongoing projects. Click any department to view detailed information.";
     }
 
-    // Task queries
-    if (lowerMessage.includes('task') && lowerMessage.includes('assign')) {
-      return "To assign a task, go to your Dashboard and click 'Add Task'. Enter the task title, select the assignee, set the due date, and add any relevant details. The assignee will be notified immediately.";
+    if (lowerMessage.includes('task') && (lowerMessage.includes('assign') || lowerMessage.includes('create'))) {
+      return "To manage project tasks: 1) Open Project Management and select your project, 2) Go to Task Management tab, 3) Click 'Create Task' and fill in: task title, description, priority level, due date, 4) Assign the task to a team member, 5) Save. Team members can then update status as they progress. Keep tasks current so everyone knows what's being worked on.";
     }
 
     // Services queries
     if (lowerMessage.includes('service') && lowerMessage.includes('request')) {
-      return "To request a service, submit a service request form specifying the service type, priority level, and detailed requirements. Current average response time is 2.4 hours, and we maintain a 92% on-time delivery rate.";
+      return "To submit a service request, navigate to Dashboard → Public User Features → Submit Service Request. Fill in: Service Type, Priority Level (Low/Medium/High/Critical), Detailed Description, Contact Information, and any supporting files. Submit for review and tracking.";
+    }
+
+    // Staff management queries
+    if ((lowerMessage.includes('accept') || lowerMessage.includes('receive')) && lowerMessage.includes('staff') && lowerMessage.includes('request')) {
+      return "To accept staff requests, go to Dashboard → Project Management → Select Project → 'Assign Staff' Tab. Review pending staff requests with their qualifications and requirements. Click 'Accept' to approve the assignment or 'Decline' with feedback. Accepted staff will be notified immediately.";
+    }
+    if ((lowerMessage.includes('assign') || lowerMessage.includes('add')) && (lowerMessage.includes('staff') || lowerMessage.includes('personnel')) && lowerMessage.includes('project')) {
+      return "To assign project staff, go to Dashboard → Project Management → Select Project → 'Assign Staff' Tab. Click 'Request Staff' or 'Add Staff'. Select roles needed, specify requirements, choose staff members from department pool, and submit request. Staff assignment requires approval from appropriate authority.";
     }
 
     // Blog queries
@@ -113,7 +166,7 @@ export default function ChatbotPage() {
     }
 
     // Default response
-    return "I understand you're asking about: \"" + userMessage + "\". Could you please provide more details? I can help with projects, users, budgets, analytics, tasks, services, and general system information.";
+    return "I'm here to help with admin tasks like project management, user administration, budget tracking, and analytics. I didn't quite understand that question. Could you rephrase what you're looking for, or pick a quick prompt above to get started?";
   };
 
   const handleSendMessage = () => {

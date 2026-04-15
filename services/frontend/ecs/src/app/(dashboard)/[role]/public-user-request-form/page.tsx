@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   FileText, Target, Users, XCircle,
   Send, CheckCircle2, Lightbulb, RefreshCw, ClipboardList,
@@ -16,14 +17,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/shared/components/ui/Dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/ui/Select';
-import { filterVisibleDepartments } from '@/shared/configs/department-visibility';
+import ActivityLogService from '@/shared/lib/activity-log-service';
+import { AuthService } from '@/shared/lib/auth-service';
 
 const API = 'http://localhost:8081/api/v1';
 function getToken() { return localStorage.getItem('auth_token'); }
@@ -214,34 +209,28 @@ function RequestDetailDialog({
   );
 }
 
-interface Department {
-  id: string;
-  department_name: string;
-  department_code?: string;
-}
-
 export default function PublicUserRequestFormPage() {
+  const searchParams = useSearchParams();
+  const requestFromQuery = searchParams.get('requestId');
+  const focusFromQuery = searchParams.get('focus');
+
   // Form state
   const [formData, setFormData] = useState({
     request_title: '',
     request_description: '',
     justification: '',
     target_beneficiaries: '',
-    requested_department: '',
-    requested_department_id: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [submitSuccess, setSubmitSuccess] = useState<RequestRecord | null>(null);
-
-  // Departments dropdown
-  const [departments, setDepartments] = useState<Department[]>([]);
 
   // My requests state
   const [myRequests, setMyRequests] = useState<RequestRecord[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [showRequests, setShowRequests] = useState(true);
   const [selectedRequest, setSelectedRequest] = useState<RequestRecord | null>(null);
+  const [queryHandled, setQueryHandled] = useState(false);
 
   const fetchMyRequests = async () => {
     setLoadingRequests(true);
@@ -258,18 +247,23 @@ export default function PublicUserRequestFormPage() {
     }
   };
 
-  const fetchDepartments = async () => {
-    try {
-      const r = await fetch(`${API}/departments`, { headers: authHeaders() });
-      if (r.ok) {
-        const data = await r.json();
-        const filtered = filterVisibleDepartments(data.departments ?? []);
-        setDepartments(filtered);
-      }
-    } catch { /* silently fail */ }
-  };
+  useEffect(() => { fetchMyRequests(); }, []);
 
-  useEffect(() => { fetchMyRequests(); fetchDepartments(); }, []);
+  useEffect(() => {
+    if (queryHandled || !requestFromQuery) return;
+
+    const found = myRequests.find((req) => req.id === requestFromQuery);
+    if (found) {
+      setShowRequests(true);
+      setSelectedRequest(found);
+      setQueryHandled(true);
+      return;
+    }
+
+    if (!loadingRequests) {
+      setQueryHandled(true);
+    }
+  }, [myRequests, loadingRequests, queryHandled, requestFromQuery]);
 
   const handleSubmit = async () => {
     if (!formData.request_title.trim() || !formData.request_description.trim()) {
@@ -285,9 +279,6 @@ export default function PublicUserRequestFormPage() {
       };
       if (formData.justification.trim()) body.justification = formData.justification.trim();
       if (formData.target_beneficiaries.trim()) body.target_beneficiaries = formData.target_beneficiaries.trim();
-      if (formData.requested_department.trim()) body.requested_department = formData.requested_department.trim();
-      if (formData.requested_department_id) body.requested_department_id = formData.requested_department_id;
-
       const r = await fetch(`${API}/requests`, {
         method: 'POST',
         headers: authHeaders(),
@@ -298,8 +289,20 @@ export default function PublicUserRequestFormPage() {
         setSubmitError(data.error ?? 'Submission failed. Please try again.');
         return;
       }
+      const currentUser = AuthService.getUser();
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'public_user',
+          currentUser.department || 'Public User',
+          `Submitted program request: ${formData.request_title.trim()}`,
+          'submission',
+          { requestType: 'program_request', requestTitle: formData.request_title.trim() }
+        );
+      }
       setSubmitSuccess(data);
-      setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '', requested_department: '', requested_department_id: '' });
+      setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '' });
       fetchMyRequests();
     } catch {
       setSubmitError('Network error. Please try again.');
@@ -309,7 +312,7 @@ export default function PublicUserRequestFormPage() {
   };
 
   const handleClear = () => {
-    setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '', requested_department: '', requested_department_id: '' });
+    setFormData({ request_title: '', request_description: '', justification: '', target_beneficiaries: '' });
     setSubmitError('');
     setSubmitSuccess(null);
   };
@@ -422,41 +425,6 @@ export default function PublicUserRequestFormPage() {
                     className="border-slate-300"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700">Preferred Department (optional)</label>
-                  {departments.length > 0 ? (
-                    <Select
-                      value={formData.requested_department_id}
-                      onValueChange={val => {
-                        const dept = departments.find(d => d.id === val);
-                        setFormData({
-                          ...formData,
-                          requested_department_id: val,
-                          requested_department: dept?.department_name ?? '',
-                        });
-                      }}
-                    >
-                      <SelectTrigger className="border-slate-300">
-                        <SelectValue placeholder="Select a department (optional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {departments.map(d => (
-                          <SelectItem key={d.id} value={d.id}>
-                            {d.department_name}{d.department_code ? ` (${d.department_code})` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <Input
-                      value={formData.requested_department}
-                      onChange={e => setFormData({ ...formData, requested_department: e.target.value })}
-                      placeholder="e.g. College of Engineering (optional)"
-                      className="border-slate-300"
-                    />
-                  )}
-                  <p className="text-xs text-slate-400">Optional — the program chair will make the final department assignment.</p>
-                </div>
               </div>
             </div>
 
@@ -498,6 +466,9 @@ export default function PublicUserRequestFormPage() {
             <div className="flex items-center gap-2">
               <ClipboardList className="w-5 h-5 text-slate-500" />
               <span className="font-semibold text-slate-800">My Submitted Requests</span>
+              {focusFromQuery === 'feedback' && requestFromQuery && (
+                <span className="bg-blue-100 text-blue-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">Feedback Highlight</span>
+              )}
               {myRequests.length > 0 && (
                 <span className="bg-slate-100 text-slate-700 text-xs font-medium px-2 py-0.5 rounded-full">{myRequests.length}</span>
               )}

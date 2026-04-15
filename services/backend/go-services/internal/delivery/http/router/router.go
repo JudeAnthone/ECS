@@ -9,9 +9,11 @@ import (
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/domain"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/pkg/database"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/repository/postgres"
+	activityuc "github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/activity"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/auth"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/budget"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/department"
+	notificationuc "github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/notification"
 	"github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/program"
 	projectuc "github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/project"
 	requestuc "github.com/Xschema-dev/Earist-Extension-Service/internal/usecase/request"
@@ -28,14 +30,18 @@ func SetupRoutes() *mux.Router {
 	programRepo := postgres.NewProgramRepository(database.DB)
 	projectRepo := postgres.NewProjectRepository(database.DB)
 	requestRepo := postgres.NewRequestRepository(database.DB)
+	notificationRepo := postgres.NewNotificationRepository(database.DB)
+	activityRepo := postgres.NewActivityLogRepository(database.DB)
 
 	// Initialize usecases
 	authUsecase := auth.NewAuthUsecase(userRepo, config.AppConfig)
 	userUsecase := user.NewUserUseCase(userRepo)
 	departmentUsecase := department.NewDepartmentUseCase(departmentRepo)
 	programUsecase := program.NewProgramUseCase(programRepo)
-	projectUsecase := projectuc.NewProjectUseCase(projectRepo, userRepo, departmentRepo, programRepo)
-	requestUsecase := requestuc.NewRequestUseCase(requestRepo, programRepo, userRepo, departmentRepo)
+	projectUsecase := projectuc.NewProjectUseCase(projectRepo, userRepo, departmentRepo, programRepo, notificationRepo)
+	requestUsecase := requestuc.NewRequestUseCase(requestRepo, programRepo, userRepo, departmentRepo, notificationRepo)
+	notificationUsecase := notificationuc.NewNotificationUseCase(notificationRepo)
+	activityUsecase := activityuc.NewActivityUseCase(activityRepo)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authUsecase)
@@ -44,9 +50,11 @@ func SetupRoutes() *mux.Router {
 	programHandler := handler.NewProgramHandler(programUsecase)
 	projectHandler := handler.NewProjectHandler(projectUsecase)
 	requestHandler := handler.NewRequestHandler(requestUsecase)
+	notificationHandler := handler.NewNotificationHandler(notificationUsecase)
+	activityHandler := handler.NewActivityHandler(activityUsecase)
 	// budget
 	budgetRepo := postgres.NewBudgetRepository(database.DB)
-	budgetUsecase := budget.NewBudgetUsecase(budgetRepo, projectRepo, programRepo)
+	budgetUsecase := budget.NewBudgetUsecase(budgetRepo, projectRepo, programRepo, notificationRepo)
 	budgetHandler := handler.NewBudgetHandler(budgetUsecase)
 
 	// Root endpoint
@@ -125,6 +133,10 @@ func SetupRoutes() *mux.Router {
 
 	// User management routes (admin only)
 	api.Handle("/users", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.GetAllUsers))).Methods("GET")
+	api.HandleFunc("/users/me", userHandler.GetMe).Methods("GET")
+	api.HandleFunc("/users/me", userHandler.UpdateCurrentUser).Methods("PUT")
+	api.HandleFunc("/users/me/avatar", userHandler.UploadMyAvatar).Methods("PATCH")
+	api.HandleFunc("/users/me/avatar", userHandler.RemoveMyAvatar).Methods("DELETE")
 	api.HandleFunc("/users/by-role", userHandler.GetUsersByRole).Methods("GET")
 	api.Handle("/users/{id}/approve", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.ApproveUser))).Methods("PUT")
 	api.Handle("/users/{id}/reject", middleware.AdminOnlyMiddleware(http.HandlerFunc(userHandler.RejectUser))).Methods("PUT")
@@ -146,6 +158,17 @@ func SetupRoutes() *mux.Router {
 
 	// Program budget update (admin only)
 	api.Handle("/programs/{id}/budget", middleware.AdminOnlyMiddleware(http.HandlerFunc(programHandler.UpdateProgramBudget))).Methods("PATCH")
+
+	// Notification routes (authenticated users)
+	api.Handle("/notifications", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead, domain.RoleStaff, domain.RolePublicUser)(http.HandlerFunc(notificationHandler.GetNotifications))).Methods("GET")
+	api.Handle("/notifications/unread-count", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead, domain.RoleStaff, domain.RolePublicUser)(http.HandlerFunc(notificationHandler.GetUnreadCount))).Methods("GET")
+	api.Handle("/notifications/{id}/read", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead, domain.RoleStaff, domain.RolePublicUser)(http.HandlerFunc(notificationHandler.MarkAsRead))).Methods("PATCH")
+	api.Handle("/notifications/{id}", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead, domain.RoleStaff, domain.RolePublicUser)(http.HandlerFunc(notificationHandler.DeleteNotification))).Methods("DELETE")
+	api.Handle("/notifications/read-all", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead, domain.RoleStaff, domain.RolePublicUser)(http.HandlerFunc(notificationHandler.MarkAllAsRead))).Methods("PATCH")
+
+	// Activity log routes
+	api.Handle("/activity-logs", middleware.RequireRolesMiddleware(domain.RoleAdmin, domain.RoleProgramChair, domain.RoleProjectHead, domain.RoleStaff, domain.RolePublicUser)(http.HandlerFunc(activityHandler.CreateActivity))).Methods("POST")
+	api.Handle("/activity-logs", middleware.AdminOnlyMiddleware(http.HandlerFunc(activityHandler.GetActivityLogs))).Methods("GET")
 
 	return r
 }

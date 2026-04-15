@@ -1,4 +1,4 @@
-import { API_ENDPOINTS } from '../lib/api-config';
+import { API_ENDPOINTS, API_URL } from '../lib/api-config';
 
 export interface LoginRequest {
   email: string;
@@ -46,6 +46,29 @@ export interface ErrorResponse {
 }
 
 export class AuthService {
+  private static hasStorage(): boolean {
+    return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+  }
+
+  static setUser(user: UserDTO): void {
+    if (!this.hasStorage()) return;
+    localStorage.setItem('user', JSON.stringify(user));
+    if (typeof window !== 'undefined' && window.sessionStorage.getItem('ecs-login-redirecting') !== '1') {
+      window.dispatchEvent(new CustomEvent('ecs:user-updated', { detail: user }));
+    }
+  }
+
+  static resolveAvatarUrl(raw?: string | null): string {
+    const value = String(raw || '').trim();
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+    const normalized = value.replace(/\\/g, '/').replace(/^\/+/, '');
+    if (normalized.startsWith('uploads/')) {
+      return `${API_URL}/${normalized}`;
+    }
+    return `${API_URL}/uploads/${normalized}`;
+  }
+
   static async login(data: LoginRequest): Promise<AuthResponse> {
     const response = await fetch(API_ENDPOINTS.auth.login, {
       method: 'POST',
@@ -71,9 +94,9 @@ export class AuthService {
     const result: AuthResponse = await response.json();
     
     // Store token in localStorage
-    if (result.token) {
+    if (result.token && this.hasStorage()) {
       localStorage.setItem('auth_token', result.token);
-      localStorage.setItem('user', JSON.stringify(result.user));
+      this.setUser(result.user);
     }
 
     return result;
@@ -104,17 +127,19 @@ export class AuthService {
     const result: AuthResponse = await response.json();
 
     // Store token if provided (user might need approval first)
-    if (result.token) {
+    if (result.token && this.hasStorage()) {
       localStorage.setItem('auth_token', result.token);
-      localStorage.setItem('user', JSON.stringify(result.user));
+      this.setUser(result.user);
     }
 
     return result;
   }
 
   static logout(): void {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user');
+    if (this.hasStorage()) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
+    }
     
     // Redirect to landing page
     if (typeof window !== 'undefined') {
@@ -123,12 +148,19 @@ export class AuthService {
   }
 
   static getToken(): string | null {
+    if (!this.hasStorage()) return null;
     return localStorage.getItem('auth_token');
   }
 
   static getUser(): UserDTO | null {
+    if (!this.hasStorage()) return null;
     const userStr = localStorage.getItem('user');
-    return userStr ? JSON.parse(userStr) : null;
+    if (!userStr) return null;
+    try {
+      return JSON.parse(userStr) as UserDTO;
+    } catch {
+      return null;
+    }
   }
 
   static isAuthenticated(): boolean {

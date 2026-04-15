@@ -30,6 +30,8 @@ import {
   Target,
   PhilippinePeso
 } from 'lucide-react';
+import ActivityLogService from '@/shared/lib/activity-log-service';
+import { AuthService } from '@/shared/lib/auth-service';
 
 const API = 'http://localhost:8081/api/v1'
 
@@ -152,6 +154,19 @@ export default function ProjectRecommendationPage() {
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}))
         throw new Error(payload.error || 'Failed to submit project recommendation')
+      }
+
+      const currentUser = AuthService.getUser();
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'project_head',
+          currentUser.department || 'Project Head',
+          `Submitted project proposal: ${projectName}`,
+          'submission',
+          { programId: selectedProgramID, projectName, estimatedBudget: expectedBudget || null }
+        );
       }
 
       setIsSubmitting(false);

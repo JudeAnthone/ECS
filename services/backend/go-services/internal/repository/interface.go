@@ -102,3 +102,19 @@ type RequestRepository interface {
 	GetByDepartmentChair(ctx context.Context, chairID string) ([]*domain.ProjectRequest, error)
 	RerouteRequest(ctx context.Context, requestID, departmentID string) error
 }
+
+// NotificationRepository defines methods for in-app notifications.
+type NotificationRepository interface {
+	ListByUser(ctx context.Context, userID string, limit int, offset int, unreadOnly bool) ([]*domain.Notification, error)
+	GetUnreadCount(ctx context.Context, userID string) (int, error)
+	MarkAsRead(ctx context.Context, notificationID string, userID string) error
+	MarkAllAsRead(ctx context.Context, userID string) error
+	Delete(ctx context.Context, notificationID string, userID string) error
+	Create(ctx context.Context, notification *domain.Notification) error
+}
+
+// ActivityLogRepository defines methods for system activity logs.
+type ActivityLogRepository interface {
+	Create(ctx context.Context, log *domain.ActivityLog) error
+	List(ctx context.Context, limit int, offset int) ([]*domain.ActivityLog, error)
+}

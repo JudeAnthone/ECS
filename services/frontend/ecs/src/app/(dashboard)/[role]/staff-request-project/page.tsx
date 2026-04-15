@@ -36,6 +36,8 @@ import {
 import { Avatar, AvatarImage, AvatarFallback } from "@/shared/components/ui/Avatar";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/shared/components/ui/Card';
 import { ClipboardList, Clock, CheckCircle2, XCircle, Plus, FolderOpen, Loader2 } from 'lucide-react';
+import ActivityLogService from '@/shared/lib/activity-log-service';
+import { AuthService } from '@/shared/lib/auth-service';
 
 const API = "http://localhost:8081/api/v1";
 
@@ -150,6 +152,18 @@ export default function StaffRequestProjectPage() {
         body: JSON.stringify(form),
       });
       if (!res.ok) throw new Error("Failed to submit request");
+      const currentUser = AuthService.getUser();
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'staff',
+          currentUser.department || 'Staff',
+          `Submitted project request: ${form.project_name}`,
+          'submission',
+          { programId: form.program_id, projectName: form.project_name }
+        );
+      }
       setModalOpen(false);
       setForm(emptyForm);
     } catch (err) {

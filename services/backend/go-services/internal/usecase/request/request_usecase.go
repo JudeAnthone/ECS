@@ -14,6 +14,7 @@ type requestUseCase struct {
 	programRepo repository.ProgramRepository
 	userRepo    repository.UserRepository
 	deptRepo    repository.DepartmentRepository
+	notificationRepo repository.NotificationRepository
 }
 
 // NewRequestUseCase creates a new request use case.
@@ -22,12 +23,18 @@ func NewRequestUseCase(
 	programRepo repository.ProgramRepository,
 	userRepo repository.UserRepository,
 	deptRepo repository.DepartmentRepository,
+	notificationRepo ...repository.NotificationRepository,
 ) UseCase {
+	var notifRepo repository.NotificationRepository
+	if len(notificationRepo) > 0 {
+		notifRepo = notificationRepo[0]
+	}
 	return &requestUseCase{
 		requestRepo: requestRepo,
 		programRepo: programRepo,
 		userRepo:    userRepo,
 		deptRepo:    deptRepo,
+		notificationRepo: notifRepo,
 	}
 }
 
@@ -44,14 +51,54 @@ func (uc *requestUseCase) SubmitRequest(ctx context.Context, userID string, inpu
 		RequestTitle:          input.RequestTitle,
 		RequestDescription:    input.RequestDescription,
 		RequestedBy:           userID,
-		RequestedDepartment:   input.RequestedDepartment,
-		RequestedDepartmentID: input.RequestedDepartmentID,
+		RequestedDepartment:   nil,
+		RequestedDepartmentID: nil,
 		TargetBeneficiaries:   input.TargetBeneficiaries,
 		Justification:         input.Justification,
 	}
 
 	if err := uc.requestRepo.Create(ctx, req); err != nil {
 		return nil, fmt.Errorf("failed to submit request: %w", err)
+	}
+
+	if uc.notificationRepo != nil {
+		title := "Request Submitted"
+		message := fmt.Sprintf("Your request \"%s\" was submitted successfully.", req.RequestTitle)
+		entityType := "project_request"
+		entityID := req.ID
+		_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+			UserID:     userID,
+			Title:      title,
+			Message:    message,
+			Type:       "request_submitted",
+			EntityType: &entityType,
+			EntityID:   &entityID,
+		})
+
+		requesterName := "A public user"
+		if requester, userErr := uc.userRepo.GetByID(ctx, userID); userErr == nil && requester != nil {
+			fullName := strings.TrimSpace(strings.TrimSpace(requester.FirstName) + " " + strings.TrimSpace(requester.LastName))
+			if fullName != "" {
+				requesterName = fullName
+			}
+		}
+
+		if chairs, chairErr := uc.userRepo.GetUsersByRole(ctx, domain.RoleProgramChair); chairErr == nil {
+			chairMessage := fmt.Sprintf("%s submitted a new public request: \"%s\".", requesterName, req.RequestTitle)
+			for _, chair := range chairs {
+				if chair == nil || strings.TrimSpace(chair.ID) == "" || chair.ID == userID {
+					continue
+				}
+				_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+					UserID:     chair.ID,
+					Title:      "New Public Request",
+					Message:    chairMessage,
+					Type:       "request_submitted",
+					EntityType: &entityType,
+					EntityID:   &entityID,
+				})
+			}
+		}
 	}
 	return req, nil
 }
@@ -150,6 +197,33 @@ func (uc *requestUseCase) ProgramChairReview(ctx context.Context, actorID, actor
 	if err := uc.requestRepo.ProgramChairReview(ctx, id, actorID, input); err != nil {
 		return err
 	}
+
+	if uc.notificationRepo != nil {
+		typeValue := "request_rejected"
+		title := "Request Rejected"
+		message := fmt.Sprintf("Your request \"%s\" was rejected by review.", req.RequestTitle)
+		feedbackProvided := input.ProgramChairFeedback != nil && strings.TrimSpace(*input.ProgramChairFeedback) != ""
+		if input.Status == "approved" {
+			typeValue = "request_approved"
+			title = "Request Approved"
+			message = fmt.Sprintf("Your request \"%s\" was approved and moved forward.", req.RequestTitle)
+		}
+		if feedbackProvided {
+			typeValue = "feedback_received"
+			title = "Feedback Received"
+			message = fmt.Sprintf("Your request \"%s\" has new chair feedback. Click to view details.", req.RequestTitle)
+		}
+		entityType := "project_request"
+		entityID := req.ID
+		_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+			UserID:     req.RequestedBy,
+			Title:      title,
+			Message:    message,
+			Type:       typeValue,
+			EntityType: &entityType,
+			EntityID:   &entityID,
+		})
+	}
 	return nil
 }
 
@@ -204,6 +278,20 @@ func (uc *requestUseCase) AssignToHead(ctx context.Context, chairID, id string, 
 
 	if err := uc.requestRepo.AssignToHead(ctx, id, input); err != nil {
 		return err
+	}
+
+	if uc.notificationRepo != nil && input.AssignedToProjectHead != nil && strings.TrimSpace(*input.AssignedToProjectHead) != "" {
+		entityType := "project_request"
+		entityID := req.ID
+		message := fmt.Sprintf("You were assigned to review request \"%s\".", req.RequestTitle)
+		_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+			UserID:     *input.AssignedToProjectHead,
+			Title:      "Request Assigned",
+			Message:    message,
+			Type:       "project_assigned",
+			EntityType: &entityType,
+			EntityID:   &entityID,
+		})
 	}
 	return nil
 }
@@ -289,7 +377,25 @@ func (uc *requestUseCase) ProjectHeadRespond(ctx context.Context, headID, id str
 	if headUser.AssignedProgramChairID == nil || req.ReviewedBy == nil || *headUser.AssignedProgramChairID != *req.ReviewedBy {
 		return fmt.Errorf("forbidden: project head is outside the assigned program chair team")
 	}
-	return uc.requestRepo.ProjectHeadRespond(ctx, id, input)
+	if err := uc.requestRepo.ProjectHeadRespond(ctx, id, input); err != nil {
+		return err
+	}
+
+	if uc.notificationRepo != nil && req.ReviewedBy != nil && strings.TrimSpace(*req.ReviewedBy) != "" {
+		entityType := "project_request"
+		entityID := req.ID
+		message := fmt.Sprintf("Project head responded \"%s\" to request \"%s\".", input.Response, req.RequestTitle)
+		_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+			UserID:     *req.ReviewedBy,
+			Title:      "Project Head Response",
+			Message:    message,
+			Type:       "request_updated",
+			EntityType: &entityType,
+			EntityID:   &entityID,
+		})
+	}
+
+	return nil
 }
 
 // SubmitProposal records the proposal document URL.
@@ -311,12 +417,60 @@ func (uc *requestUseCase) SubmitProposal(ctx context.Context, headID, id string,
 	if headUser.AssignedProgramChairID == nil || req.ReviewedBy == nil || *headUser.AssignedProgramChairID != *req.ReviewedBy {
 		return fmt.Errorf("forbidden: project head is outside the assigned program chair team")
 	}
-	return uc.requestRepo.SubmitProposal(ctx, id, input)
+	if err := uc.requestRepo.SubmitProposal(ctx, id, input); err != nil {
+		return err
+	}
+
+	if uc.notificationRepo != nil && req.ReviewedBy != nil && strings.TrimSpace(*req.ReviewedBy) != "" {
+		entityType := "project_request"
+		entityID := req.ID
+		message := fmt.Sprintf("Proposal submitted for request \"%s\".", req.RequestTitle)
+		_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+			UserID:     *req.ReviewedBy,
+			Title:      "Proposal Submitted",
+			Message:    message,
+			Type:       "proposal_submitted",
+			EntityType: &entityType,
+			EntityID:   &entityID,
+		})
+	}
+
+	return nil
 }
 
 // ReviewProposal records the administrative review of a submitted proposal.
 func (uc *requestUseCase) ReviewProposal(ctx context.Context, reviewerID, id string, notes *string, approved bool) error {
-	return uc.requestRepo.ReviewProposal(ctx, id, reviewerID, notes, approved)
+	req, err := uc.requestRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if err := uc.requestRepo.ReviewProposal(ctx, id, reviewerID, notes, approved); err != nil {
+		return err
+	}
+
+	if uc.notificationRepo != nil && req.AssignedToProjectHead != nil && strings.TrimSpace(*req.AssignedToProjectHead) != "" {
+		typeValue := "proposal_rejected"
+		title := "Proposal Rejected"
+		message := fmt.Sprintf("Proposal for request \"%s\" needs revisions.", req.RequestTitle)
+		if approved {
+			typeValue = "proposal_approved"
+			title = "Proposal Approved"
+			message = fmt.Sprintf("Proposal for request \"%s\" was approved.", req.RequestTitle)
+		}
+		entityType := "project_request"
+		entityID := req.ID
+		_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+			UserID:     *req.AssignedToProjectHead,
+			Title:      title,
+			Message:    message,
+			Type:       typeValue,
+			EntityType: &entityType,
+			EntityID:   &entityID,
+		})
+	}
+
+	return nil
 }
 
 // FinalApprove records the admin's final approval or rejection.
@@ -324,5 +478,35 @@ func (uc *requestUseCase) FinalApprove(ctx context.Context, adminID, id string, 
 	if input.Status != "approved" && input.Status != "rejected" {
 		return fmt.Errorf("status must be 'approved' or 'rejected'")
 	}
-	return uc.requestRepo.FinalApprove(ctx, id, adminID, input)
+	req, err := uc.requestRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if err := uc.requestRepo.FinalApprove(ctx, id, adminID, input); err != nil {
+		return err
+	}
+
+	if uc.notificationRepo != nil {
+		typeValue := "request_rejected"
+		title := "Request Rejected"
+		message := fmt.Sprintf("Final decision: your request \"%s\" was rejected.", req.RequestTitle)
+		if input.Status == "approved" {
+			typeValue = "request_approved"
+			title = "Request Approved"
+			message = fmt.Sprintf("Final decision: your request \"%s\" was approved.", req.RequestTitle)
+		}
+		entityType := "project_request"
+		entityID := req.ID
+		_ = uc.notificationRepo.Create(ctx, &domain.Notification{
+			UserID:     req.RequestedBy,
+			Title:      title,
+			Message:    message,
+			Type:       typeValue,
+			EntityType: &entityType,
+			EntityID:   &entityID,
+		})
+	}
+
+	return nil
 }

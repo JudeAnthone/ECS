@@ -15,6 +15,7 @@ import {
 import { Textarea } from '@/shared/components/ui/TextArea';
 import { PROGRAM_CATEGORIES } from '@/shared/configs/program-categories';
 import { filterVisibleDepartments } from '@/shared/configs/department-visibility';
+import ProfileAvatar from '@/shared/components/ui/ProfileAvatar';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/shared/components/ui/DropdownMenu';
@@ -24,6 +25,8 @@ import {
   FolderOpen, Layers, Users, Tag, Target,
   CalendarRange, FileText, Building2, Wallet, UserCog
 } from 'lucide-react';
+import ActivityLogService from '@/shared/lib/activity-log-service';
+import { AuthService } from '@/shared/lib/auth-service';
 import ProgramChairRequestManagement from '../program-chair-request-management/page';
 
 interface Program {
@@ -91,11 +94,18 @@ interface ChairDepartmentBudget {
 }
 
 function UserAvatar({ user, size = 'md' }: { user: UserOption; size?: 'sm' | 'md' | 'lg' }) {
-  const szClass = size === 'sm' ? 'h-6 w-6 text-[10px]' : size === 'lg' ? 'h-12 w-12 text-base' : 'h-9 w-9 text-xs';
-  const initials = `${user.first_name[0] ?? ''}${user.last_name[0] ?? ''}`.toUpperCase();
-  return user.avatar_url
-    ? <img src={user.avatar_url} alt={initials} className={`${szClass} rounded-full object-cover border border-slate-200 shrink-0`} />
-    : <div className={`${szClass} rounded-full bg-slate-200 text-slate-600 font-semibold flex items-center justify-center border border-slate-300 shrink-0`}>{initials}</div>;
+  const szClass = size === 'sm' ? 'h-6 w-6' : size === 'lg' ? 'h-12 w-12' : 'h-9 w-9';
+  const textClass = size === 'sm' ? 'text-[10px]' : size === 'lg' ? 'text-base' : 'text-xs';
+  return (
+    <ProfileAvatar
+      imageUrl={user.avatar_url}
+      firstName={user.first_name}
+      lastName={user.last_name}
+      alt={`${user.first_name} ${user.last_name}`.trim() || 'User'}
+      className={`${szClass} border border-slate-300`}
+      textClassName={textClass}
+    />
+  );
 }
 
 function UserPickerList({ users, value, onChange, emptyLabel, isDisabled, disabledReason }: {
@@ -804,9 +814,9 @@ function ProjectsView({ program, departments, onBack }: {
 
   const requesterUserByID = React.useMemo(() => {
     const map = new Map<string, UserOption>();
-    [...staffUsers, ...adminUsers, ...chairUsers].forEach(u => map.set(u.id, u));
+    [...staffUsers, ...adminUsers, ...chairUsers, ...heads].forEach(u => map.set(u.id, u));
     return map;
-  }, [staffUsers, adminUsers, chairUsers]);
+  }, [staffUsers, adminUsers, chairUsers, heads]);
 
   const requesterUser = (p: Project): UserOption => {
     const existing = p.created_by ? requesterUserByID.get(p.created_by) : undefined;
@@ -1006,7 +1016,8 @@ function ProjectsView({ program, departments, onBack }: {
         {loading ? (
           <div className="text-center py-12 text-slate-400">Loading projects...</div>
         ) : (
-          <Table className="w-full text-sm">
+          <div className="max-h-[60vh] overflow-auto">
+            <Table className="w-full text-sm">
             <TableHeader>
               <TableRow className="bg-slate-50 border-b text-left">
                 <TableHead className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Project Name</TableHead>
@@ -1087,6 +1098,7 @@ function ProjectsView({ program, departments, onBack }: {
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
       </div>
 
@@ -1464,7 +1476,21 @@ export default function AdminProgramManagement() {
         approval_status: 'approved',
       }),
     });
-    if (res.ok) { await loadPrograms(); setCreateOpen(false); setForm(emptyForm); setProgramFormError(''); }
+    if (res.ok) {
+      const current = AuthService.getUser();
+      if (current) {
+        await ActivityLogService.logActivity(
+          current.id,
+          `${current.first_name} ${current.last_name}`.trim(),
+          current.role || 'admin',
+          current.department || 'Program Administration',
+          `Created program ${form.program_name}`,
+          'submission',
+          { programName: form.program_name, departmentId: form.department_id || null }
+        );
+      }
+      await loadPrograms(); setCreateOpen(false); setForm(emptyForm); setProgramFormError('');
+    }
     else { const e = await res.json(); setProgramFormError(e.error || 'Failed to create program'); }
   };
 
@@ -1483,7 +1509,21 @@ export default function AdminProgramManagement() {
         end_date: form.end_date || null,
       }),
     });
-    if (res.ok) { await loadPrograms(); setEditOpen(false); setSelected(null); setForm(emptyForm); setProgramFormError(''); }
+    if (res.ok) {
+      const current = AuthService.getUser();
+      if (current) {
+        await ActivityLogService.logActivity(
+          current.id,
+          `${current.first_name} ${current.last_name}`.trim(),
+          current.role || 'admin',
+          current.department || 'Program Administration',
+          `Updated program ${selected.program_name}`,
+          'other',
+          { programId: selected.id, programName: selected.program_name }
+        );
+      }
+      await loadPrograms(); setEditOpen(false); setSelected(null); setForm(emptyForm); setProgramFormError('');
+    }
     else { const e = await res.json(); setProgramFormError(e.error || 'Failed to update program'); }
   };
 
@@ -1498,7 +1538,21 @@ export default function AdminProgramManagement() {
       method: 'PATCH', headers: authHeaders(),
       body: JSON.stringify({ status: programStatusDialog.status }),
     });
-    if (res.ok) await loadPrograms();
+    if (res.ok) {
+      const current = AuthService.getUser();
+      if (current) {
+        await ActivityLogService.logActivity(
+          current.id,
+          `${current.first_name} ${current.last_name}`.trim(),
+          current.role || 'admin',
+          current.department || 'Program Administration',
+          `${programStatusDialog.status === 'completed' ? 'Completed' : 'Cancelled'} program ${programStatusDialog.id}`,
+          'other',
+          { programId: programStatusDialog.id, status: programStatusDialog.status }
+        );
+      }
+      await loadPrograms();
+    }
     else { const e = await res.json(); setProgramPageError(e.error || `Failed to ${programStatusDialog.label} program`); }
     setProgramStatusDialog(null);
   };
@@ -1510,7 +1564,22 @@ export default function AdminProgramManagement() {
   const confirmDeleteProgram = async () => {
     if (!deleteProgramDialogID) return;
     const res = await fetch(`${API}/programs/${deleteProgramDialogID}`, { method: 'DELETE', headers: authHeaders() });
-    if (res.ok) await loadPrograms();
+    if (res.ok) {
+      const current = AuthService.getUser();
+      const deletedProgram = programs.find((program) => program.id === deleteProgramDialogID);
+      if (current) {
+        await ActivityLogService.logActivity(
+          current.id,
+          `${current.first_name} ${current.last_name}`.trim(),
+          current.role || 'admin',
+          current.department || 'Program Administration',
+          `Deleted program ${deletedProgram?.program_name || deleteProgramDialogID}`,
+          'other',
+          { programId: deleteProgramDialogID, programName: deletedProgram?.program_name }
+        );
+      }
+      await loadPrograms();
+    }
     else { const e = await res.json(); setProgramPageError(e.error || 'Failed to delete program'); }
     setDeleteProgramDialogID(null);
   };
@@ -1532,7 +1601,21 @@ export default function AdminProgramManagement() {
       method: 'PATCH', headers: authHeaders(),
       body: JSON.stringify({ program_chair_id: selectedChairID === '__none__' ? null : selectedChairID }),
     });
-    if (res.ok) { await loadPrograms(); setAssignChairOpen(false); }
+    if (res.ok) {
+      const current = AuthService.getUser();
+      if (current) {
+        await ActivityLogService.logActivity(
+          current.id,
+          `${current.first_name} ${current.last_name}`.trim(),
+          current.role || 'admin',
+          current.department || 'Program Administration',
+          `Assigned program chair for ${assignChairProgram.program_name}`,
+          'other',
+          { programId: assignChairProgram.id, programChairId: selectedChairID === '__none__' ? null : selectedChairID }
+        );
+      }
+      await loadPrograms(); setAssignChairOpen(false);
+    }
     else {
       const text = await res.text();
       let msg = 'Failed to assign program chair';
@@ -1717,7 +1800,10 @@ export default function AdminProgramManagement() {
                               <DropdownMenuItem onClick={() => setDrillProgram(p)}>
                                 <FolderOpen className="w-4 h-4 mr-2" /> View Projects
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { setSelected(p); setViewOpen(true); }}>
+                              <DropdownMenuItem onSelect={() => {
+                                setSelected(p)
+                                window.setTimeout(() => setViewOpen(true), 0)
+                              }}>
                                 <Eye className="w-4 h-4 mr-2" /> View Details
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => openEdit(p)}>

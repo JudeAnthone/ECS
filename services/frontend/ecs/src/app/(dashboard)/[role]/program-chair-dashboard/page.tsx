@@ -77,18 +77,20 @@ export default function ProgramChairDashboardPage() {
   const [chairBudget, setChairBudget] = useState<ChairBudget | null>(null);
   const [chairDepartmentBudgets, setChairDepartmentBudgets] = useState<ChairDepartmentBudget[]>([]);
   const [expandedDeadlineBucket, setExpandedDeadlineBucket] = useState<'due7' | 'due14' | 'due30' | 'overdue' | null>(null);
-
-  const [userName] = useState(() => {
-    const user = AuthService.getUser();
-    const fullName = `${user?.first_name || ''} ${user?.last_name || ''}`.trim();
-    return fullName || user?.username || 'Program Chair';
-  });
+  const [userName, setUserName] = useState('Program Chair');
 
   useEffect(() => {
     let mounted = true;
 
     const loadDashboard = async () => {
       const user = AuthService.getUser();
+      
+      // Update userName with current user data
+      if (user) {
+        const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+        setUserName(fullName || user.username || 'Program Chair');
+      }
+      
       if (!user?.id) {
         if (!mounted) return;
         setLoading(false);

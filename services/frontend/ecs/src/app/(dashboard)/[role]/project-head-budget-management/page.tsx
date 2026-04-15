@@ -19,6 +19,8 @@ import {
   DialogClose,
 } from '@/shared/components/ui/Dialog'
 import { UploadCloud, Printer, RefreshCw, FileText, Paperclip, CheckCircle2, Clock3, XCircle, Loader2, Eye } from 'lucide-react'
+import ActivityLogService from '@/shared/lib/activity-log-service'
+import { AuthService } from '@/shared/lib/auth-service'
 
 type Allocation = {
   allocated: number
@@ -349,6 +351,25 @@ export default function ProjectHeadBudgetManagementPage() {
       }
 
       const created = await res.json()
+      const currentUser = AuthService.getUser()
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'project_head',
+          currentUser.department || 'Budget Management',
+          `Submitted budget request for ${selectedProject?.project_name || form.projectId}`,
+          'submission',
+          {
+            budgetRequestId: created?.id,
+            projectId: form.projectId,
+            projectName: selectedProject?.project_name,
+            amount: Number(form.amount),
+            neededByDate: form.neededByDate || null,
+          }
+        )
+      }
+
       setRequests((current) => [created, ...current])
       setForm({ projectId: '', amount: '', neededByDate: '', reason: '' })
       setSupportingDocument(null)
@@ -411,6 +432,24 @@ export default function ProjectHeadBudgetManagementPage() {
         }
         throw new Error(message)
       }
+      const currentUser = AuthService.getUser()
+      if (currentUser) {
+        await ActivityLogService.logActivity(
+          currentUser.id,
+          `${currentUser.first_name} ${currentUser.last_name}`.trim(),
+          currentUser.role || 'project_head',
+          currentUser.department || 'Budget Management',
+          `Deleted budget request for ${deleteRequest.project_name || deleteRequest.project_id || 'project'}`,
+          'other',
+          {
+            budgetRequestId: deleteRequest.id,
+            projectId: deleteRequest.project_id,
+            projectName: deleteRequest.project_name,
+            amount: deleteRequest.amount,
+          }
+        )
+      }
+
       setRequests((current) => current.filter((request) => request.id !== deleteRequest.id))
       setDeleteRequest(null)
       if (selectedRequest?.id === deleteRequest.id) {
