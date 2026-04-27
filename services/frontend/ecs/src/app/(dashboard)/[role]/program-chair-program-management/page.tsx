@@ -27,7 +27,6 @@ import {
 } from 'lucide-react';
 import ActivityLogService from '@/shared/lib/activity-log-service';
 import { AuthService } from '@/shared/lib/auth-service';
-import ProgramChairRequestManagement from '../program-chair-request-management/page';
 
 interface Program {
   id: string;

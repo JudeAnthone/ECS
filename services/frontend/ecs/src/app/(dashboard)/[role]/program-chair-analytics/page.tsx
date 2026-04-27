@@ -1,891 +1,548 @@
-"use client"
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/Card';
-import { Badge } from '@/shared/components/ui/Badge';
-import { Input } from '@/shared/components/ui/Input';
-import { Button } from '@/shared/components/ui/Button';
-import { Label } from '@/shared/components/ui/Label';
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert, AlertDescription } from "@/shared/components/ui/Alert";
+import { Badge } from "@/shared/components/ui/Badge";
+import { Button } from "@/shared/components/ui/Button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/Card";
+import ClientNow from "@/shared/components/ui/ClientNow";
+import { Input } from "@/shared/components/ui/Input";
+import { AuthService } from "@/shared/lib/auth-service";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/shared/components/ui/Select';
-import ClientNow from '@/shared/components/ui/ClientNow'
-import { 
-  BarChart3,
-  Calendar,
-  Printer,
-  Download,
-  TrendingUp,
-  TrendingDown,
-  DollarSign,
+  BudgetRequestRecord,
+  ChairBudget,
+  ChairDepartmentBudget,
+  formatCurrency,
+  formatDate,
+  formatTaskStatus,
+  getApprovedBudgetByProject,
+  getApprovedBudgetCountByProject,
+  getDaysUntilDeadline,
+  getProjectProgress,
+  getTaskCounts,
+  loadProgramChairWorkspace,
+  Program,
+  ProgramChairUser,
+  Project,
+  ProjectTask,
+  projectBudgetDisplay,
+  projectLifecycleLabel,
+  projectLifecycleTone,
+  projectNeedsFunding,
+  projectVerificationLabel,
+  projectVerificationTone,
+} from "@/shared/lib/program-chair-workspace";
+import {
+  CheckCircle2,
+  Clock3,
+  FileSearch,
   FolderKanban,
-  Settings,
-  Filter
-} from 'lucide-react';
+  Loader2,
+  Search,
+  Target,
+  TriangleAlert,
+  Wallet,
+} from "lucide-react";
 
-export default function AnalyticsPage() {
-  const [startDate, setStartDate] = useState('2025-05-01');
-  const [endDate, setEndDate] = useState('2025-08-31');
-  const [selectedDepartment, setSelectedDepartment] = useState('Engineering');
-  const [selectedAnalytics, setSelectedAnalytics] = useState('funds');
+type ProjectFilter = "all" | "approved" | "pending" | "needs_funding" | "overdue";
 
-  // Sample analytics data
-  const analyticsData = {
-    Engineering: {
-      funds: {
-        totalAllocated: 850000,
-        totalSpent: 638000,
-        remaining: 212000,
-        utilizationRate: 75,
-        breakdown: [
-          { month: 'May', allocated: 200000, spent: 150000 },
-          { month: 'June', allocated: 220000, spent: 165000 },
-          { month: 'July', allocated: 210000, spent: 158000 },
-          { month: 'August', allocated: 220000, spent: 165000 }
-        ],
-        categories: [
-          { name: 'Personnel', amount: 350000, percentage: 55 },
-          { name: 'Equipment', amount: 180000, percentage: 28 },
-          { name: 'Software', amount: 75000, percentage: 12 },
-          { name: 'Training', amount: 33000, percentage: 5 }
-        ]
-      },
-      projects: {
-        total: 12,
-        completed: 7,
-        ongoing: 4,
-        delayed: 1,
-        onTimeRate: 85,
-        breakdown: [
-          { month: 'May', total: 3, completed: 2, ongoing: 1 },
-          { month: 'June', total: 3, completed: 1, ongoing: 2 },
-          { month: 'July', total: 3, completed: 2, ongoing: 1 },
-          { month: 'August', total: 3, completed: 2, ongoing: 1 }
-        ],
-        topProjects: [
-          { name: 'Digital Transformation Initiative', status: 'Ongoing', progress: 75, budget: 150000 },
-          { name: 'Product Line Extension', status: 'Ongoing', progress: 55, budget: 175000 },
-          { name: 'API Integration v3.0', status: 'Completed', progress: 100, budget: 120000 }
-        ]
-      },
-      services: {
-        totalDelivered: 45,
-        onTime: 39,
-        delayed: 6,
-        satisfactionRate: 92,
-        breakdown: [
-          { month: 'May', delivered: 10, onTime: 9, delayed: 1 },
-          { month: 'June', delivered: 12, onTime: 10, delayed: 2 },
-          { month: 'July', delivered: 11, onTime: 10, delayed: 1 },
-          { month: 'August', delivered: 12, onTime: 10, delayed: 2 }
-        ],
-        serviceTypes: [
-          { name: 'Software Development', count: 18, avgTime: 15 },
-          { name: 'System Maintenance', count: 12, avgTime: 8 },
-          { name: 'Technical Consultation', count: 10, avgTime: 5 },
-          { name: 'Code Review', count: 5, avgTime: 3 }
-        ]
-      }
-    },
-    Marketing: {
-      funds: {
-        totalAllocated: 620000,
-        totalSpent: 485000,
-        remaining: 135000,
-        utilizationRate: 78,
-        breakdown: [
-          { month: 'May', allocated: 150000, spent: 118000 },
-          { month: 'June', allocated: 155000, spent: 121000 },
-          { month: 'July', allocated: 157000, spent: 123000 },
-          { month: 'August', allocated: 158000, spent: 123000 }
-        ],
-        categories: [
-          { name: 'Advertising', amount: 220000, percentage: 45 },
-          { name: 'Content Creation', amount: 145000, percentage: 30 },
-          { name: 'Events', amount: 72500, percentage: 15 },
-          { name: 'Tools & Software', amount: 47500, percentage: 10 }
-        ]
-      },
-      projects: {
-        total: 8,
-        completed: 5,
-        ongoing: 2,
-        delayed: 1,
-        onTimeRate: 80,
-        breakdown: [
-          { month: 'May', total: 2, completed: 1, ongoing: 1 },
-          { month: 'June', total: 2, completed: 1, ongoing: 1 },
-          { month: 'July', total: 2, completed: 2, ongoing: 0 },
-          { month: 'August', total: 2, completed: 1, ongoing: 1 }
-        ],
-        topProjects: [
-          { name: 'Market Expansion Strategy', status: 'Ongoing', progress: 45, budget: 120000 },
-          { name: 'Customer Experience Enhancement', status: 'Delayed', progress: 60, budget: 80000 },
-          { name: 'Brand Refresh Campaign', status: 'Completed', progress: 100, budget: 95000 }
-        ]
-      },
-      services: {
-        totalDelivered: 35,
-        onTime: 31,
-        delayed: 4,
-        satisfactionRate: 89,
-        breakdown: [
-          { month: 'May', delivered: 8, onTime: 7, delayed: 1 },
-          { month: 'June', delivered: 9, onTime: 8, delayed: 1 },
-          { month: 'July', delivered: 9, onTime: 8, delayed: 1 },
-          { month: 'August', delivered: 9, onTime: 8, delayed: 1 }
-        ],
-        serviceTypes: [
-          { name: 'Campaign Management', count: 12, avgTime: 20 },
-          { name: 'Social Media', count: 10, avgTime: 12 },
-          { name: 'Content Writing', count: 8, avgTime: 10 },
-          { name: 'Analytics Reporting', count: 5, avgTime: 6 }
-        ]
-      }
-    },
-    Research: {
-      funds: {
-        totalAllocated: 580000,
-        totalSpent: 425000,
-        remaining: 155000,
-        utilizationRate: 73,
-        breakdown: [
-          { month: 'May', allocated: 140000, spent: 102000 },
-          { month: 'June', allocated: 145000, spent: 106000 },
-          { month: 'July', allocated: 147000, spent: 107000 },
-          { month: 'August', allocated: 148000, spent: 110000 }
-        ],
-        categories: [
-          { name: 'Research Personnel', amount: 240000, percentage: 56 },
-          { name: 'Equipment & Lab', amount: 130000, percentage: 31 },
-          { name: 'Materials', amount: 38000, percentage: 9 },
-          { name: 'Publications', amount: 17000, percentage: 4 }
-        ]
-      },
-      projects: {
-        total: 6,
-        completed: 3,
-        ongoing: 2,
-        delayed: 1,
-        onTimeRate: 75,
-        breakdown: [
-          { month: 'May', total: 1, completed: 1, ongoing: 0 },
-          { month: 'June', total: 2, completed: 1, ongoing: 1 },
-          { month: 'July', total: 2, completed: 1, ongoing: 1 },
-          { month: 'August', total: 1, completed: 0, ongoing: 1 }
-        ],
-        topProjects: [
-          { name: 'AI Research Integration', status: 'Ongoing', progress: 45, budget: 200000 },
-          { name: 'Data Analytics Platform', status: 'Ongoing', progress: 50, budget: 160000 },
-          { name: 'User Behavior Study', status: 'Completed', progress: 100, budget: 85000 }
-        ]
-      },
-      services: {
-        totalDelivered: 28,
-        onTime: 25,
-        delayed: 3,
-        satisfactionRate: 94,
-        breakdown: [
-          { month: 'May', delivered: 7, onTime: 6, delayed: 1 },
-          { month: 'June', delivered: 7, onTime: 7, delayed: 0 },
-          { month: 'July', delivered: 7, onTime: 6, delayed: 1 },
-          { month: 'August', delivered: 7, onTime: 6, delayed: 1 }
-        ],
-        serviceTypes: [
-          { name: 'Data Analysis', count: 12, avgTime: 14 },
-          { name: 'Research Reports', count: 8, avgTime: 21 },
-          { name: 'User Testing', count: 5, avgTime: 10 },
-          { name: 'Statistical Analysis', count: 3, avgTime: 8 }
-        ]
-      }
-    },
-    Operations: {
-      funds: {
-        totalAllocated: 720000,
-        totalSpent: 590000,
-        remaining: 130000,
-        utilizationRate: 82,
-        breakdown: [
-          { month: 'May', allocated: 175000, spent: 143000 },
-          { month: 'June', allocated: 180000, spent: 148000 },
-          { month: 'July', allocated: 182000, spent: 149000 },
-          { month: 'August', allocated: 183000, spent: 150000 }
-        ],
-        categories: [
-          { name: 'Infrastructure', amount: 295000, percentage: 50 },
-          { name: 'Personnel', amount: 177000, percentage: 30 },
-          { name: 'Maintenance', amount: 88500, percentage: 15 },
-          { name: 'Security', amount: 29500, percentage: 5 }
-        ]
-      },
-      projects: {
-        total: 10,
-        completed: 6,
-        ongoing: 3,
-        delayed: 1,
-        onTimeRate: 82,
-        breakdown: [
-          { month: 'May', total: 2, completed: 1, ongoing: 1 },
-          { month: 'June', total: 3, completed: 2, ongoing: 1 },
-          { month: 'July', total: 3, completed: 2, ongoing: 1 },
-          { month: 'August', total: 2, completed: 1, ongoing: 1 }
-        ],
-        topProjects: [
-          { name: 'Infrastructure Modernization', status: 'Ongoing', progress: 80, budget: 180000 },
-          { name: 'Security Compliance Audit', status: 'Delayed', progress: 85, budget: 95000 },
-          { name: 'Employee Training Program', status: 'Completed', progress: 100, budget: 65000 }
-        ]
-      },
-      services: {
-        totalDelivered: 52,
-        onTime: 47,
-        delayed: 5,
-        satisfactionRate: 90,
-        breakdown: [
-          { month: 'May', delivered: 12, onTime: 11, delayed: 1 },
-          { month: 'June', delivered: 13, onTime: 12, delayed: 1 },
-          { month: 'July', delivered: 13, onTime: 12, delayed: 1 },
-          { month: 'August', delivered: 14, onTime: 12, delayed: 2 }
-        ],
-        serviceTypes: [
-          { name: 'IT Support', count: 20, avgTime: 4 },
-          { name: 'System Updates', count: 15, avgTime: 6 },
-          { name: 'Security Checks', count: 10, avgTime: 8 },
-          { name: 'Training Sessions', count: 7, avgTime: 12 }
-        ]
-      }
-    }
-  };
+const filterOptions: Array<{ value: ProjectFilter; label: string }> = [
+  { value: "all", label: "All Projects" },
+  { value: "approved", label: "Approved" },
+  { value: "pending", label: "Pending Review" },
+  { value: "needs_funding", label: "Needs Funding" },
+  { value: "overdue", label: "Overdue" },
+];
 
-  const departments = ['Engineering', 'Marketing', 'Research', 'Operations'];
-  const analyticsTypes = [
-    { value: 'funds', label: 'Funds Analytics' },
-    { value: 'projects', label: 'Projects Analytics' },
-    { value: 'services', label: 'Services Analytics' }
-  ];
+function isOverdue(project: Project) {
+  const days = getDaysUntilDeadline(project.end_date);
+  return days !== null && days < 0 && project.status !== "completed" && project.status !== "cancelled";
+}
 
-  const currentData = analyticsData[selectedDepartment as keyof typeof analyticsData][selectedAnalytics as keyof typeof analyticsData.Engineering];
+export default function ProgramChairAnalyticsPage() {
+  const [user, setUser] = useState<ProgramChairUser | null>(null);
+  const [userName, setUserName] = useState("Program Chair");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<ProjectTask[]>([]);
+  const [budgetRequests, setBudgetRequests] = useState<BudgetRequestRecord[]>([]);
+  const [chairBudget, setChairBudget] = useState<ChairBudget | null>(null);
+  const [chairDepartmentBudgets, setChairDepartmentBudgets] = useState<ChairDepartmentBudget[]>([]);
+  const [query, setQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState<ProjectFilter>("all");
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleDownload = () => {
-    const content = generateReportContent();
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${selectedDepartment}_${selectedAnalytics}_${startDate}_to_${endDate}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const generateReportContent = () => {
-    const dateRange = `${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}`;
-    let content = `
-ANALYTICS REPORT
-Department: ${selectedDepartment}
-Analytics Type: ${selectedAnalytics.toUpperCase()}
-Date Range: ${dateRange}
-Generated: ${new Date().toLocaleString()}
-
-====================================
-`;
-
-    if (selectedAnalytics === 'funds') {
-      const data = currentData as typeof analyticsData.Engineering.funds;
-      content += `
-FUNDS ANALYTICS SUMMARY
-
-Total Allocated: $${data.totalAllocated.toLocaleString()}
-Total Spent: $${data.totalSpent.toLocaleString()}
-Remaining: $${data.remaining.toLocaleString()}
-Utilization Rate: ${data.utilizationRate}%
-
-Monthly Breakdown:
-`;
-      data.breakdown.forEach(item => {
-        content += `${item.month}: Allocated: $${item.allocated.toLocaleString()}, Spent: $${item.spent.toLocaleString()}\n`;
-      });
-
-      content += `\nExpense Categories:\n`;
-      data.categories.forEach(cat => {
-        content += `${cat.name}: $${cat.amount.toLocaleString()} (${cat.percentage}%)\n`;
-      });
-    } else if (selectedAnalytics === 'projects') {
-      const data = currentData as typeof analyticsData.Engineering.projects;
-      content += `
-PROJECTS ANALYTICS SUMMARY
-
-Total Projects: ${data.total}
-Completed: ${data.completed}
-Ongoing: ${data.ongoing}
-Delayed: ${data.delayed}
-On-Time Rate: ${data.onTimeRate}%
-
-Monthly Breakdown:
-`;
-      data.breakdown.forEach(item => {
-        content += `${item.month}: Total: ${item.total}, Completed: ${item.completed}, Ongoing: ${item.ongoing}\n`;
-      });
-
-      content += `\nTop Projects:\n`;
-      data.topProjects.forEach(proj => {
-        content += `${proj.name}: ${proj.status} - ${proj.progress}% complete, Budget: $${proj.budget.toLocaleString()}\n`;
-      });
-    } else if (selectedAnalytics === 'services') {
-      const data = currentData as typeof analyticsData.Engineering.services;
-      content += `
-SERVICES ANALYTICS SUMMARY
-
-Total Services Delivered: ${data.totalDelivered}
-On-Time: ${data.onTime}
-Delayed: ${data.delayed}
-Satisfaction Rate: ${data.satisfactionRate}%
-
-Monthly Breakdown:
-`;
-      data.breakdown.forEach(item => {
-        content += `${item.month}: Delivered: ${item.delivered}, On-Time: ${item.onTime}, Delayed: ${item.delayed}\n`;
-      });
-
-      content += `\nService Types:\n`;
-      data.serviceTypes.forEach(service => {
-        content += `${service.name}: ${service.count} services, Avg Time: ${service.avgTime} days\n`;
-      });
+  useEffect(() => {
+    const currentUser = AuthService.getUser();
+    if (!currentUser) {
+      setError("Could not resolve the current program chair session.");
+      setLoading(false);
+      return;
     }
 
-    return content;
-  };
+    const normalizedUser: ProgramChairUser = {
+      id: currentUser.id,
+      first_name: currentUser.first_name,
+      last_name: currentUser.last_name,
+      username: currentUser.username,
+    };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
+    const fullName = `${currentUser.first_name || ""} ${currentUser.last_name || ""}`.trim();
+    setUser(normalizedUser);
+    setUserName(fullName || currentUser.username || "Program Chair");
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadData() {
+      if (!user) return;
+      setLoading(true);
+      setError("");
+
+      try {
+        const workspace = await loadProgramChairWorkspace(user);
+        if (!active) return;
+
+        setPrograms(workspace.programs);
+        setProjects(workspace.projects);
+        setTasks(workspace.tasks);
+        setBudgetRequests(workspace.budgetRequests);
+        setChairBudget(workspace.chairBudget);
+        setChairDepartmentBudgets(workspace.chairDepartmentBudgets);
+      } catch (err) {
+        if (!active) return;
+        setPrograms([]);
+        setProjects([]);
+        setTasks([]);
+        setBudgetRequests([]);
+        setChairBudget(null);
+        setChairDepartmentBudgets([]);
+        setError(err instanceof Error ? err.message : "Failed to load program chair analytics.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    void loadData();
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
+  const programNameByID = useMemo(() => {
+    const map = new Map<string, string>();
+    programs.forEach(program => map.set(program.id, program.program_name));
+    return map;
+  }, [programs]);
+
+  const approvedBudgetByProject = useMemo(() => getApprovedBudgetByProject(budgetRequests), [budgetRequests]);
+  const approvedBudgetCountByProject = useMemo(() => getApprovedBudgetCountByProject(budgetRequests), [budgetRequests]);
+
+  const visibleProjects = useMemo(() => {
+    const search = query.trim().toLowerCase();
+
+    return projects.filter(project => {
+      if (projectFilter === "approved" && project.approval_status !== "approved") return false;
+      if (projectFilter === "pending" && project.approval_status !== "pending") return false;
+      if (projectFilter === "needs_funding" && !projectNeedsFunding(project, approvedBudgetCountByProject)) return false;
+      if (projectFilter === "overdue" && !isOverdue(project)) return false;
+
+      if (!search) return true;
+
+      return [
+        project.project_name,
+        project.project_description,
+        programNameByID.get(project.program_id || ""),
+        project.status,
+        project.approval_status,
+        projectLifecycleLabel(project, approvedBudgetCountByProject),
+        projectVerificationLabel(project),
+      ]
+        .filter(Boolean)
+        .some(value => String(value).toLowerCase().includes(search));
+    });
+  }, [approvedBudgetCountByProject, programNameByID, projectFilter, projects, query]);
+
+  const visibleProjectIDs = useMemo(() => new Set(visibleProjects.map(project => project.id)), [visibleProjects]);
+
+  const visibleTasks = useMemo(
+    () => tasks.filter(task => visibleProjectIDs.has(task.project_id)),
+    [tasks, visibleProjectIDs]
+  );
+
+  const taskCounts = useMemo(() => getTaskCounts(visibleTasks), [visibleTasks]);
+  const completionRate = visibleTasks.length === 0 ? 0 : Math.round((taskCounts.completed / visibleTasks.length) * 100);
+
+  const visiblePrograms = useMemo(() => {
+    if (!query.trim() && projectFilter === "all") return programs;
+    const visibleProgramIDs = new Set(visibleProjects.map(project => project.program_id).filter(Boolean));
+    return programs.filter(program => visibleProgramIDs.has(program.id));
+  }, [programs, projectFilter, query, visibleProjects]);
+
+  const portfolioCards = useMemo(() => {
+    return visiblePrograms.map(program => {
+      const programProjects = visibleProjects.filter(project => project.program_id === program.id);
+      const programTasks = visibleTasks.filter(task => programProjects.some(project => project.id === task.project_id));
+      const programTaskCounts = getTaskCounts(programTasks);
+      const fundedBudget = programProjects.reduce(
+        (sum, project) => sum + projectBudgetDisplay(project, approvedBudgetByProject),
+        0
+      );
+      const dueSoon = programProjects.filter(project => {
+        const days = getDaysUntilDeadline(project.end_date);
+        return days !== null && days <= 14 && days >= 0 && project.status !== "completed";
+      }).length;
+
+      return { program, programProjects, programTasks, programTaskCounts, fundedBudget, dueSoon };
+    });
+  }, [approvedBudgetByProject, visiblePrograms, visibleProjects, visibleTasks]);
+
+  const pendingReviewProjects = useMemo(
+    () => visibleProjects.filter(project => project.approval_status === "pending").slice(0, 6),
+    [visibleProjects]
+  );
+
+  const dueSoonTasks = useMemo(() => {
+    return visibleTasks
+      .map(task => ({ ...task, daysLeft: getDaysUntilDeadline(task.due_date) }))
+      .filter(task => task.status !== "completed" && task.status !== "cancelled" && task.daysLeft !== null && task.daysLeft <= 7)
+      .sort((a, b) => (a.daysLeft ?? Number.POSITIVE_INFINITY) - (b.daysLeft ?? Number.POSITIVE_INFINITY))
+      .slice(0, 6);
+  }, [visibleTasks]);
+
+  const fundingGapCount = useMemo(
+    () => visibleProjects.filter(project => projectNeedsFunding(project, approvedBudgetCountByProject)).length,
+    [approvedBudgetCountByProject, visibleProjects]
+  );
+
+  const approvedBudgetPool = useMemo(
+    () => visibleProjects.reduce((sum, project) => sum + projectBudgetDisplay(project, approvedBudgetByProject), 0),
+    [approvedBudgetByProject, visibleProjects]
+  );
+
+  const chairBudgetRemaining = Math.max(
+    0,
+    Number(chairBudget?.allocated_budget || 0) - Number(chairBudget?.spent_budget || 0)
+  );
+
+  const delegatedBudget = chairDepartmentBudgets.reduce(
+    (sum, budget) => sum + Number(budget.allocated_budget || 0),
+    0
+  );
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
-        
-        * {
-          font-family: 'Outfit', sans-serif;
-        }
-        
-        .mono {
-          font-family: 'JetBrains Mono', monospace;
-        }
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(186,0,33,0.10),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(14,116,144,0.12),_transparent_32%),linear-gradient(180deg,_#fff9f8_0%,_#f7fcfc_45%,_#ffffff_100%)] p-4 md:p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <section className="overflow-hidden rounded-[2rem] border border-[#f1d7dc] bg-white/90 shadow-[0_24px_80px_-48px_rgba(125,10,35,0.35)] backdrop-blur">
+          <div className="grid gap-6 px-6 py-7 md:px-8 lg:grid-cols-[1.35fr_0.85fr]">
+            <div className="space-y-4">
+              <div className="inline-flex w-fit items-center rounded-full border border-[#e8c6ce] bg-[#fff4f6] px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-[#8f1934]">
+                Program Chair Analytics
+              </div>
+              <div className="space-y-3">
+                <h1 className="max-w-3xl text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
+                  Cross-program visibility for {userName}
+                </h1>
+                <p className="max-w-2xl text-sm leading-6 text-slate-600 md:text-base">
+                  Search across chaired programs, monitor approval queues, watch budget release pressure, and surface projects that need intervention before deadlines slip.
+                </p>
+              </div>
+            </div>
 
-        @media print {
-          .no-print {
-            display: none !important;
-          }
-          body {
-            background: white !important;
-          }
-          .print-container {
-            padding: 20px;
-          }
-        }
-      `}</style>
-
-      <div className="max-w-[1920px] mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 no-print">
-          <div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-2 tracking-tight">
-              Analytics Dashboard
-            </h1>
-            <p className="text-slate-600 text-lg">Analyze department performance by date range</p>
+            <div className="grid gap-4 rounded-[1.75rem] bg-[#8f1934] p-5 text-white shadow-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-white/75">Last updated</p>
+                  <p className="mt-1 text-xl font-semibold">
+                    <ClientNow />
+                  </p>
+                </div>
+                <Target className="h-10 w-10 text-white/75" />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-white/70">Visible Budget Pool</p>
+                  <p className="mt-2 text-2xl font-semibold">{formatCurrency(approvedBudgetPool)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-white/70">Chair Budget Remaining</p>
+                  <p className="mt-2 text-2xl font-semibold">{formatCurrency(chairBudgetRemaining)}</p>
+                </div>
+              </div>
+              <p className="text-sm leading-6 text-white/80">
+                {fundingGapCount} project{fundingGapCount === 1 ? "" : "s"} still need funding attention, while {pendingReviewProjects.length} project{pendingReviewProjects.length === 1 ? "" : "s"} are sitting in review.
+              </p>
+            </div>
           </div>
-          <Badge className="bg-blue-600 text-white px-4 py-2 text-sm">
-            <BarChart3 className="h-4 w-4 mr-2" />
-            Analytics Report
-          </Badge>
-        </div>
+        </section>
 
-        {/* Filters Section */}
-        <Card className="bg-white border-slate-200 shadow-lg no-print">
-          <CardHeader>
-            <CardTitle className="text-slate-900 text-2xl flex items-center gap-2">
-              <Filter className="h-6 w-6" />
-              Report Filters
-            </CardTitle>
-            <CardDescription className="text-slate-600">
-              Select department, analytics type, and date range to generate report
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              {/* Department Selection */}
-              <div>
-                <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                  Department
-                </Label>
-                <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                  <SelectTrigger className="bg-white border-slate-300 text-slate-900">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {departments.map(dept => (
-                      <SelectItem key={dept} value={dept} className="text-slate-900">
-                        {dept}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        {error ? (
+          <Alert className="border-rose-200 bg-rose-50 text-rose-700">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
 
-              {/* Analytics Type */}
-              <div>
-                <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                  Analytics Type
-                </Label>
-                <Select value={selectedAnalytics} onValueChange={setSelectedAnalytics}>
-                  <SelectTrigger className="bg-white border-slate-300 text-slate-900">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white border-slate-200">
-                    {analyticsTypes.map(type => (
-                      <SelectItem key={type.value} value={type.value} className="text-slate-900">
-                        {type.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <section className="grid gap-4 lg:grid-cols-4">
+          <Card className="rounded-[1.75rem] border-slate-200/80 bg-white/90 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardDescription>Programs</CardDescription>
+              <CardTitle className="flex items-center justify-between text-3xl text-slate-900">
+                {visiblePrograms.length}
+                <FolderKanban className="h-5 w-5 text-[#8f1934]" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-slate-600">
+              {programs.length} assigned program{programs.length === 1 ? "" : "s"} currently tracked.
+            </CardContent>
+          </Card>
 
-              {/* Start Date */}
-              <div>
-                <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                  Start Date
-                </Label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="pl-10 bg-white border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
+          <Card className="rounded-[1.75rem] border-slate-200/80 bg-white/90 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardDescription>Projects</CardDescription>
+              <CardTitle className="flex items-center justify-between text-3xl text-slate-900">
+                {visibleProjects.length}
+                <FileSearch className="h-5 w-5 text-[#0f766e]" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-slate-600">
+              {visibleProjects.filter(project => project.approval_status === "approved").length} approved and {fundingGapCount} waiting on funding.
+            </CardContent>
+          </Card>
 
-              {/* End Date */}
-              <div>
-                <Label className="text-sm font-medium text-slate-700 mb-2 block">
-                  End Date
-                </Label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="pl-10 bg-white border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
+          <Card className="rounded-[1.75rem] border-slate-200/80 bg-white/90 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardDescription>Task Completion</CardDescription>
+              <CardTitle className="flex items-center justify-between text-3xl text-slate-900">
+                {completionRate}%
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-slate-600">
+              {taskCounts.completed} done, {taskCounts.ongoing} in progress, {taskCounts.notStarted} not yet started.
+            </CardContent>
+          </Card>
 
-              {/* Action Buttons */}
-              <div className="flex items-end gap-2">
-                <Button onClick={handlePrint} className="bg-blue-600 hover:bg-blue-700 flex-1">
-                  <Printer className="h-4 w-4 mr-2" />
-                  Print
+          <Card className="rounded-[1.75rem] border-slate-200/80 bg-white/90 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardDescription>Delegated Budget</CardDescription>
+              <CardTitle className="flex items-center justify-between text-3xl text-slate-900">
+                {formatCurrency(delegatedBudget)}
+                <Wallet className="h-5 w-5 text-amber-600" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-slate-600">
+              Spread across {chairDepartmentBudgets.length} department allocation{chairDepartmentBudgets.length === 1 ? "" : "s"}.
+            </CardContent>
+          </Card>
+        </section>
+
+        <Card className="rounded-[1.75rem] border-slate-200/80 bg-white/90 shadow-sm">
+          <CardContent className="grid gap-4 p-5 lg:grid-cols-[1.4fr_1fr]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Search programs, projects, lifecycle, or review stage..."
+                className="h-12 rounded-full border-slate-200 bg-slate-50 pl-11 text-sm"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {filterOptions.map(option => (
+                <Button
+                  key={option.value}
+                  type="button"
+                  variant={projectFilter === option.value ? "default" : "outline"}
+                  onClick={() => setProjectFilter(option.value)}
+                  className={projectFilter === option.value
+                    ? "rounded-full bg-[#8f1934] text-white hover:bg-[#731228]"
+                    : "rounded-full border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}
+                >
+                  {option.label}
                 </Button>
-                <Button onClick={handleDownload} variant="outline" className="border-slate-300">
-                  <Download className="h-4 w-4" />
-                </Button>
-              </div>
+              ))}
             </div>
           </CardContent>
         </Card>
 
-        {/* Analytics Content */}
-        <div className="print-container">
-          {/* Print Header */}
-          <div className="hidden print:block mb-6">
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">Analytics Report</h1>
-            <div className="text-slate-600 space-y-1">
-              <p>Department: <span className="font-semibold text-slate-900">{selectedDepartment}</span></p>
-              <p>Analytics Type: <span className="font-semibold text-slate-900">{selectedAnalytics.charAt(0).toUpperCase() + selectedAnalytics.slice(1)}</span></p>
-              <p>Period: <span className="font-semibold text-slate-900">{new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()}</span></p>
-              <p>Generated: <span className="font-semibold text-slate-900"><ClientNow /></span></p>
-            </div>
-            <hr className="my-4 border-slate-300" />
+        <section className="grid gap-6 xl:grid-cols-[1.45fr_0.95fr]">
+          <Card className="rounded-[1.9rem] border-slate-200/80 bg-white/95 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-xl text-slate-900">Program portfolio</CardTitle>
+              <CardDescription>Each card rolls up projects, tasks, and funded budget inside a chaired program.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {loading ? (
+                <div className="flex items-center justify-center rounded-[1.5rem] border border-dashed border-slate-200 px-4 py-12 text-sm text-slate-500">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading analytics...
+                </div>
+              ) : portfolioCards.length === 0 ? (
+                <div className="rounded-[1.5rem] border border-dashed border-slate-200 px-4 py-12 text-center text-sm text-slate-500">
+                  No programs match the current search and filter state.
+                </div>
+              ) : (
+                portfolioCards.map(({ program, programProjects, programTasks, programTaskCounts, fundedBudget, dueSoon }) => (
+                  <article key={program.id} className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-5">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-semibold text-slate-900">{program.program_name}</h3>
+                          <Badge className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-sky-700">
+                            {programProjects.length} project{programProjects.length === 1 ? "" : "s"}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-slate-600">
+                          {programTaskCounts.completed} completed tasks, {programTaskCounts.ongoing} in progress, {programTaskCounts.notStarted} not yet started.
+                        </p>
+                      </div>
+                      <div className="grid gap-2 text-sm text-slate-600 md:text-right">
+                        <span>Funded budget: <strong className="text-slate-900">{formatCurrency(fundedBudget)}</strong></span>
+                        <span>Tasks tracked: <strong className="text-slate-900">{programTasks.length}</strong></span>
+                        <span>Projects due in 14 days: <strong className="text-slate-900">{dueSoon}</strong></span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      {programProjects.slice(0, 4).map(project => {
+                        const projectTasks = visibleTasks.filter(task => task.project_id === project.id);
+                        const progress = getProjectProgress(projectTasks, Number(project.progress || 0));
+                        return (
+                          <div key={project.id} className="rounded-2xl border border-white bg-white p-4 shadow-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="font-medium text-slate-900">{project.project_name}</p>
+                              <Badge className={`rounded-full border px-3 py-1 ${projectLifecycleTone(project, approvedBudgetCountByProject)}`}>
+                                {projectLifecycleLabel(project, approvedBudgetCountByProject)}
+                              </Badge>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <Badge className={`rounded-full border px-3 py-1 ${projectVerificationTone(project)}`}>
+                                {projectVerificationLabel(project)}
+                              </Badge>
+                              <Badge className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-600">
+                                {formatCurrency(projectBudgetDisplay(project, approvedBudgetByProject))}
+                              </Badge>
+                            </div>
+                            <div className="mt-4 space-y-2">
+                              <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                <span>Task progress</span>
+                                <span>{progress}%</span>
+                              </div>
+                              <div className="h-2 rounded-full bg-slate-200">
+                                <div className="h-2 rounded-full bg-[#8f1934]" style={{ width: `${progress}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </article>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6">
+            <Card className="rounded-[1.9rem] border-slate-200/80 bg-white/95 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-xl text-slate-900">Review queue</CardTitle>
+                <CardDescription>Projects waiting on chair action or funding release.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {pendingReviewProjects.length === 0 && fundingGapCount === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+                    No immediate review blockers found.
+                  </div>
+                ) : (
+                  visibleProjects
+                    .filter(project => project.approval_status === "pending" || projectNeedsFunding(project, approvedBudgetCountByProject))
+                    .slice(0, 6)
+                    .map(project => (
+                      <div key={project.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium text-slate-900">{project.project_name}</p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {programNameByID.get(project.program_id || "") || "Unassigned program"}
+                            </p>
+                          </div>
+                          <Badge className={`rounded-full border px-3 py-1 ${projectVerificationTone(project)}`}>
+                            {projectVerificationLabel(project)}
+                          </Badge>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <Badge className={`rounded-full border px-3 py-1 ${projectLifecycleTone(project, approvedBudgetCountByProject)}`}>
+                            {projectLifecycleLabel(project, approvedBudgetCountByProject)}
+                          </Badge>
+                          <span>Budget: {formatCurrency(projectBudgetDisplay(project, approvedBudgetByProject))}</span>
+                        </div>
+                      </div>
+                    ))
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-[1.9rem] border-slate-200/80 bg-white/95 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-xl text-slate-900">Deadline pressure</CardTitle>
+                <CardDescription>Upcoming task deadlines that may need follow-up.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {dueSoonTasks.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+                    No tasks fall inside the seven-day risk window.
+                  </div>
+                ) : (
+                  dueSoonTasks.map(task => (
+                    <div key={task.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-slate-900">{task.title}</p>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {visibleProjects.find(project => project.id === task.project_id)?.project_name || "Project task"}
+                          </p>
+                        </div>
+                        <Badge className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700">
+                          {task.daysLeft === null ? "No date" : `${task.daysLeft} day${task.daysLeft === 1 ? "" : "s"}`}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <Clock3 className="h-3.5 w-3.5" />
+                        <span>{formatDate(task.due_date)}</span>
+                        <span>•</span>
+                        <span>{formatTaskStatus(task.status)}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-[1.9rem] border-slate-200/80 bg-[#0f172a] text-white shadow-sm">
+              <CardContent className="flex h-full flex-col justify-between p-6">
+                <div className="space-y-3">
+                  <TriangleAlert className="h-10 w-10 text-amber-300" />
+                  <h3 className="text-xl font-semibold">Chair signal</h3>
+                  <p className="text-sm leading-6 text-slate-300">
+                    {fundingGapCount} project{fundingGapCount === 1 ? "" : "s"} need budget activation, and {dueSoonTasks.length} task{dueSoonTasks.length === 1 ? "" : "s"} are due within the next week.
+                  </p>
+                </div>
+                <div className="mt-6 grid gap-3 text-sm text-slate-300">
+                  <div className="flex items-center justify-between">
+                    <span>Allocated chair budget</span>
+                    <strong className="text-white">{formatCurrency(chairBudget?.allocated_budget || 0)}</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Spent chair budget</span>
+                    <strong className="text-white">{formatCurrency(chairBudget?.spent_budget || 0)}</strong>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-
-          {/* Funds Analytics */}
-          {selectedAnalytics === 'funds' && (
-            <>
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">Total Allocated</span>
-                      <DollarSign className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {formatCurrency((currentData as typeof analyticsData.Engineering.funds).totalAllocated)}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">Total Spent</span>
-                      <TrendingDown className="h-5 w-5 text-red-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {formatCurrency((currentData as typeof analyticsData.Engineering.funds).totalSpent)}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">Remaining</span>
-                      <TrendingUp className="h-5 w-5 text-green-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {formatCurrency((currentData as typeof analyticsData.Engineering.funds).remaining)}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">Utilization Rate</span>
-                      <BarChart3 className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {(currentData as typeof analyticsData.Engineering.funds).utilizationRate}%
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Monthly Breakdown */}
-              <Card className="bg-white border-slate-200 mb-6">
-                <CardHeader>
-                  <CardTitle className="text-slate-900">Monthly Breakdown</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {(currentData as typeof analyticsData.Engineering.funds).breakdown.map((item, index) => (
-                      <div key={index} className="border-b border-slate-200 pb-4 last:border-0">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-lg font-semibold text-slate-900">{item.month}</h4>
-                          <Badge className="bg-blue-100 text-blue-700">
-                            {Math.round((item.spent / item.allocated) * 100)}% utilized
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="text-slate-600">Allocated: </span>
-                            <span className="font-semibold text-slate-900 mono">{formatCurrency(item.allocated)}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-600">Spent: </span>
-                            <span className="font-semibold text-slate-900 mono">{formatCurrency(item.spent)}</span>
-                          </div>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-2 mt-3">
-                          <div 
-                            className="bg-blue-600 h-2 rounded-full"
-                            style={{ width: `${(item.spent / item.allocated) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Expense Categories */}
-              <Card className="bg-white border-slate-200">
-                <CardHeader>
-                  <CardTitle className="text-slate-900">Expense Categories</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {(currentData as typeof analyticsData.Engineering.funds).categories.map((category, index) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-slate-900">{category.name}</span>
-                            <span className="text-sm font-semibold text-slate-700">{category.percentage}%</span>
-                          </div>
-                          <div className="w-full bg-slate-200 rounded-full h-2">
-                            <div 
-                              className="bg-linear-to-r from-blue-500 to-blue-600 h-2 rounded-full"
-                              style={{ width: `${category.percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                        <span className="ml-4 font-semibold text-slate-900 mono">{formatCurrency(category.amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-
-          {/* Projects Analytics */}
-          {selectedAnalytics === 'projects' && (
-            <>
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">Total Projects</span>
-                      <FolderKanban className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {(currentData as typeof analyticsData.Engineering.projects).total}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">Completed</span>
-                      <TrendingUp className="h-5 w-5 text-green-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {(currentData as typeof analyticsData.Engineering.projects).completed}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">Ongoing</span>
-                      <Settings className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {(currentData as typeof analyticsData.Engineering.projects).ongoing}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">On-Time Rate</span>
-                      <BarChart3 className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {(currentData as typeof analyticsData.Engineering.projects).onTimeRate}%
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Monthly Breakdown */}
-              <Card className="bg-white border-slate-200 mb-6">
-                <CardHeader>
-                  <CardTitle className="text-slate-900">Monthly Project Activity</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {(currentData as typeof analyticsData.Engineering.projects).breakdown.map((item, index) => (
-                      <div key={index} className="border-b border-slate-200 pb-4 last:border-0">
-                        <h4 className="text-lg font-semibold text-slate-900 mb-3">{item.month}</h4>
-                        <div className="grid grid-cols-3 gap-4 text-sm">
-                          <div className="bg-blue-50 p-3 rounded-lg">
-                            <span className="text-slate-600 block mb-1">Total</span>
-                            <span className="text-2xl font-bold text-blue-600">{item.total}</span>
-                          </div>
-                          <div className="bg-green-50 p-3 rounded-lg">
-                            <span className="text-slate-600 block mb-1">Completed</span>
-                            <span className="text-2xl font-bold text-green-600">{item.completed}</span>
-                          </div>
-                          <div className="bg-amber-50 p-3 rounded-lg">
-                            <span className="text-slate-600 block mb-1">Ongoing</span>
-                            <span className="text-2xl font-bold text-amber-600">{item.ongoing}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Top Projects */}
-              <Card className="bg-white border-slate-200">
-                <CardHeader>
-                  <CardTitle className="text-slate-900">Key Projects</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {(currentData as typeof analyticsData.Engineering.projects).topProjects.map((project, index) => (
-                      <div key={index} className="border border-slate-200 rounded-lg p-4">
-                        <div className="flex items-start justify-between mb-3">
-                          <h4 className="font-semibold text-slate-900">{project.name}</h4>
-                          <Badge className={
-                            project.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                            project.status === 'Delayed' ? 'bg-red-100 text-red-700' :
-                            'bg-blue-100 text-blue-700'
-                          }>
-                            {project.status}
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm mb-3">
-                          <div>
-                            <span className="text-slate-600">Progress: </span>
-                            <span className="font-semibold text-slate-900">{project.progress}%</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-600">Budget: </span>
-                            <span className="font-semibold text-slate-900 mono">{formatCurrency(project.budget)}</span>
-                          </div>
-                        </div>
-                        <div className="w-full bg-slate-200 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              project.status === 'Completed' ? 'bg-green-600' :
-                              project.status === 'Delayed' ? 'bg-red-600' :
-                              'bg-blue-600'
-                            }`}
-                            style={{ width: `${project.progress}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-
-          {/* Services Analytics */}
-          {selectedAnalytics === 'services' && (
-            <>
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">Total Delivered</span>
-                      <Settings className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {(currentData as typeof analyticsData.Engineering.services).totalDelivered}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">On-Time</span>
-                      <TrendingUp className="h-5 w-5 text-green-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {(currentData as typeof analyticsData.Engineering.services).onTime}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">Delayed</span>
-                      <TrendingDown className="h-5 w-5 text-red-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {(currentData as typeof analyticsData.Engineering.services).delayed}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-white border-slate-200">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-slate-600">Satisfaction Rate</span>
-                      <BarChart3 className="h-5 w-5 text-purple-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-slate-900">
-                      {(currentData as typeof analyticsData.Engineering.services).satisfactionRate}%
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Monthly Breakdown */}
-              <Card className="bg-white border-slate-200 mb-6">
-                <CardHeader>
-                  <CardTitle className="text-slate-900">Monthly Service Delivery</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {(currentData as typeof analyticsData.Engineering.services).breakdown.map((item, index) => (
-                      <div key={index} className="border-b border-slate-200 pb-4 last:border-0">
-                        <h4 className="text-lg font-semibold text-slate-900 mb-3">{item.month}</h4>
-                        <div className="grid grid-cols-3 gap-4 text-sm">
-                          <div className="bg-blue-50 p-3 rounded-lg">
-                            <span className="text-slate-600 block mb-1">Delivered</span>
-                            <span className="text-2xl font-bold text-blue-600">{item.delivered}</span>
-                          </div>
-                          <div className="bg-green-50 p-3 rounded-lg">
-                            <span className="text-slate-600 block mb-1">On-Time</span>
-                            <span className="text-2xl font-bold text-green-600">{item.onTime}</span>
-                          </div>
-                          <div className="bg-red-50 p-3 rounded-lg">
-                            <span className="text-slate-600 block mb-1">Delayed</span>
-                            <span className="text-2xl font-bold text-red-600">{item.delayed}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Service Types */}
-              <Card className="bg-white border-slate-200">
-                <CardHeader>
-                  <CardTitle className="text-slate-900">Service Types Breakdown</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {(currentData as typeof analyticsData.Engineering.services).serviceTypes.map((service, index) => (
-                      <div key={index} className="border border-slate-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-semibold text-slate-900">{service.name}</h4>
-                          <Badge className="bg-blue-100 text-blue-700">
-                            {service.count} services
-                          </Badge>
-                        </div>
-                        <div className="text-sm text-slate-600">
-                          Average Completion Time: <span className="font-semibold text-slate-900">{service.avgTime} days</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </div>
+        </section>
       </div>
     </div>
   );

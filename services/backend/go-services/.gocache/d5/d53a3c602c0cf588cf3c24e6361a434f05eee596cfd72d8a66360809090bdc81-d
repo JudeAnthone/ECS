@@ -1,0 +1,5 @@
+./admin_routes.go
+./beneficiary_routes.go
+./colleges_routes.go
+./public_routes.go
+./router.go

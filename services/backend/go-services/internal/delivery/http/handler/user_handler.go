@@ -127,7 +127,9 @@ func (h *UserHandler) GetUsersByRole(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "role query parameter is required")
 		return
 	}
-	users, err := h.userUsecase.GetUsersByRole(r.Context(), role)
+	requesterID, _ := r.Context().Value("user_id").(string)
+	requesterRole, _ := r.Context().Value("role").(string)
+	users, err := h.userUsecase.GetUsersByRole(r.Context(), role, requesterID, requesterRole)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return

@@ -6,6 +6,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Drop existing tables and types
 DROP VIEW IF EXISTS vw_department_budget_summary CASCADE;
 DROP VIEW IF EXISTS vw_program_summary CASCADE;
+DROP VIEW IF EXISTS vw_admin_reporting_scope CASCADE;
+DROP VIEW IF EXISTS vw_program_chair_reporting_scope CASCADE;
+DROP VIEW IF EXISTS vw_project_head_reporting_scope CASCADE;
 DROP TABLE IF EXISTS activity_logs CASCADE;
 DROP TABLE IF EXISTS sla_metrics CASCADE;
 DROP TABLE IF EXISTS task_assignments CASCADE;
@@ -1080,6 +1083,85 @@ WHERE p.is_published = TRUE
   AND p.status IN ('active', 'completed')
 GROUP BY p.id, d.department_name;
 
+CREATE VIEW vw_admin_reporting_scope AS
+SELECT
+    a.id AS admin_id,
+    a.username AS admin_username,
+    a.first_name || ' ' || a.last_name AS admin_name,
+    (SELECT COUNT(*) FROM users u WHERE u.role = 'program_chair' AND u.account_status = 'active') AS total_program_chairs,
+    (SELECT COUNT(*) FROM users u WHERE u.role = 'project_head' AND u.account_status = 'active') AS total_project_heads,
+    (SELECT COUNT(*) FROM users u WHERE u.role = 'staff' AND u.account_status = 'active') AS total_staff,
+    (SELECT COUNT(*) FROM departments d WHERE d.is_active = TRUE) AS total_departments,
+    (SELECT COUNT(*) FROM programs p) AS total_programs,
+    (SELECT COUNT(*) FROM projects pr) AS total_projects,
+    (SELECT COUNT(*) FROM tasks t) AS total_tasks,
+    (SELECT COUNT(*) FROM budget_requests br) AS total_budget_requests
+FROM users a
+WHERE a.role = 'admin' AND a.account_status = 'active';
+
+CREATE VIEW vw_program_chair_reporting_scope AS
+SELECT
+    chair.id AS program_chair_id,
+    chair.username AS program_chair_username,
+    chair.first_name || ' ' || chair.last_name AS program_chair_name,
+    (SELECT COUNT(*) FROM users ph WHERE ph.role = 'project_head' AND ph.account_status = 'active' AND ph.assigned_program_chair_id = chair.id) AS total_project_heads,
+    (SELECT COUNT(*) FROM users st WHERE st.role = 'staff' AND st.account_status = 'active' AND st.assigned_program_chair_id = chair.id) AS total_staff,
+    (SELECT COUNT(*) FROM programs p WHERE p.program_chair_id = chair.id) AS total_programs,
+    (SELECT COUNT(*) FROM projects pr JOIN programs p ON p.id = pr.program_id WHERE p.program_chair_id = chair.id) AS total_projects,
+    (SELECT COUNT(*) FROM tasks t JOIN projects pr ON pr.id = t.project_id JOIN programs p ON p.id = pr.program_id WHERE p.program_chair_id = chair.id) AS total_tasks,
+    (SELECT COUNT(*) FROM projects pr JOIN programs p ON p.id = pr.program_id WHERE p.program_chair_id = chair.id AND pr.approval_status = 'pending') AS pending_projects,
+    (
+        SELECT COUNT(*)
+        FROM projects pr
+        JOIN programs p ON p.id = pr.program_id
+        WHERE p.program_chair_id = chair.id
+          AND pr.approval_status = 'approved'
+          AND COALESCE(pr.budget_allocated, 0) <= 0
+          AND NOT EXISTS (
+              SELECT 1
+              FROM budget_requests br
+              WHERE br.project_id = pr.id
+                AND br.status = 'approved'
+          )
+    ) AS approved_projects_needing_funding
+FROM users chair
+WHERE chair.role = 'program_chair' AND chair.account_status = 'active';
+
+CREATE VIEW vw_project_head_reporting_scope AS
+SELECT
+    head.id AS project_head_id,
+    head.username AS project_head_username,
+    head.first_name || ' ' || head.last_name AS project_head_name,
+    head.department AS department_name,
+    chair.id AS program_chair_id,
+    chair.first_name || ' ' || chair.last_name AS program_chair_name,
+    (
+        SELECT COUNT(*)
+        FROM users st
+        WHERE st.role = 'staff'
+          AND st.account_status = 'active'
+          AND st.assigned_program_chair_id = head.assigned_program_chair_id
+          AND (
+              head.department IS NULL
+              OR st.department = head.department
+          )
+    ) AS total_staff,
+    (SELECT COUNT(*) FROM projects pr WHERE pr.project_head_id = head.id) AS total_projects,
+    (SELECT COUNT(*) FROM tasks t JOIN projects pr ON pr.id = t.project_id WHERE pr.project_head_id = head.id) AS total_tasks,
+    (
+        SELECT COUNT(*)
+        FROM tasks t
+        JOIN projects pr ON pr.id = t.project_id
+        WHERE pr.project_head_id = head.id
+          AND t.status NOT IN ('completed', 'cancelled')
+          AND t.due_date IS NOT NULL
+          AND t.due_date <= CURRENT_DATE + 7
+    ) AS due_soon_tasks,
+    (SELECT COUNT(*) FROM projects pr WHERE pr.project_head_id = head.id AND pr.approval_status = 'pending') AS pending_projects
+FROM users head
+LEFT JOIN users chair ON chair.id = head.assigned_program_chair_id
+WHERE head.role = 'project_head' AND head.account_status = 'active';
+
 -- ==========================================
 -- Row Level Security
 -- ==========================================
@@ -1120,6 +1202,9 @@ GRANT SELECT, INSERT ON documents TO app_staff;
 GRANT SELECT ON notifications TO app_staff;
 
 GRANT SELECT ON vw_public_programs TO app_public_user;
+GRANT SELECT ON vw_admin_reporting_scope TO app_admin;
+GRANT SELECT ON vw_program_chair_reporting_scope TO app_admin, app_program_chair;
+GRANT SELECT ON vw_project_head_reporting_scope TO app_admin, app_program_chair, app_project_head;
 GRANT SELECT, INSERT ON project_requests TO app_public_user;
 GRANT SELECT, INSERT ON program_feedback TO app_public_user;
 GRANT SELECT ON notifications TO app_public_user;

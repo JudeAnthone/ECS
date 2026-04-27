@@ -48,6 +48,20 @@ func toUserDTO(user *domain.User) *dto.UserDTO {
 	}
 }
 
+func normalizeDepartmentValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(*value))
+}
+
+func chairIDValue(user *domain.User) string {
+	if user == nil || user.AssignedProgramChairID == nil {
+		return ""
+	}
+	return strings.TrimSpace(*user.AssignedProgramChairID)
+}
+
 func (uc *userUseCase) GetAllUsers(ctx context.Context) ([]*dto.UserDTO, error) {
 	users, err := uc.userRepo.GetAllUsers(ctx)
 	if err != nil {
@@ -68,6 +82,123 @@ func (uc *userUseCase) GetUserByID(ctx context.Context, userID string) (*dto.Use
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 	return toUserDTO(user), nil
+}
+
+func (uc *userUseCase) GetUsersByRole(ctx context.Context, role string, requesterID string, requesterRole string) ([]*dto.UserDTO, error) {
+	targetRole := strings.TrimSpace(strings.ToLower(role))
+	if targetRole == "" {
+		return nil, fmt.Errorf("role is required")
+	}
+
+	users, err := uc.userRepo.GetUsersByRole(ctx, targetRole)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users by role: %w", err)
+	}
+
+	if requesterRole == domain.RoleAdmin {
+		userDTOs := make([]*dto.UserDTO, 0, len(users))
+		for _, user := range users {
+			userDTOs = append(userDTOs, toUserDTO(user))
+		}
+		return userDTOs, nil
+	}
+
+	if strings.TrimSpace(requesterID) == "" {
+		return nil, fmt.Errorf("requester id is required")
+	}
+
+	requester, err := uc.userRepo.GetByID(ctx, requesterID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve requesting user: %w", err)
+	}
+
+	filtered := make([]*domain.User, 0, len(users))
+	appendIfMatch := func(candidate *domain.User) {
+		if candidate != nil {
+			filtered = append(filtered, candidate)
+		}
+	}
+
+	switch requesterRole {
+	case domain.RoleProgramChair:
+		switch targetRole {
+		case domain.RoleProgramChair:
+			for _, candidate := range users {
+				if candidate.ID == requesterID {
+					appendIfMatch(candidate)
+				}
+			}
+		case domain.RoleProjectHead, domain.RoleStaff:
+			for _, candidate := range users {
+				if chairIDValue(candidate) == requesterID {
+					appendIfMatch(candidate)
+				}
+			}
+		}
+	case domain.RoleProjectHead:
+		switch targetRole {
+		case domain.RoleProgramChair:
+			requiredChairID := chairIDValue(requester)
+			for _, candidate := range users {
+				if candidate.ID == requiredChairID {
+					appendIfMatch(candidate)
+				}
+			}
+		case domain.RoleProjectHead:
+			for _, candidate := range users {
+				if candidate.ID == requesterID {
+					appendIfMatch(candidate)
+				}
+			}
+		case domain.RoleStaff:
+			requiredChairID := chairIDValue(requester)
+			requiredDepartment := normalizeDepartmentValue(requester.Department)
+			for _, candidate := range users {
+				if requiredChairID != "" && chairIDValue(candidate) != requiredChairID {
+					continue
+				}
+				if requiredDepartment != "" && normalizeDepartmentValue(candidate.Department) != requiredDepartment {
+					continue
+				}
+				appendIfMatch(candidate)
+			}
+		}
+	case domain.RoleStaff:
+		switch targetRole {
+		case domain.RoleProgramChair:
+			requiredChairID := chairIDValue(requester)
+			for _, candidate := range users {
+				if candidate.ID == requiredChairID {
+					appendIfMatch(candidate)
+				}
+			}
+		case domain.RoleProjectHead:
+			requiredChairID := chairIDValue(requester)
+			requiredDepartment := normalizeDepartmentValue(requester.Department)
+			for _, candidate := range users {
+				if requiredChairID != "" && chairIDValue(candidate) != requiredChairID {
+					continue
+				}
+				if requiredDepartment != "" && normalizeDepartmentValue(candidate.Department) != requiredDepartment {
+					continue
+				}
+				appendIfMatch(candidate)
+			}
+		case domain.RoleStaff:
+			for _, candidate := range users {
+				if candidate.ID == requesterID {
+					appendIfMatch(candidate)
+				}
+			}
+		}
+	}
+
+	userDTOs := make([]*dto.UserDTO, 0, len(filtered))
+	for _, user := range filtered {
+		userDTOs = append(userDTOs, toUserDTO(user))
+	}
+
+	return userDTOs, nil
 }
 
 func (uc *userUseCase) ApproveUser(ctx context.Context, userID string, approvedByID string) error {
@@ -340,20 +471,4 @@ func (uc *userUseCase) UpdateOwnProfile(ctx context.Context, userID string, upda
 	}
 
 	return toUserDTO(updatedUser), nil
-}
-
-// GetUsersByRole returns active users filtered by role as UserDTOs
-func (uc *userUseCase) GetUsersByRole(ctx context.Context, role string) ([]*dto.UserDTO, error) {
-	users, err := uc.userRepo.GetUsersByRole(ctx, role)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get users by role: %w", err)
-	}
-	var result []*dto.UserDTO
-	for _, u := range users {
-		result = append(result, toUserDTO(u))
-	}
-	if result == nil {
-		result = []*dto.UserDTO{}
-	}
-	return result, nil
 }

@@ -11,9 +11,9 @@ import {
 } from "@/shared/components/ui/Sidebar"
 
 import Link from "next/link"
-import { BarChart2, Users, Home, FileText, BookOpen, MessageSquare } from "lucide-react"
+import { BarChart2, Users, Home, FileText, BookOpen, MessageSquare, type LucideIcon } from "lucide-react"
 // Icon mapping for menu items
-const iconMap: { [key: string]: React.ComponentType<any> } = {
+const iconMap: Record<string, LucideIcon> = {
   Dashboard: Home,
   "User Management": Users,
   "Program Management": BookOpen,
@@ -69,7 +69,7 @@ const roleNavigation: RoleNavigation = {
       { title: "Dashboard", href: "/program-chair-dashboard" },
       { title: "Program Management", href: "/program-chair-program-management" },
       { title: "Budget Management", href: "/program-chair-budget-management" },
-      { title: "Reports", href: "/program-chair-report" },
+      { title: "Reports", href: "/program-chair-reports" },
       { title: "Analytics", href: "/program-chair-analytics" },
     ],
   },
@@ -89,7 +89,7 @@ const roleNavigation: RoleNavigation = {
       { title: "Dashboard", href: "/staff-dashboard" },
       { title: "Project Tasks", href: "/staff-project-task" },
       { title: "Request a Project", href: "/staff-request-project" },
-      { title: "Reports", href: "/staff-report" },
+      { title: "Reports", href: "/staff-reports" },
       { title: "Analytics", href: "/staff-project-analytics" },
     ],
   },
@@ -107,6 +107,7 @@ export function NavMain({ userRole }: { userRole?: string }) {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
   const params = useParams();
+  const pathname = usePathname() || "";
   const role = normalizeRoleSlug((params?.role as string) || userRole || '');
 
   if (!role || !roleNavigation[role]) {
@@ -114,17 +115,13 @@ export function NavMain({ userRole }: { userRole?: string }) {
   }
 
   const navigation = roleNavigation[role];
-
-  const pathname = useParams()?.role
-    ? `/${useParams()?.role}${usePathname()?.replace(`/${useParams()?.role}`, "")}`
-    : usePathname() || "";
   return (
     <SidebarGroup>
       <SidebarGroupLabel className="text-slate-300">{navigation.label}</SidebarGroupLabel>
       <SidebarMenu>
         {navigation.items.map((item) => {
           const itemPath = `/${role}${item.href}`;
-          const isActive = usePathname() === itemPath;
+          const isActive = pathname === itemPath;
           const Icon = iconMap[item.title] || Home;
           const iconClassName = isCollapsed ? "w-6 h-6" : "w-5 h-5";
           

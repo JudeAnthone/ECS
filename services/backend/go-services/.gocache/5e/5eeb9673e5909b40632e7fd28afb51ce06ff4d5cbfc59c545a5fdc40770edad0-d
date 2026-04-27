@@ -1,0 +1,10 @@
+./activity_postgres.go
+./budget_postgres.go
+./department_postgres.go
+./notification_postgres.go
+./program_postgres.go
+./project_postgres.go
+./request_postgres.go
+./service_postgres.go
+./transaction.go
+./user_postgres.go
