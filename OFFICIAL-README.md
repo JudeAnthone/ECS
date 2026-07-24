@@ -166,7 +166,7 @@ require (
 # *System Walkthrough & User Flow*
 ### I provide the GOOGLE DRIVE link below for all the images and screenshots of every part of the system. This is to ensure that all the parts, including the public site, each dashboard role, and authentication can be seen in one folder to avoid confusion.
 GOOGLE DRIVE LINK:
-(Insert your Google Drive link here)
+https://drive.google.com/drive/folders/1b1THgClA3pA9QinPC57w7ju1bD2yLc6L?usp=sharing
 
 ----
 # *Installation & Setup Guide*
@@ -236,4 +236,7 @@ cd Earist-Extension-Service
 
 ----
 # *Project Contributors*
-(Your name here)
+- Jude Anthone R. Duarte - Frontend Developer
+- Micko Licuanan - Backend Developer
+- Rayn Torres - frontend Developer
+- Ralph Russel Marabilla
