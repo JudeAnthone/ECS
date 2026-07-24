@@ -167,6 +167,21 @@ require (
 ### I provide the GOOGLE DRIVE link below for all the images and screenshots of every part of the system. This is to ensure that all the parts, including the public site, each dashboard role, and authentication can be seen in one folder to avoid confusion.
 GOOGLE DRIVE LINK:
 https://drive.google.com/drive/folders/1b1THgClA3pA9QinPC57w7ju1bD2yLc6L?usp=sharing
+# *SCREENSHOTS and PROJECT TURN-OVER:*
+<img width="1438" height="712" alt="image" src="https://github.com/user-attachments/assets/02b6639b-0ea6-4663-8bc3-13f6c8b6f8b1" />
+<img width="1429" height="705" alt="image" src="https://github.com/user-attachments/assets/84b1063a-42ff-4698-b982-79e2b601919a" />
+<img width="1422" height="695" alt="image" src="https://github.com/user-attachments/assets/be6323f5-3009-4def-bd9c-3978199310bf" />
+<img width="1426" height="709" alt="image" src="https://github.com/user-attachments/assets/49dcbce6-3da3-4092-b8db-46799f608b48" />
+<img width="1421" height="686" alt="image" src="https://github.com/user-attachments/assets/93a6e5a6-a212-41dd-b7b2-8c45e03b2308" />
+<img width="1450" height="700" alt="image" src="https://github.com/user-attachments/assets/6374231d-26d8-44dd-a6d3-b70346cc16db" />
+<img width="1460" height="704" alt="image" src="https://github.com/user-attachments/assets/df1465e3-cdcb-45ff-9d97-4a754e42b537" />
+<img width="1427" height="705" alt="image" src="https://github.com/user-attachments/assets/38ac792c-e6c8-4616-aef0-16dfad07d624" />
+<img width="1453" height="686" alt="image" src="https://github.com/user-attachments/assets/57cd4398-e6dc-4e18-9d1b-50485e753e2a" />
+<img width="1435" height="704" alt="image" src="https://github.com/user-attachments/assets/b05cddc6-fcfe-4eaf-a976-ec1eec0610ce" />
+<img width="940" height="715" alt="image" src="https://github.com/user-attachments/assets/dfac5041-166c-466a-b129-f655befa4ec0" />
+<img width="947" height="714" alt="image" src="https://github.com/user-attachments/assets/42b1ea2a-935a-45ff-857a-edc0701d1782" />
+
+
 
 ----
 # *Installation & Setup Guide*
